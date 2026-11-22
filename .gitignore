@@ -1,0 +1,91 @@
+# =============================================
+# AI KeyVault — .gitignore estricto
+# REGLA PRINCIPAL: ningún secreto en el repo
+# =============================================
+
+# ─── Secretos y credenciales (NUNCA en el repo) ───
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+auth.json
+config.json
+!config.json.example
+cooldown-data.csv
+*.db
+*.sqlite
+*.sqlite3
+!**/migrations/*.sql
+blobs/
+credentials/
+secrets/
+
+# ─── Logs (pueden contener datos sensibles) ───
+logs/
+*.log
+*.log.*
+
+# ─── Rust ───
+/target/
+Cargo.lock
+# Mantener Cargo.lock en workspace raíz si existe
+
+# ─── Node / Frontend ───
+node_modules/
+dist/
+.next/
+out/
+build/
+*.tsbuildinfo
+
+# ─── Tauri build artifacts ───
+apps/desktop/src-tauri/target/
+apps/desktop/dist/
+apps/desktop/build/
+
+# ─── Python ───
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# ─── Windows ───
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# ─── macOS ───
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ─── IDEs ───
+.vscode/settings.json
+.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*.suo
+*.user
+
+# ─── Capturas / archivos temporales ───
+*.png.tmp
+screenshots-real/
+*.bak
+*.tmp
+
+# ─── Respaldos de BD sin cifrar ───
+backups/*.db
+backups/*.sqlite
+!backups/.gitkeep
+
+# ─── Cache ───
+.cache/
+.turbo/

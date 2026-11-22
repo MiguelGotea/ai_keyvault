@@ -1,0 +1,64 @@
+name: 🚀 Deploy Server → VPS
+
+# Se dispara solo con push a main Y cuando hay cambios en server/
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy-server.yml'
+
+jobs:
+  deploy:
+    name: 🏗️ Compilar y desplegar servidor
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🦀 Instalar Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 📦 Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            server/target/
+          key: ${{ runner.os }}-server-cargo-${{ hashFiles('server/Cargo.lock') }}
+
+      - name: 🔨 Compilar servidor (release)
+        run: cargo build --release --manifest-path server/Cargo.toml
+        # Genera: server/target/release/ai-keyvault-server
+
+      - name: 🔑 Configurar SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: 📤 Deploy binario → VPS
+        run: |
+          rsync -avz \
+            --exclude='.git/' \
+            -e "ssh -o StrictHostKeyChecking=no" \
+            server/target/release/ai-keyvault-server \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}/bin/
+
+      - name: 🔄 Reiniciar servicio en VPS
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
+            set -e
+            sudo systemctl restart ai-keyvault
+            sleep 2
+            sudo systemctl status ai-keyvault --no-pager
+            curl -sf http://localhost:3010/health && echo "✅ Servidor respondiendo OK"
+          EOF
+
+      - name: ✅ Verificar deploy
+        run: echo "🚀 Deploy completado exitosamente"

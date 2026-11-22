@@ -1,0 +1,17 @@
+{
+  "_comment": "ESTE ES UN ARCHIVO DE EJEMPLO. Copia esto a config.json y completa con tus tokens reales. config.json está en .gitignore — NUNCA lo subas al repo.",
+  "accounts": [
+    {
+      "provider": "agy",
+      "alias": "mi-cuenta-agy-1",
+      "access_token": "PEGAR_AQUI_EL_ACCESS_TOKEN_DE_AGY",
+      "_nota": "El access_token de agy se puede obtener del Windows Credential Manager (gemini:antigravity)"
+    },
+    {
+      "provider": "codex",
+      "alias": "mi-cuenta-codex-1",
+      "access_token": "PEGAR_AQUI_EL_ACCESS_TOKEN_DE_CODEX",
+      "_nota": "El access_token de Codex se puede obtener de ~/.codex/auth.json (campo access_token)"
+    }
+  ]
+}
