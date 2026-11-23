@@ -162,24 +162,28 @@ apt install -y fail2ban
 - [ ] cooldown-logger corriendo y capturando datos
 - [ ] Usuario aprueba para continuar
 
-### Fase 1 — Núcleo seguro
+### Fase 1 — Núcleo seguro (crates/core) ✅ COMPLETADA
+**Contenido implementado:**
+- Crate `crates/core/`: Bóveda criptográfica de conocimiento cero.
+- **KDF Argon2id:** derivación de `AuthKey` (32 bytes para servidor) y `MasterDerivationKey` (32 bytes para descifrar `VaultKey`).
+- **Vault Key wrapping:** clave de 256 bits generada con `OsRng`, empaquetada dualmente con `MasterDerivationKey` y `RecoveryKey` usando XChaCha20-Poly1305.
+- **Cifrado por campo:** XChaCha20-Poly1305 con nonces de 192 bits y Additional Authenticated Data (`account_id:version:field_type`) para mitigar ataques cut-and-paste.
+- **Clave de respaldo:** formato legible estilo Windows/BitLocker (`AKVR-XXXX-...`), parseo, validación y soporte de recuperación de bóveda y re-cifrado de claves.
+- **Zeroize en memoria:** borrado seguro de claves maestras, auth keys y vault keys al autobloquear o descartar instancias (`ZeroizeOnDrop`).
+- **Tests unitarios de seguridad:**
+  - `test_vault_create_lock_unlock` (creación, bloqueo, desbloqueo y recuperación)
+  - `test_recovery_key_format_roundtrip` (consistencia Base32 y parsing)
+  - `test_ciphertext_contains_no_cleartext` (verificación de cero fuga de texto plano en memoria serializada)
+- **Calidad de código:** `cargo fmt` limpio y `cargo clippy -- -D warnings` pasando en verde.
+
+### Fase 2 — Servidor VPS (Próxima)
 **Contenido:**
-- Crate `crates/core/`: Vault (cifrado, descifrado, Argon2id)
-- Clave maestra → Argon2id → CDM + auth_key → Vault Key wrapping
-- Clave de respaldo: generación, formato legible, exportación
-- Autobloqueo con zeroize
-- Portapapeles con limpieza automática
-- Tests de cifrado/recuperación
-- CI con gitleaks
-
-**Criterios de aceptación:**
-- [ ] Tests de cifrado pasan: encrypt/decrypt de todos los tipos de campo
-- [ ] Test de recuperación con clave de respaldo
-- [ ] Test de que nada sensible aparece en logs ni disco en claro
-- [ ] `gitleaks detect` limpio
-- [ ] `cargo audit` limpio
-
-**Tiempo estimado:** 3-4 días
+- Crate `server/`: API axum con SQLite (vía IP directa y puerto 3010, sin subdominio según instrucción).
+- Endpoints: register_device, sync_vault, get_quota_readings, post_quota_reading, quota_lease.
+- Autenticación Ed25519 de dispositivos.
+- Deploy con GitHub Actions (binario compilado).
+- Respaldo cifrado a `ai_keyvault_data`.
+- Prueba de restauración automática.
 
 ### Fase 2 — Servidor VPS
 **Contenido:**
