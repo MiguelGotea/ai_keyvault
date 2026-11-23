@@ -117,13 +117,16 @@ def query_agy_quota(account: dict) -> Optional[list[dict]]:
     except requests.exceptions.Timeout:
         log.warning("[agy:%s] Timeout al consultar cuota", account.get("alias", "?"))
     except requests.exceptions.HTTPError as e:
-        # Solo loguear el status code, nunca el token
-        log.error("[agy:%s] HTTP %s al consultar cuota", account.get("alias", "?"), e.response.status_code)
+        log.error(
+            "[agy:%s] HTTP %s | cuerpo: %s",
+            account.get("alias", "?"),
+            e.response.status_code,
+            e.response.text[:300],
+        )
     except Exception as e:
         log.error("[agy:%s] Error inesperado: %s", account.get("alias", "?"), type(e).__name__)
 
     return None
-
 
 # ─────────────────────────────────────────────
 # Consulta de cuota para Codex
@@ -182,7 +185,12 @@ def query_codex_quota(account: dict) -> Optional[list[dict]]:
     except requests.exceptions.Timeout:
         log.warning("[codex:%s] Timeout", account.get("alias", "?"))
     except requests.exceptions.HTTPError as e:
-        log.error("[codex:%s] HTTP %s", account.get("alias", "?"), e.response.status_code)
+        log.error(
+            "[codex:%s] HTTP %s | cuerpo: %s",
+            account.get("alias", "?"),
+            e.response.status_code,
+            e.response.text[:300],
+        )
     except Exception as e:
         log.error("[codex:%s] Error: %s", account.get("alias", "?"), type(e).__name__)
 
