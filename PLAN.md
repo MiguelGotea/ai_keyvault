@@ -20,26 +20,52 @@ AI KeyVault es una bóveda + tablero personal para administrar cuentas de agente
 - [x] THIRD_PARTY_NOTICES.md con licencias de referencia
 - [x] Estructura de directorios del monorepo
 - [x] Logos copiados a `assets/branding/`
-- [x] docs/research/01-agy-investigacion.md
-- [x] docs/research/02-codex-investigacion.md
+- [x] docs/research/01-agy-investigacion.md **(actualizado con hallazgos reales)**
+- [x] docs/research/02-codex-investigacion.md **(actualizado con hallazgos reales)**
 - [x] docs/research/03-otros-proveedores.md
-- [x] docs/research/04-experimento-cooldown.md (protocolo listo, datos pendientes)
+- [x] docs/research/04-experimento-cooldown.md
 - [x] docs/research/05-vps-estructura.md
+- [x] docs/research/busquea_rutas.md **(verificación real de rutas)**
+- [x] docs/research/supuesto-tokens-local.md **(consumo por modelo vía transcript.jsonl)**
+- [x] resultados_codex.md **(estructura real de state_5.sqlite verificada)**
+- [x] reusltados_agy.md **(Credential Manager, tokens, agy /usage verificado)**
 - [x] docs/adr/ADR-001-stack.md (Tauri 2 elegido y justificado)
 - [x] docs/adr/ADR-002-cifrado.md (Argon2id + XChaCha20-Poly1305)
 - [x] docs/adr/ADR-003-sincronizacion.md (lease, CRDT LWW, Ed25519)
 - [x] docs/adr/ADR-004-ping-alertas.md (configurable por hipótesis H1/H2/H3)
-- [x] docs/threat-model.md (6 escenarios cubiertos)
-- [x] agent/cooldown-logger/ (script Python para el experimento)
+- [x] docs/threat-model.md (7 escenarios cubiertos)
+- [x] agent/cooldown-logger/ (script Python ejecutado y actualizado)
 - [x] .gitignore estricto
 - [x] .github/workflows/ci.yml (CI con gitleaks)
+- [x] .github/workflows/deploy-server.yml
+- [x] GitHub Actions Secrets configurados
+- [x] VPS setup: `/opt/ai-keyvault/{bin,config,data,logs,backups}` creados
+- [x] VPS: usuario `ai-keyvault-deploy` con SSH configurado
+- [x] VPS: `.env` del servidor creado
+- [x] VPS: Caddy instalado (Caddyfile pendiente de configurar con subdominio)
+- [x] Push inicial a ambos repos en GitHub
 
-### Pendiente (acciones manuales del usuario) ⏳
-- [ ] **Experimento de cooldown:** leer `docs/research/04-experimento-cooldown.md` y ejecutar el protocolo
-- [ ] **Verificar estructura real de agy:** `dir "$env:APPDATA\Gemini" -Recurse -Name | Select-Object -First 30` y `dir "$env:USERPROFILE\.gemini" -Recurse -Name | Select-Object -First 30`
-- [ ] **Verificar estructura de Codex:** `dir "$env:USERPROFILE\.codex" -Recurse -Name | Select-Object -First 50`
-- [ ] **Configurar secrets en GitHub Actions** (ver sección "Secrets necesarios")
-- [ ] **Setup inicial del VPS** (ver sección "Setup del VPS")
+### Hallazgos críticos de la investigación (corrigen supuestos)
+
+| Supuesto original | Realidad verificada |
+|-------------------|---------------------|
+| Pools de agy: `gemini-5h`, `3p-5h`, `gemini-weekly`, `3p-weekly` | **Solo ventanas semanales** en cuentas personales. No hay ventanas de 5h. |
+| Endpoint `cloudcode-pa.googleapis.com` disponible | **HTTP 403** en cuentas personales — solo Enterprise |
+| Cuota de agy vía API JSON | **Solo vía `agy /usage`** (texto parseado) o `transcript.jsonl` local |
+| Codex: JSON por sesión en `~/.codex/sessions/` | **SQLite**: `~/.codex/state_5.sqlite` tabla `threads`. El número puede cambiar con la versión |
+| Codex: endpoint `/wham/profiles/me` | **HTTP 404** — endpoint descartado |
+| Codex: `tokens_used` desglosado en la tabla | Entero total en `threads`. Desglose real en `token_usage_record` del JSONL (`rollout_path`) |
+| agy token es JWT | **Token opaco** (`ya29`), vida ~1h. Ruta: `gemini:antigravity` → `token.access_token` |
+| Codex token: plan y `subscription_end` en raíz del JWT | Están en `https://api.openai.com/auth` → `chatgpt_plan_type` y `chatgpt_subscription_active_until` |
+
+### Hallazgo clave para el experimento de cooldown (agy)
+
+La UI de `agy /usage` muestra:
+- Antes de usar: `100.00% — Quota available` (sin `resetTime` visible)
+- Después de usar Gemini: `98.41% — Refreshes in 167h 55m`
+- Después de usar Claude+GPT: `97.48% — Refreshes in 167h 59m`
+
+**Interpretación preliminar:** el contador de "167h" (~7 días) aparece solo cuando hay consumo. Esto apoya **H1** (el reloj empieza con el primer uso), pero necesita confirmación con más muestras para distinguirlo de H3 (horario fijo que solo se muestra cuando hay consumo).
 
 ---
 
@@ -289,14 +315,24 @@ apt install -y fail2ban
 
 ---
 
-## ⏸️ DETENIDO — Esperando aprobación
+## ⏸️ FASE 0 COMPLETA — Esperando aprobación para Fase 1
 
-La Fase 0 está completada en su parte de documentación. Antes de continuar a Fase 1 necesito:
+### Estado del VPS (verificado 2026-11-22)
+| Elemento | Estado |
+|----------|--------|
+| `/opt/ai-keyvault/{bin,config,data,logs,backups}` | ✅ Creados |
+| `.env` del servidor | ✅ Creado |
+| Usuario `ai-keyvault-deploy` con SSH | ✅ Configurado |
+| Caddy instalado | ✅ Instalado (Caddyfile pendiente de configurar con subdominio) |
+| Servicio `systemd` `ai-keyvault` | ⏳ Pendiente (se crea en Fase 2 cuando exista el binario) |
+| `bin/ai-keyvault-server` | ⏳ Pendiente (se compila en Fase 2) |
 
-1. Tu **aprobación** del stack (ADR-001), el modelo de cifrado (ADR-002) y los demás ADRs.
-2. Los resultados del **experimento de cooldown** (protocolo en `docs/research/04-experimento-cooldown.md`).
-3. La verificación manual de las rutas de agy y Codex en tu PC.
-4. La configuración de los **GitHub Actions Secrets** (listados arriba).
-5. El **setup inicial del VPS** (comandos listados arriba — necesita tu ejecución vía SSH).
+### Qué falta antes de Fase 1 (solo tu aprobación)
 
-**Una vez aprobado, continúo directamente con la Fase 1 (núcleo seguro en Rust).**
+1. **¿Apruebas el stack Tauri 2?** (ADR-001)
+2. **¿Apruebas el modelo de cifrado** Argon2id + XChaCha20-Poly1305? (ADR-002)
+3. **¿Apruebas la sincronización** LWW + Ed25519 + lease? (ADR-003)
+4. **¿Apruebas el modelo de ping/alertas** configurable por hipótesis? (ADR-004)
+5. **Subdominio para el VPS:** ¿cuál subdominio en Spaceship apuntará al VPS? (ej. `keyvault.tudominio.com`). Necesito el dominio para configurar el Caddyfile.
+
+Una vez aprobado, arranco directamente con la **Fase 1: Núcleo seguro** (Argon2id, Vault Key, clave de respaldo, XChaCha20, zeroize, autobloqueo) en Rust.

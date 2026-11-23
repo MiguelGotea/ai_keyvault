@@ -41,62 +41,57 @@ Agy usa la API Win32 `CredWrite` / `CredRead` / `CredDelete`. La escritura atóm
 
 ## 2. Consulta de cuota
 
-### [VERIFICADO] Endpoints de cuota
+### [VERIFICADO PARCIALMENTE] Endpoints de cuota
 
-Según `antigravity-swap` y análisis de tráfico de red documentado en el proyecto:
+**Endpoint `agy /usage` (UI integrada) — [VERIFICADO]:**
 
-**Endpoint principal:**
+agy expone su propio comando de cuota que devuelve la UI de texto:
+```
+agy /usage
+```
+Salida real verificada (2026-11-22):
+```
+Account: batidospitayaclaude53@gmail.com
+
+GEMINI MODELS
+  Models within this group: Gemini 3.8 Flash
+  Weekly Limit Remaining
+    [██████████████████████████████████] 98.41%
+    Refreshes in 167h 55m
+
+CLAUDE AND GPT MODELS
+  Models within this group: Claude Sonnet 4.6, Claude Opus 4.6, GPT-OSS 120B
+  Weekly Limit Remaining
+    [██████████████████████████████████] 97.48%
+    Refreshes in 167h 59m
+```
+
+**Hallazgos clave de la UI:**
+- agy reporta **solo ventanas SEMANALES** (no ventanas de 5h como se suponía)
+- El tiempo de reinicio se expresa como "Refreshes in Xh Ym" — un countdown relativo, no un timestamp absoluto
+- Hay **2 pools**: Gemini y Claude+GPT (llamado "3P" internamente)
+
+**Endpoint `cloudcode-pa.googleapis.com` — [BLOQUEADO / NO DISPONIBLE]:**
 ```
 POST https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary
-Authorization: Bearer <access_token>
-Content-Type: application/json
+→ HTTP 403: "You do not have a valid license of this product."
 ```
+Este endpoint **solo funciona con cuentas Enterprise/Workspace**. Las cuentas personales reciben 403.
 
-**Respuesta (esquema parcial — [SUPUESTO] sin verificación directa):**
-```json
-{
-  "quotaSummary": {
-    "currentPeriodStart": "2026-11-20T00:00:00Z",
-    "currentPeriodEnd": "2026-11-25T05:00:00Z",
-    "pools": [
-      {
-        "poolId": "gemini-5h",
-        "tokensUsed": 12345,
-        "tokensLimit": 100000,
-        "resetTime": "2026-11-22T18:00:00Z"
-      },
-      {
-        "poolId": "gemini-weekly",
-        "tokensUsed": 67890,
-        "tokensLimit": 1000000,
-        "resetTime": "2026-11-25T05:00:00Z"
-      },
-      {
-        "poolId": "3p-5h",
-        "tokensUsed": 5000,
-        "tokensLimit": 50000,
-        "resetTime": "2026-11-22T16:00:00Z"
-      },
-      {
-        "poolId": "3p-weekly",
-        "tokensUsed": 25000,
-        "tokensLimit": 500000,
-        "resetTime": "2026-11-25T05:00:00Z"
-      }
-    ]
-  }
-}
-```
+> ⚠️ **CORRECCIÓN IMPORTANTE al ADR-004 y al diseño original:** el endpoint de cuota directo NO está disponible para cuentas personales. La única fuente oficial para cuentas personales es la salida de `agy /usage` (texto, no JSON).
 
-**Pools identificados:**
-| Pool | Descripción | Ventana |
-|------|-------------|---------|
-| `gemini-5h` | Tokens de modelos Gemini | 5 horas |
-| `gemini-weekly` | Tokens de modelos Gemini | Semanal |
-| `3p-5h` | Tokens de modelos 3P (Claude, GPT) | 5 horas |
-| `3p-weekly` | Tokens de modelos 3P | Semanal |
+**Estrategia alternativa para leer cuota de agy:**
+1. Ejecutar `agy /usage` y parsear la salida de texto (frágil pero es lo único disponible).
+2. O parsear `transcript.jsonl` del brain para consumo local estimado.
+3. El countdown "Refreshes in Xh Ym" permite calcular el `reset_time` relativo.
 
-> **TODO para experimento 6.1:** capturar `resetTime` de estas ventanas antes y después del primer uso del día para determinar H1/H2/H3.
+**Pools REALES verificados (2026-11-22):**
+| Pool | Modelos | Ventana real | Fuente |
+|------|---------|-------------|--------|
+| Gemini | Gemini 3.8 Flash | **Semanal** | `agy /usage` [VERIFICADO] |
+| 3P (Claude+GPT) | Claude Sonnet 4.6, Claude Opus 4.6, GPT-OSS 120B | **Semanal** | `agy /usage` [VERIFICADO] |
+
+> **SUPUESTO CORREGIDO:** no existen ventanas de 5h en las cuentas personales de agy. Solo hay ventanas semanales. Las ventanas de 5h mencionadas en `antigravity-swap` pueden corresponder a cuentas Enterprise o a una versión anterior de agy.
 
 **Endpoint secundario:**
 ```
