@@ -30,12 +30,12 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            server/target/
-          key: ${{ runner.os }}-server-cargo-${{ hashFiles('server/Cargo.lock') }}
+            target/
+          key: ${{ runner.os }}-server-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: 🔨 Compilar servidor (release)
-        run: cargo build --release --manifest-path server/Cargo.toml
-        # Genera: server/target/release/ai-keyvault-server
+        run: cargo build --release --package ai-keyvault-server
+        # Workspace: el binario queda en target/release/ai-keyvault-server
 
       - name: 🔑 Configurar SSH
         uses: webfactory/ssh-agent@v0.8.0
@@ -47,7 +47,7 @@ jobs:
           rsync -avz \
             --exclude='.git/' \
             -e "ssh -o StrictHostKeyChecking=no" \
-            server/target/release/ai-keyvault-server \
+            target/release/ai-keyvault-server \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}/bin/
 
       - name: 🔄 Reiniciar servicio en VPS
