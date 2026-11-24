@@ -44,10 +44,8 @@ impl AccountSwitcher {
     /// tomar decisiones sin propagar errores de lógica de negocio como errores Rust.
     pub fn switch(new_credential: &AgyCredential) -> SwitchResult {
         // ── Paso 1: leer credencial actual para poder revertir ──────────────
-        let previous = match AgyCredentialManager::read() {
-            Ok(c) => Some(c),
-            Err(_) => None, // si no hay credencial previa, no podemos revertir pero continuamos
-        };
+        // si no hay credencial previa, no podemos revertir pero continuamos
+        let previous = AgyCredentialManager::read().ok();
 
         // ── Paso 2: escribir nueva credencial ───────────────────────────────
         if let Err(e) = AgyCredentialManager::write(new_credential) {

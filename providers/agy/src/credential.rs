@@ -139,10 +139,12 @@ fn decode_blob(raw: &[u8]) -> Result<String> {
         return Ok(s.to_string());
     }
     // UTF-16-LE (Windows nativo)
-    if raw.len() % 2 == 0 {
+    if raw.len().is_multiple_of(2) {
         let u16_data: Vec<u16> = raw
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| u16::from_le_bytes(*c))
             .collect();
         if let Ok(s) = String::from_utf16(&u16_data) {
             return Ok(s);
