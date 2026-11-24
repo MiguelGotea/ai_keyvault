@@ -7,6 +7,7 @@ Versión: 1.0.0 | Fecha: 2026-11-22
 
 ---
 
+
 ## 1. Qué es este proyecto
 
 **AI KeyVault** es una bóveda + tablero personal para administrar cuentas de agentes de IA de programación (Antigravity/agy, Codex, Claude, Gemini, OpenCode, Grok y otros). Es una **herramienta personal** del autor para sus propias cuentas en sus propias PCs. No tiene fines comerciales ni de distribución masiva.
