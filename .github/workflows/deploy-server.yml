@@ -61,4 +61,4 @@ jobs:
           EOF
 
       - name: ✅ Verificar deploy
-        run: echo "🚀 Deploy completado exitosamente"
+        run: echo "🚀 Deploy completado exitosamente — $(date)"
