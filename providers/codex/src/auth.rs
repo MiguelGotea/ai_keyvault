@@ -17,7 +17,7 @@
 //! `email`, `exp` (Unix timestamp), y posiblemente `plan`/`subscription_end`.
 //!
 //! **Escritura atómica en NTFS:**
-//! ```
+//! ```text
 //! 1. Escribir auth.json.tmp con el nuevo contenido
 //! 2. Renombrar .tmp → auth.json  (atómico en NTFS con MoveFileExW REPLACE_EXISTING)
 //! ```
