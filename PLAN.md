@@ -176,31 +176,31 @@ apt install -y fail2ban
   - `test_ciphertext_contains_no_cleartext` (verificación de cero fuga de texto plano en memoria serializada)
 - **Calidad de código:** `cargo fmt` limpio y `cargo clippy -- -D warnings` pasando en verde.
 
-### Fase 2 — Servidor VPS (Próxima)
-**Contenido:**
-- Crate `server/`: API axum con SQLite (vía IP directa y puerto 3010, sin subdominio según instrucción).
-- Endpoints: register_device, sync_vault, get_quota_readings, post_quota_reading, quota_lease.
-- Autenticación Ed25519 de dispositivos.
-- Deploy con GitHub Actions (binario compilado).
-- Respaldo cifrado a `ai_keyvault_data`.
-- Prueba de restauración automática.
+### Fase 2 — Servidor VPS ✅ COMPLETADA
+**Contenido implementado:**
+- Crate `server/`: API axum con SQLite escuchando en IP directa + puerto 3010 (sin subdominio).
+- **Endpoints implementados:** `GET /health`, `POST /api/devices/register`, `POST+GET /api/vault/sync`, `POST /api/quota/lease`, `POST /api/quota/readings`, `GET /api/quota/readings/:account_id`.
+- **Autenticación Ed25519 de dispositivos:** registro por `public_key_hex`, verificación por SHA-256.
+- **Deploy automático:** GitHub Actions compila en release y sube vía rsync + polkit al VPS.
+- **Respaldo cifrado:** workflow diario (`backup.yml`) descarga la BD del VPS y hace commit a `ai_keyvault_data` usando `BACKUP_WRITE_KEY`. Retención de 30 días.
+- **Tests de servidor:**
+  - `test_db_schema_initialization`: esquema correcto.
+  - `test_servidor_no_puede_descifrar_vault`: **conocimiento cero demostrado** — el servidor almacena blobs opacos y no tiene acceso a texto plano.
+  - `test_restauracion_desde_backup`: backup y restauración verifican integridad de datos.
 
-### Fase 2 — Servidor VPS
-**Contenido:**
-- Crate `server/`: API axum con SQLite
-- Endpoints: register_device, sync_vault, get_quota_readings, post_quota_reading, quota_lease
-- Autenticación Ed25519 de dispositivos
-- Deploy con GitHub Actions (binario compilado)
-- Respaldo cifrado a ai_keyvault_data
-- Prueba de restauración automática
+**Cambios manuales en VPS (documentados en `docs/operaciones.md` §4):**
+- Servicio `systemd` `/etc/systemd/system/ai-keyvault.service` creado.
+- `.env` actualizado con `DATABASE_URL=sqlite:./data/keyvault.db?mode=rwc`.
+- Permisos `bin/`: `chown ai-keyvault-deploy:ai-keyvault`, `chmod 750`.
+- Usuario `ai-keyvault` agregado al grupo `ai-keyvault-deploy` para ejecutar el binario.
+- Regla polkit `/etc/polkit-1/rules.d/50-ai-keyvault.rules` para reiniciar sin sudo desde SSH sin TTY.
+- Puerto 3010 abierto en UFW.
 
 **Criterios de aceptación:**
-- [ ] Entrar desde una segunda PC con URL + clave maestra y ver las mismas cuentas
-- [ ] El servidor no puede descifrar nada (demostrado en test)
-- [ ] Deploy automático funciona: push → binario en VPS
-- [ ] Prueba de restauración pasa
-
-**Tiempo estimado:** 4-5 días
+- [x] Deploy automático funciona: push → binario en VPS (binario activo en `198.211.97.243:3010`)
+- [x] El servidor no puede descifrar nada (demostrado en `test_servidor_no_puede_descifrar_vault`)
+- [x] Prueba de restauración pasa (`test_restauracion_desde_backup`)
+- [ ] Entrar desde una segunda PC con URL + clave maestra y ver las mismas cuentas _(requiere app desktop — Fase 5+)_
 
 ### Fase 3 — Adaptadores agy + Codex
 **Contenido:**

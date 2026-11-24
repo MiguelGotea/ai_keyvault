@@ -1,0 +1,60 @@
+name: 💾 Backup BD → ai_keyvault_data
+
+on:
+  schedule:
+    - cron: '0 4 * * *'   # 4:00 UTC diario (~10pm CST)
+  workflow_dispatch:        # Disparar manualmente desde GitHub UI
+
+jobs:
+  backup:
+    name: 📦 Snapshot de BD al repo de respaldo
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔑 Configurar SSH para VPS
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: 📥 Descargar BD del VPS
+        run: |
+          scp -o StrictHostKeyChecking=no \
+            ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}/data/keyvault.db \
+            ./keyvault_backup.db
+          echo "✅ BD descargada: $(du -sh keyvault_backup.db | cut -f1)"
+
+      - name: 📦 Checkout repo de respaldo
+        uses: actions/checkout@v4
+        with:
+          repository: MiguelGotea/ai_keyvault_data
+          ssh-key: ${{ secrets.BACKUP_WRITE_KEY }}
+          path: backup_repo
+
+      - name: 💾 Guardar snapshot con timestamp
+        run: |
+          TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
+          mkdir -p backup_repo/backups
+          cp keyvault_backup.db backup_repo/backups/keyvault_${TIMESTAMP}.db
+          echo "Snapshot: keyvault_${TIMESTAMP}.db"
+
+          # Retener solo los últimos 30 backups
+          BACKUP_COUNT=$(ls backup_repo/backups/keyvault_*.db 2>/dev/null | wc -l)
+          if [ "$BACKUP_COUNT" -gt 30 ]; then
+            ls -t backup_repo/backups/keyvault_*.db | tail -n +31 | xargs rm -f
+            echo "🧹 Backups antiguos eliminados (reteniendo últimos 30)"
+          fi
+
+      - name: 🔄 Commit y push al repo de respaldo
+        run: |
+          cd backup_repo
+          git config user.email "ai-keyvault-backup@noreply.github.com"
+          git config user.name "AI KeyVault Backup Bot"
+          git add backups/
+          CHANGED=$(git diff --cached --name-only | wc -l)
+          if [ "$CHANGED" -gt 0 ]; then
+            git commit -m "backup: snapshot $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+            echo "✅ Backup subido al repo ai_keyvault_data"
+          else
+            echo "⏩ Sin cambios desde el último backup"
+          fi
