@@ -118,14 +118,9 @@ impl CodexAuthManager {
         let expiry = file
             .tokens
             .expiry_time
-            .map(|ts| Utc.timestamp_opt(ts, 0).single())
-            .flatten();
+            .and_then(|ts| Utc.timestamp_opt(ts, 0).single());
 
-        let email = file
-            .tokens
-            .id_token
-            .as_deref()
-            .and_then(|jwt| decode_jwt_email(jwt));
+        let email = file.tokens.id_token.as_deref().and_then(decode_jwt_email);
 
         Ok(CodexAuth {
             email,
