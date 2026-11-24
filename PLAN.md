@@ -202,13 +202,11 @@ apt install -y fail2ban
 - [x] Prueba de restauración pasa (`test_restauracion_desde_backup`)
 - [ ] Entrar desde una segunda PC con URL + clave maestra y ver las mismas cuentas _(requiere app desktop — Fase 5+)_
 
-### Fase 3 — Adaptadores agy + Codex
-**Contenido:**
-- Provider `providers/agy/`: Credential Manager, leer/escribir login, verificar con `agy models`, leer cuota
-- Provider `providers/codex/`: leer/escribir auth.json (atómico), verificar, leer cuota
-- Login guiado (una sola vez)
-- Cambio de cuenta con deshacer
-- Tests con `fake_agy` y `fake_codex`
+### Fase 3 — Adaptadores agy + Codex ← ACTUAL
+**Contenido implementado:**
+- Crate `providers/agy/`: Credential Manager Windows, lectura/escritura de credencial `gemini:antigravity`, parser de `agy /usage`, verificación con `agy models`, cambio de cuenta con revertir.
+- Crate `providers/codex/`: lectura/escritura atómica de `~/.codex/auth.json` (.tmp → rename + .bak), decodificación de JWT para email, cambio de cuenta con revertir.
+- Tests con `fake_agy` y `fake_codex` (sin credenciales reales, sin procesos externos).
 
 **Criterios de aceptación:**
 - [ ] Cambio real de cuenta de agy probado (Credential Manager)
