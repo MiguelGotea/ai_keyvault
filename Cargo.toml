@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/core",
+    "crates/poller",
     "server",
     "providers/agy",
     "providers/codex",

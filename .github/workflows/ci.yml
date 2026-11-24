@@ -65,6 +65,9 @@ jobs:
       - name: ✅ cargo test — providers agy y codex
         run: cargo test --package ai-keyvault-provider-agy --package ai-keyvault-provider-codex
 
+      - name: ✅ cargo test — poller
+        run: cargo test --package ai-keyvault-poller
+
       - name: 🛡️ cargo audit
         run: |
           cargo install cargo-audit --quiet 2>/dev/null || true

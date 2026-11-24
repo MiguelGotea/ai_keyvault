@@ -225,12 +225,15 @@ apt install -y fail2ban
 > El switch completo entre cuentas se validará cuando haya 2 cuentas disponibles (Fase 5+).
 
 ### Fase 4 — Cuota y planes ← ACTUAL
-**Contenido:**
-- Consulta programada (10/60 min por cuenta)
-- Lease anti-duplicado en el servidor
-- Panel principal: tarjetas de cuentas con % por ventana
-- Detalle de cuenta: resumen, cuota/cooldown
-- "Actualizado hace X por PC-Y"
+**Contenido implementado:**
+- Crate `crates/poller/`: consulta periódica de cuota con lease anti-duplicado.
+  - `collector.rs`: llama a `agy /usage` y lee `~/.codex/auth.json`, genera `QuotaSnapshot`s.
+  - `lease.rs`: adquiere/verifica lease en `/api/quota/lease` antes de consultar.
+  - `uploader.rs`: POST individual a `/api/quota/readings` por cada snapshot.
+  - `scheduler.rs`: loop tokio cada 10 min (configurable), agrupa por `account_id`.
+  - `models.rs`: `PollerConfig`, `QuotaSnapshot`, `LeaseResponse`.
+- **5 tests unitarios** (sin red, sin providers reales): config defaults, serialización JSON, payload de lease y upload, snapshot de Codex.
+- **1 test de integración** `#[ignore]`: ciclo completo con servidor real y agy instalado.
 
 **Criterios de aceptación:**
 - [ ] Datos coherentes entre PCs (mismo % visto desde dos PCs)
