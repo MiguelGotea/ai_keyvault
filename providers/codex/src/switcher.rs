@@ -7,10 +7,7 @@
 //! 4. Si falla: revertir .bak → auth.json y marcar cuenta en cuarentena.
 //! 5. Si OK: registrar en historial y avisar al usuario que reinicie Codex.
 
-use crate::{
-    auth::{CodexAuth, CodexAuthManager},
-    CodexError, Result,
-};
+use crate::auth::{CodexAuth, CodexAuthManager};
 use std::path::PathBuf;
 
 /// Resultado de un cambio de cuenta.

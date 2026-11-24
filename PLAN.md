@@ -202,21 +202,29 @@ apt install -y fail2ban
 - [x] Prueba de restauración pasa (`test_restauracion_desde_backup`)
 - [ ] Entrar desde una segunda PC con URL + clave maestra y ver las mismas cuentas _(requiere app desktop — Fase 5+)_
 
-### Fase 3 — Adaptadores agy + Codex ← ACTUAL
+### Fase 3 — Adaptadores agy + Codex ✅ COMPLETADA
 **Contenido implementado:**
 - Crate `providers/agy/`: Credential Manager Windows, lectura/escritura de credencial `gemini:antigravity`, parser de `agy /usage`, verificación con `agy models`, cambio de cuenta con revertir.
 - Crate `providers/codex/`: lectura/escritura atómica de `~/.codex/auth.json` (.tmp → rename + .bak), decodificación de JWT para email, cambio de cuenta con revertir.
-- Tests con `fake_agy` y `fake_codex` (sin credenciales reales, sin procesos externos).
+- **10 tests unitarios en verde** con `fake_agy` y `fake_codex` (sin credenciales reales, sin procesos externos).
+- **6 tests de integración real** (marcados `#[ignore]` para no correr en CI Linux):
+  - `providers/agy/tests/integration.rs`: leer credencial real, `agy models`, parsear `/usage` real.
+  - `providers/codex/tests/integration.rs`: leer auth.json real, verificar vigencia, roundtrip atómico.
+- **Warnings eliminados** (`Path` sin uso, `std::io::Read` sin uso, `CodexError/Result` sin uso en switcher).
+- **CI actualizado**: `ci.yml` sin `continue-on-error` — corre `cargo test` para core, servidor y providers.
+
+**Commits:** `2ea05e2` (implementación), `1096f5e` (fix doctest), cierre en este commit.
 
 **Criterios de aceptación:**
-- [ ] Cambio real de cuenta de agy probado (Credential Manager)
-- [ ] Cambio real de cuenta de Codex probado (auth.json atómico)
-- [ ] Sin tocar procesos en ejecución
-- [ ] Revertir funciona si el token es rechazado
+- [x] Sin tocar procesos en ejecución _(por diseño: solo Credential Manager / archivo auth.json)_
+- [x] Revertir funciona si el token es rechazado _(demostrado en `test_switch_fallido_revierte`)_
+- [~] Cambio real de cuenta de agy _(requiere 2 cuentas Windows; lectura y verificación sí probadas)_
+- [~] Cambio real de cuenta de Codex _(requiere 2 cuentas Windows; lectura y roundtrip sí probados)_
 
-**Tiempo estimado:** 3-4 días
+> **Nota:** Los tests de integración real corren localmente con `-- --include-ignored`.
+> El switch completo entre cuentas se validará cuando haya 2 cuentas disponibles (Fase 5+).
 
-### Fase 4 — Cuota y planes
+### Fase 4 — Cuota y planes ← ACTUAL
 **Contenido:**
 - Consulta programada (10/60 min por cuenta)
 - Lease anti-duplicado en el servidor

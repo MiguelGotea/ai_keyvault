@@ -55,21 +55,21 @@ jobs:
 
       - name: ✅ cargo fmt --check
         run: cargo fmt --all -- --check
-        continue-on-error: true  # No hay Cargo.toml aún — se elimina este flag en Fase 1
 
       - name: ✅ cargo clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
-        continue-on-error: true  # No hay Cargo.toml aún
 
-      - name: ✅ cargo test
-        run: cargo test --all
-        continue-on-error: true  # No hay Cargo.toml aún
+      - name: ✅ cargo test — núcleo y servidor
+        run: cargo test --package ai-keyvault-core --package ai-keyvault-server
+
+      - name: ✅ cargo test — providers agy y codex
+        run: cargo test --package ai-keyvault-provider-agy --package ai-keyvault-provider-codex
 
       - name: 🛡️ cargo audit
         run: |
           cargo install cargo-audit --quiet 2>/dev/null || true
           cargo audit
-        continue-on-error: true  # No hay Cargo.toml aún
+        continue-on-error: true  # Puede haber advisories no críticos — no bloquea
 
   # ─────────────────────────────────────────────
   # 3. CI de TypeScript/Frontend (cuando exista)

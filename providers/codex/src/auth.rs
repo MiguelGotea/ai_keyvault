@@ -26,7 +26,7 @@
 use crate::{CodexError, Result};
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Ruta por defecto de auth.json de Codex.
 pub fn default_auth_path() -> PathBuf {
@@ -211,8 +211,6 @@ fn decode_jwt_email(jwt: &str) -> Option<String> {
 
 /// Decodificador base64 sin dependencia externa.
 fn base64_decode(input: &str) -> Result<Vec<u8>> {
-    use std::io::Read;
-    // Usamos el decodificador de la stdlib vía iterador manual.
     // Para no agregar la crate `base64`, implementamos decodificación básica.
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut lut = [255u8; 256];
