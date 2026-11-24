@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-11-22  
 **Última actualización:** 2026-11-24  
-**Versión:** 1.1
+**Versión:** 1.2
 
 > Este documento describe cómo administrar el VPS, hacer deploys, gestionar respaldos y restaurar datos.
 > También registra todos los cambios manuales que se han hecho directamente en el VPS (fuera del repositorio),
@@ -206,6 +206,30 @@ ufw allow 3010/tcp comment 'AI KeyVault Server'
 
 Caddy está instalado (`apt install caddy`) pero el Caddyfile no fue configurado porque
 se decidió no usar subdominio. No interfiere con el servidor — escucha en puerto 80.
+
+---
+
+## 4.10 Cambios de Fase 3 — Cierre (2026-11-24)
+
+No hubo cambios directos al VPS en Fase 3. Los cambios fueron todos en el repositorio:
+
+| Elemento | Cambio |
+|----------|--------|
+| `providers/agy/` | Crate nuevo — Credential Manager Win32, parser `/usage`, switcher |
+| `providers/codex/` | Crate nuevo — auth.json atómico, JWT decode, switcher |
+| `providers/agy/tests/integration.rs` | Tests de integración real (marcados `#[ignore]`) |
+| `providers/codex/tests/integration.rs` | Tests de integración real (marcados `#[ignore]`) |
+| `.github/workflows/ci.yml` | Quitados `continue-on-error` — ahora bloquea en rojo |
+| `server/Cargo.toml` | Eliminada dependencia `rand` sin uso |
+| `audit.toml` (raíz) | Creado — ignora RUSTSEC-2023-0071 (rsa, dev-dep transitivo) |
+| `Cargo.lock` | Actualizado con `cargo update` |
+
+**Para correr tests de integración localmente (Windows):**
+```powershell
+$env:PATH = "C:\msys64\mingw64\bin;$env:USERPROFILE\.cargo\bin;$env:PATH"
+cargo test --package ai-keyvault-provider-agy -- --include-ignored
+cargo test --package ai-keyvault-provider-codex -- --include-ignored
+```
 
 ---
 
