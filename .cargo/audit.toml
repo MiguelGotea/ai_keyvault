@@ -16,6 +16,12 @@ ignore = [
     #   no SQL arbitrario ni archivos SQLite externos no confiables.
     # - Se removerá cuando sqlx publique versión compatible con libsqlite3-sys >= 0.39.0.
     "RUSTSEC-2026-0459",
+
+    # RUSTSEC-2026-0543: chrono unmaintained
+    # - No existe reemplazo directo disponible en el ecosistema.
+    # - Dependencia transitiva de sqlx y otros crates del workspace.
+    # - Se eliminará cuando sqlx migre a un sucesor (ej. jiff).
+    "RUSTSEC-2026-0543",
 ]
 
 # [output]
