@@ -68,7 +68,10 @@ async fn test_db_schema_initialization() {
     .execute(&pool)
     .await;
 
-    assert!(insert.is_ok(), "El esquema debe permitir insertar un snapshot cifrado");
+    assert!(
+        insert.is_ok(),
+        "El esquema debe permitir insertar un snapshot cifrado"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,24 +183,33 @@ async fn test_restauracion_desde_backup() {
 
     // Copiar datos de la BD original al backup
     let devices: Vec<(String, String, String, i64, String, String)> = sqlx::query(
-        "SELECT id, name, public_key_hex, is_active, created_at, last_seen_at FROM devices"
+        "SELECT id, name, public_key_hex, is_active, created_at, last_seen_at FROM devices",
     )
-    .map(|r: sqlx::sqlite::SqliteRow| (
-        r.get("id"), r.get("name"), r.get("public_key_hex"),
-        r.get("is_active"), r.get("created_at"), r.get("last_seen_at"),
-    ))
+    .map(|r: sqlx::sqlite::SqliteRow| {
+        (
+            r.get("id"),
+            r.get("name"),
+            r.get("public_key_hex"),
+            r.get("is_active"),
+            r.get("created_at"),
+            r.get("last_seen_at"),
+        )
+    })
     .fetch_all(&pool_original)
     .await
     .expect("Leer devices de BD original");
 
     for d in &devices {
-        sqlx::query(
-            "INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?)"
-        )
-        .bind(&d.0).bind(&d.1).bind(&d.2).bind(d.3).bind(&d.4).bind(&d.5)
-        .execute(&pool_backup)
-        .await
-        .expect("Copiar device al backup");
+        sqlx::query("INSERT INTO devices VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(&d.0)
+            .bind(&d.1)
+            .bind(&d.2)
+            .bind(d.3)
+            .bind(&d.4)
+            .bind(&d.5)
+            .execute(&pool_backup)
+            .await
+            .expect("Copiar device al backup");
     }
 
     let snapshots: Vec<(i64, String, String, String, String)> = sqlx::query(
@@ -213,7 +225,11 @@ async fn test_restauracion_desde_backup() {
 
     for s in &snapshots {
         sqlx::query("INSERT INTO vault_snapshots VALUES (?, ?, ?, ?, ?)")
-            .bind(s.0).bind(&s.1).bind(&s.2).bind(&s.3).bind(&s.4)
+            .bind(s.0)
+            .bind(&s.1)
+            .bind(&s.2)
+            .bind(&s.3)
+            .bind(&s.4)
             .execute(&pool_backup)
             .await
             .expect("Copiar snapshot al backup");
@@ -233,7 +249,10 @@ async fn test_restauracion_desde_backup() {
         .await
         .expect("Contar devices en BD restaurada");
 
-    assert_eq!(device_count, 1, "La BD restaurada debe tener exactamente 1 dispositivo");
+    assert_eq!(
+        device_count, 1,
+        "La BD restaurada debe tener exactamente 1 dispositivo"
+    );
 
     let snapshot_payload: String =
         sqlx::query_scalar("SELECT encrypted_payload FROM vault_snapshots WHERE version = 1")

@@ -22,8 +22,7 @@ use ai_keyvault_provider_agy::quota::{parse_usage_output, verify_token};
 #[test]
 #[ignore = "Requiere Windows + Credential Manager con gemini:antigravity"]
 fn test_leer_credencial_agy_real() {
-    let cred = AgyCredentialManager::read()
-        .expect("Debe leer la credencial de Credential Manager");
+    let cred = AgyCredentialManager::read().expect("Debe leer la credencial de Credential Manager");
 
     assert!(
         !cred.access_token.is_empty(),
@@ -43,7 +42,10 @@ fn test_leer_credencial_agy_real() {
         "El email no debe estar vacío"
     );
 
-    println!("✅ Email detectado: {}", cred.email.as_deref().unwrap_or("?"));
+    println!(
+        "✅ Email detectado: {}",
+        cred.email.as_deref().unwrap_or("?")
+    );
     println!(
         "✅ Token válido: {} ({}min restantes)",
         cred.is_valid(),
@@ -59,7 +61,10 @@ fn test_leer_credencial_agy_real() {
 fn test_verificar_agy_models() {
     let models = verify_token().expect("verify_token() debe funcionar con agy instalado");
 
-    assert!(!models.is_empty(), "agy models debe devolver al menos 1 modelo");
+    assert!(
+        !models.is_empty(),
+        "agy models debe devolver al menos 1 modelo"
+    );
     println!("✅ Modelos disponibles ({}): {:?}", models.len(), models);
 }
 

@@ -68,8 +68,7 @@ impl AgyCredential {
 
     /// Minutos restantes de vida del token. `None` si no hay fecha de vencimiento.
     pub fn minutes_remaining(&self) -> Option<i64> {
-        self.expiry
-            .map(|exp| (exp - Utc::now()).num_seconds() / 60)
+        self.expiry.map(|exp| (exp - Utc::now()).num_seconds() / 60)
     }
 }
 
@@ -109,8 +108,8 @@ impl AgyCredentialManager {
     fn parse_blob(raw: &[u8]) -> Result<AgyCredential> {
         // El blob puede venir en UTF-8 o UTF-16-LE (Windows guarda en UTF-16).
         let text = decode_blob(raw)?;
-        let blob: AgyCredentialBlob = serde_json::from_str(&text)
-            .map_err(|e| AgyError::InvalidBlob(e.to_string()))?;
+        let blob: AgyCredentialBlob =
+            serde_json::from_str(&text).map_err(|e| AgyError::InvalidBlob(e.to_string()))?;
 
         let expiry = blob
             .token
@@ -160,11 +159,11 @@ fn decode_blob(raw: &[u8]) -> Result<String> {
 #[cfg(target_os = "windows")]
 mod platform {
     use super::*;
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::Security::Credentials::{
         CredFree, CredReadW, CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
     };
-    use std::ffi::OsStr;
-    use std::os::windows::ffi::OsStrExt;
 
     fn to_wide(s: &str) -> Vec<u16> {
         OsStr::new(s)
@@ -206,9 +205,7 @@ mod platform {
 
         let ok = unsafe { CredWriteW(&cred, 0) };
         if ok == 0 {
-            return Err(AgyError::CredentialWrite(
-                "CredWriteW falló".to_string(),
-            ));
+            return Err(AgyError::CredentialWrite("CredWriteW falló".to_string()));
         }
         Ok(())
     }

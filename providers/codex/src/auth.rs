@@ -81,8 +81,7 @@ impl CodexAuth {
     }
 
     pub fn minutes_remaining(&self) -> Option<i64> {
-        self.expiry
-            .map(|exp| (exp - Utc::now()).num_seconds() / 60)
+        self.expiry.map(|exp| (exp - Utc::now()).num_seconds() / 60)
     }
 }
 
@@ -94,7 +93,9 @@ pub struct CodexAuthManager {
 
 impl CodexAuthManager {
     pub fn new() -> Self {
-        Self { path: default_auth_path() }
+        Self {
+            path: default_auth_path(),
+        }
     }
 
     /// Para tests: usar una ruta personalizada.
@@ -111,8 +112,8 @@ impl CodexAuthManager {
         }
 
         let content = std::fs::read_to_string(&self.path)?;
-        let file: CodexAuthFile = serde_json::from_str(&content)
-            .map_err(|e| CodexError::InvalidJson(e.to_string()))?;
+        let file: CodexAuthFile =
+            serde_json::from_str(&content).map_err(|e| CodexError::InvalidJson(e.to_string()))?;
 
         let expiry = file
             .tokens
@@ -173,9 +174,7 @@ impl CodexAuthManager {
     pub fn revert(&self) -> Result<()> {
         let bak_path = self.path.with_extension("json.bak");
         if !bak_path.exists() {
-            return Err(CodexError::AuthFileNotFound(
-                bak_path.display().to_string(),
-            ));
+            return Err(CodexError::AuthFileNotFound(bak_path.display().to_string()));
         }
         std::fs::rename(&bak_path, &self.path)
             .map_err(|e| CodexError::AtomicWrite(format!("Revert falló: {}", e)))?;

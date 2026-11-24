@@ -1,7 +1,7 @@
 //! Tests de provider Codex — usan fake_codex (sin auth.json real).
 
 use ai_keyvault_provider_codex::auth::{CodexAuth, CodexAuthManager};
-use ai_keyvault_provider_codex::switcher::{CodexSwitcher, CodexSwitchResult};
+use ai_keyvault_provider_codex::switcher::{CodexSwitchResult, CodexSwitcher};
 use std::path::PathBuf;
 use tempfile::TempDir;
 
@@ -25,10 +25,12 @@ fn setup_fake_auth(dir: &TempDir, access_token: &str, expiry_offset_secs: i64) -
 /// Genera un JWT falso con email en el payload (para tests).
 fn fake_jwt(token_hint: &str) -> String {
     let header = base64_url_encode(br#"{"alg":"RS256","typ":"JWT"}"#);
-    let email = format!("{}@test.com", token_hint.replace("ya29.", "").get(..8).unwrap_or("test"));
-    let payload = base64_url_encode(
-        format!(r#"{{"email":"{}","exp":9999999999}}"#, email).as_bytes()
+    let email = format!(
+        "{}@test.com",
+        token_hint.replace("ya29.", "").get(..8).unwrap_or("test")
     );
+    let payload =
+        base64_url_encode(format!(r#"{{"email":"{}","exp":9999999999}}"#, email).as_bytes());
     format!("{}.{}.fakesig", header, payload)
 }
 
@@ -39,12 +41,24 @@ fn base64_url_encode(input: &[u8]) -> String {
     let mut i = 0;
     while i < input.len() {
         let b0 = input[i] as u32;
-        let b1 = if i + 1 < input.len() { input[i + 1] as u32 } else { 0 };
-        let b2 = if i + 2 < input.len() { input[i + 2] as u32 } else { 0 };
+        let b1 = if i + 1 < input.len() {
+            input[i + 1] as u32
+        } else {
+            0
+        };
+        let b2 = if i + 2 < input.len() {
+            input[i + 2] as u32
+        } else {
+            0
+        };
         out.push(TABLE[((b0 >> 2) & 0x3F) as usize] as char);
         out.push(TABLE[(((b0 & 0x03) << 4) | (b1 >> 4)) as usize] as char);
-        if i + 1 < input.len() { out.push(TABLE[(((b1 & 0x0F) << 2) | (b2 >> 6)) as usize] as char); }
-        if i + 2 < input.len() { out.push(TABLE[(b2 & 0x3F) as usize] as char); }
+        if i + 1 < input.len() {
+            out.push(TABLE[(((b1 & 0x0F) << 2) | (b2 >> 6)) as usize] as char);
+        }
+        if i + 2 < input.len() {
+            out.push(TABLE[(b2 & 0x3F) as usize] as char);
+        }
         i += 3;
     }
     out
@@ -89,7 +103,9 @@ fn test_escritura_atomica() {
         expiry: Some(chrono::Utc::now() + chrono::Duration::hours(1)),
         source_path: path.clone(),
     };
-    manager.write_atomic(&nueva).expect("Escritura atómica debe funcionar");
+    manager
+        .write_atomic(&nueva)
+        .expect("Escritura atómica debe funcionar");
 
     // Verificar que el archivo fue actualizado
     let leido = manager.read().unwrap();
@@ -97,7 +113,10 @@ fn test_escritura_atomica() {
 
     // Verificar que el .bak existe (para revertir)
     let bak_path = path.with_extension("json.bak");
-    assert!(bak_path.exists(), "El .bak debe existir después de la escritura atómica");
+    assert!(
+        bak_path.exists(),
+        "El .bak debe existir después de la escritura atómica"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -123,7 +142,9 @@ fn test_revertir_auth_json() {
     assert_eq!(manager.read().unwrap().access_token, "token_b");
 
     // Revertir
-    manager.revert().expect("Revert debe funcionar con .bak presente");
+    manager
+        .revert()
+        .expect("Revert debe funcionar con .bak presente");
 
     // Verificar que token_a está restaurado
     assert_eq!(manager.read().unwrap().access_token, "token_a");
@@ -186,7 +207,10 @@ fn test_switch_fallido_revierte() {
 
     match result {
         CodexSwitchResult::Reverted { reason } => {
-            assert!(reason.contains("401"), "El motivo debe contener el error de autenticación");
+            assert!(
+                reason.contains("401"),
+                "El motivo debe contener el error de autenticación"
+            );
             // Verificar que el token original fue restaurado
             let manager = CodexAuthManager::with_path(path);
             let leido = manager.read().unwrap();

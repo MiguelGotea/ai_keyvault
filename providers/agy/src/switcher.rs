@@ -15,7 +15,7 @@
 use crate::{
     credential::{AgyCredential, AgyCredentialManager},
     quota::verify_token,
-    Result, AgyError,
+    AgyError, Result,
 };
 
 /// Resultado de un intento de cambio de cuenta.
@@ -26,7 +26,10 @@ pub enum SwitchResult {
     /// Cambio fallido y revertido. El campo describe el error.
     Reverted { reason: String },
     /// Fallo al revertir — estado inconsistente.
-    RevertFailed { original_error: String, revert_error: String },
+    RevertFailed {
+        original_error: String,
+        revert_error: String,
+    },
 }
 
 /// Orquestador del cambio de cuenta.

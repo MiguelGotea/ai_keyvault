@@ -30,11 +30,15 @@ pub struct CodexSwitcher {
 
 impl CodexSwitcher {
     pub fn new() -> Self {
-        Self { manager: CodexAuthManager::new() }
+        Self {
+            manager: CodexAuthManager::new(),
+        }
     }
 
     pub fn with_path(path: PathBuf) -> Self {
-        Self { manager: CodexAuthManager::with_path(path) }
+        Self {
+            manager: CodexAuthManager::with_path(path),
+        }
     }
 
     /// Cambia la cuenta activa de Codex.

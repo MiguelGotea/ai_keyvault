@@ -15,7 +15,7 @@ pub mod switcher;
 
 // Re-exportaciones públicas
 pub use credential::{AgyCredential, AgyCredentialManager};
-pub use quota::{AgyPool, AgyQuotaReading, parse_usage_output};
+pub use quota::{parse_usage_output, AgyPool, AgyQuotaReading};
 pub use switcher::{AccountSwitcher, SwitchResult};
 
 use thiserror::Error;

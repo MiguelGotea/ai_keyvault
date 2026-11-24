@@ -32,13 +32,31 @@ CLAUDE AND GPT MODELS
     assert_eq!(readings.len(), 2, "Deben existir 2 pools");
 
     let gemini = readings.iter().find(|r| r.pool == AgyPool::Gemini).unwrap();
-    assert!((gemini.percent_remaining - 98.41).abs() < 0.01, "% Gemini incorrecto");
-    assert!((gemini.percent_used - 1.59).abs() < 0.01, "% usado Gemini incorrecto");
-    assert!(gemini.reset_at.is_some(), "Gemini debe tener reset_at cuando hay consumo");
+    assert!(
+        (gemini.percent_remaining - 98.41).abs() < 0.01,
+        "% Gemini incorrecto"
+    );
+    assert!(
+        (gemini.percent_used - 1.59).abs() < 0.01,
+        "% usado Gemini incorrecto"
+    );
+    assert!(
+        gemini.reset_at.is_some(),
+        "Gemini debe tener reset_at cuando hay consumo"
+    );
 
-    let claude = readings.iter().find(|r| r.pool == AgyPool::ClaudeGpt).unwrap();
-    assert!((claude.percent_remaining - 97.48).abs() < 0.01, "% Claude incorrecto");
-    assert!(claude.reset_at.is_some(), "Claude debe tener reset_at cuando hay consumo");
+    let claude = readings
+        .iter()
+        .find(|r| r.pool == AgyPool::ClaudeGpt)
+        .unwrap();
+    assert!(
+        (claude.percent_remaining - 97.48).abs() < 0.01,
+        "% Claude incorrecto"
+    );
+    assert!(
+        claude.reset_at.is_some(),
+        "Claude debe tener reset_at cuando hay consumo"
+    );
 
     // Verificar que el email se extrae correctamente
     assert_eq!(gemini.account_email.as_deref(), Some("test@gmail.com"));
@@ -67,9 +85,15 @@ CLAUDE AND GPT MODELS
     assert_eq!(readings.len(), 2);
 
     for r in &readings {
-        assert!((r.percent_remaining - 100.0).abs() < 0.01, "% debe ser 100.0");
+        assert!(
+            (r.percent_remaining - 100.0).abs() < 0.01,
+            "% debe ser 100.0"
+        );
         assert!((r.percent_used - 0.0).abs() < 0.01, "% usado debe ser 0.0");
-        assert!(r.reset_at.is_none(), "Sin reset_at cuando la cuota está completa");
+        assert!(
+            r.reset_at.is_none(),
+            "Sin reset_at cuando la cuota está completa"
+        );
     }
 }
 
@@ -92,7 +116,10 @@ CLAUDE AND GPT MODELS
 
     let readings = parse_usage_output(fake_output).expect("Debe parsear");
     let gemini = readings.iter().find(|r| r.pool == AgyPool::Gemini).unwrap();
-    let claude = readings.iter().find(|r| r.pool == AgyPool::ClaudeGpt).unwrap();
+    let claude = readings
+        .iter()
+        .find(|r| r.pool == AgyPool::ClaudeGpt)
+        .unwrap();
 
     // reset_at debe ser una fecha en el futuro
     let now = chrono::Utc::now();
@@ -102,14 +129,22 @@ CLAUDE AND GPT MODELS
         assert!(parsed > now, "reset_at de Gemini debe estar en el futuro");
         // 10h 30m = 630 min ≈ 37800s
         let diff = (parsed - now).num_minutes();
-        assert!(diff > 620 && diff <= 631, "Diferencia de tiempo incorrecta: {}min", diff);
+        assert!(
+            diff > 620 && diff <= 631,
+            "Diferencia de tiempo incorrecta: {}min",
+            diff
+        );
     }
 
     if let Some(ref reset) = claude.reset_at {
         let parsed: chrono::DateTime<chrono::Utc> =
             chrono::DateTime::parse_from_rfc3339(reset).unwrap().into();
         let diff = (parsed - now).num_minutes();
-        assert!(diff > 110 && diff <= 121, "Diferencia de tiempo incorrecta para Claude: {}min", diff);
+        assert!(
+            diff > 110 && diff <= 121,
+            "Diferencia de tiempo incorrecta para Claude: {}min",
+            diff
+        );
     }
 }
 

@@ -28,9 +28,7 @@ fn test_leer_auth_json_real() {
     );
 
     let manager = CodexAuthManager::new();
-    let auth = manager
-        .read()
-        .expect("Debe leer auth.json correctamente");
+    let auth = manager.read().expect("Debe leer auth.json correctamente");
 
     assert!(
         !auth.access_token.is_empty(),
@@ -74,9 +72,7 @@ fn test_roundtrip_codex_auth_json() {
     let manager = CodexAuthManager::new();
 
     // 1. Leer original
-    let original = manager
-        .read()
-        .expect("Debe leer auth.json original");
+    let original = manager.read().expect("Debe leer auth.json original");
     let original_token = original.access_token.clone();
 
     // 2. Escribir mismo contenido (simula un switch a sí mismo)

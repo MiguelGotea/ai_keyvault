@@ -10,7 +10,7 @@ pub mod auth;
 pub mod switcher;
 
 pub use auth::{CodexAuth, CodexAuthManager};
-pub use switcher::{CodexSwitcher, CodexSwitchResult};
+pub use switcher::{CodexSwitchResult, CodexSwitcher};
 
 use thiserror::Error;
 
