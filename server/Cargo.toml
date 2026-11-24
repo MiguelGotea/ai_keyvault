@@ -1,0 +1,42 @@
+[package]
+name = "ai-keyvault-server"
+version = "0.1.0"
+edition = "2021"
+authors = ["AI KeyVault Team"]
+description = "API de sincronización y bóveda de conocimiento cero en VPS para AI KeyVault"
+license = "MIT"
+
+[dependencies]
+# Framework HTTP y red
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1.40", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Base de datos SQLite
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "sqlite",
+    "macros",
+    "chrono",
+    "uuid",
+    "migrate"
+] }
+
+# Autenticación y Criptografía
+sha2 = "0.10"
+subtle = "2.6"
+rand = "0.8"
+
+# Serialización y utilidades
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+thiserror = "1.0"
+dotenvy = "0.15"
+
+[dev-dependencies]
+reqwest = { version = "0.12", features = ["json"] }
