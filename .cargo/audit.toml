@@ -18,5 +18,5 @@ ignore = [
     "RUSTSEC-2026-0459",
 ]
 
-[output]
-deny = ["vulnerability"]   # solo vulnerabilidades bloquean; warnings (unmaintained como chrono) no bloquean
+# [output]
+# Las vulnerabilidades bloquean por defecto; warnings (ej. unmaintained como chrono) no bloquean.
