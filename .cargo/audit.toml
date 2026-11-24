@@ -1,0 +1,22 @@
+# Configuración de cargo-audit para AI KeyVault
+# Ubicación estándar (.cargo/audit.toml) leída automáticamente por `cargo audit`.
+# Referencia: https://docs.rs/cargo-audit/latest/cargo_audit/
+
+[advisories]
+ignore = [
+    # RUSTSEC-2023-0071: Marvin Attack en crate `rsa`
+    # - Nuestro código NO usa RSA directamente.
+    # - Proviene transitivamente de dependencias de testing/sqlx-mysql.
+    # - Impacto: ninguno en producción.
+    "RUSTSEC-2023-0071",
+
+    # RUSTSEC-2026-0459: libsqlite3-sys < 0.39.0 (CVE-2026-119375)
+    # - sqlx 0.8.6 fija libsqlite3-sys en ^0.30.1 (no actualiza a 0.39 por semver).
+    # - Nuestra BD SQLite solo recibe queries parametrizadas propias del servidor,
+    #   no SQL arbitrario ni archivos SQLite externos no confiables.
+    # - Se removerá cuando sqlx publique versión compatible con libsqlite3-sys >= 0.39.0.
+    "RUSTSEC-2026-0459",
+]
+
+[output]
+deny = ["vulnerability"]   # solo vulnerabilidades bloquean; warnings (unmaintained como chrono) no bloquean

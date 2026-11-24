@@ -219,9 +219,9 @@ No hubo cambios directos al VPS en Fase 3. Los cambios fueron todos en el reposi
 | `providers/codex/` | Crate nuevo — auth.json atómico, JWT decode, switcher |
 | `providers/agy/tests/integration.rs` | Tests de integración real (marcados `#[ignore]`) |
 | `providers/codex/tests/integration.rs` | Tests de integración real (marcados `#[ignore]`) |
-| `.github/workflows/ci.yml` | Quitados `continue-on-error` — ahora bloquea en rojo |
+| `.github/workflows/ci.yml` | Quitados `continue-on-error` en fmt/clippy/test; `cargo audit` lee `.cargo/audit.toml` |
 | `server/Cargo.toml` | Eliminada dependencia `rand` sin uso |
-| `audit.toml` (raíz) | Creado — ignora RUSTSEC-2023-0071 (rsa, dev-dep transitivo) |
+| `.cargo/audit.toml` | Creado — ignora `RUSTSEC-2023-0071` (`rsa` transitivo) y `RUSTSEC-2026-0459` (`libsqlite3-sys` 0.30.1 fijado por `sqlx 0.8.6`) |
 | `Cargo.lock` | Actualizado con `cargo update` |
 
 **Para correr tests de integración localmente (Windows):**
