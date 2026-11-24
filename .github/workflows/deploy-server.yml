@@ -53,7 +53,7 @@ jobs:
       - name: 🔄 Reiniciar servicio en VPS
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} \
-            "sudo systemctl restart ai-keyvault && sleep 2 && sudo systemctl status ai-keyvault --no-pager && curl -sf http://localhost:3010/health && echo '✅ Servidor respondiendo OK'"
+            "systemctl restart ai-keyvault && sleep 2 && systemctl status ai-keyvault --no-pager && curl -sf http://localhost:3010/health && echo '✅ Servidor respondiendo OK'"
 
       - name: ✅ Verificar deploy
         run: echo "🚀 Deploy completado exitosamente — $(date)"
