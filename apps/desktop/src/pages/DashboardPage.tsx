@@ -1,9 +1,10 @@
 /**
  * DashboardPage — Fase 13: Dashboard real con tarjetas de cuota.
+ * Fase 14: reset del timer de autobloqueo en interacción del usuario.
  * Muestra resumen de todas las cuentas vía get_stats_compare.
  * Permite iniciar el poller y cambiar cuenta activa.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
 import QuotaCard from "../components/QuotaCard";
@@ -36,6 +37,28 @@ export default function DashboardPage() {
         });
     }
   }, [pollerStarted]);
+
+  // Fase 14: reset del timer de autobloqueo en cada interacción del usuario.
+  // Usamos throttle manual con useCallback para no llamar Rust en cada pixel.
+  const throttleRef = { ts: 0 };
+  const handleActivity = useCallback(() => {
+    const now = Date.now();
+    if (now - throttleRef.ts < 30_000) return; // throttle 30 s
+    throttleRef.ts = now;
+    const minutes = parseInt(localStorage.getItem("autolock_minutes") ?? "0");
+    if (minutes > 0) {
+      invoke("reset_autolock_timer", { minutes }).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener("mousemove", handleActivity, { passive: true });
+    window.addEventListener("keydown", handleActivity, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("keydown", handleActivity);
+    };
+  }, [handleActivity]);
 
   // Agrupar pools por cuenta
   const byAccount = (quota.data ?? []).reduce<Record<string, PoolSummary[]>>((acc, pool) => {

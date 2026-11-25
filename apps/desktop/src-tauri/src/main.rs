@@ -88,6 +88,12 @@ fn main() {
             // Switch de cuenta (Fase 13)
             commands::switch_cmd::switch_account,
             commands::switch_cmd::get_active_account,
+            // Autobloqueo y sincronización vault (Fase 14/15)
+            commands::security::start_autolock_timer,
+            commands::security::reset_autolock_timer,
+            commands::security::cancel_autolock_timer,
+            commands::security::upload_vault_sync,
+            commands::security::download_vault_sync,
         ])
         .run(tauri::generate_context!())
         .expect("Error al arrancar la aplicación AI KeyVault");

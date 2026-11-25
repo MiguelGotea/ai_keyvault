@@ -1,4 +1,4 @@
-﻿# gen-icons.ps1 — Genera los íconos requeridos por Tauri desde las imágenes de branding.
+# gen-icons.ps1 — Genera los íconos requeridos por Tauri desde las imágenes de branding.
 # Ejecutar desde la raíz del repositorio.
 # 
 # USO: .\.scripts\gen-icons.ps1

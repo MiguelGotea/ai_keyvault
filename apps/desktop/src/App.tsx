@@ -1,4 +1,7 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect, useRef } from "react";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import UnlockPage from "./pages/UnlockPage";
 import DashboardPage from "./pages/DashboardPage";
 import AlertsPage from "./pages/AlertsPage";
@@ -10,16 +13,35 @@ import AppLayout from "./components/AppLayout";
 
 /**
  * App — enrutador principal de AI KeyVault.
- *   / → /unlock
- *   /unlock → pantalla de desbloqueo con bóveda local (Fase 12)
- *   /dashboard → Dashboard con cuota de todas las cuentas (Fase 13)
- *   /alerts → Log de alertas (Fase 14)
- *   /ping → Ping mínimo (Fase 14)
- *   /chats → Chats activos (Fase 15)
- *   /stats → Estadísticas avanzadas (Fase 15)
- *   /settings → Configuración (Fase 15)
+ *
+ * Fase 14: escucha el evento "autolock" emitido por Rust cuando expira el timer
+ * de inactividad. Al recibirlo bloquea la bóveda y navega a /unlock.
  */
 function App() {
+  const navigate = useNavigate();
+  // Ref para evitar múltiples suscripciones al rerender
+  const unlistenRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    // Suscribirse al evento de autobloqueo emitido desde Rust
+    listen<void>("autolock", async () => {
+      try {
+        await invoke("lock_vault");
+        await invoke("cancel_autolock_timer");
+      } catch {
+        // Si la bóveda ya estaba bloqueada, no es error
+      }
+      navigate("/unlock", { replace: true });
+    }).then((unlisten) => {
+      unlistenRef.current = unlisten;
+    });
+
+    return () => {
+      // Limpiar la suscripción al desmontar
+      unlistenRef.current?.();
+    };
+  }, [navigate]);
+
   return (
     <Routes>
       {/* Pantalla de desbloqueo — sin layout */}

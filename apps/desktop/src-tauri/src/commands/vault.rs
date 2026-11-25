@@ -57,7 +57,7 @@ pub struct CreateVaultResult {
 
 // ── Ruta del archivo de bóveda ───────────────────────────────────────────────
 
-fn vault_path(app: &AppHandle) -> PathBuf {
+pub fn vault_path(app: &AppHandle) -> PathBuf {
     // %APPDATA%\com.miguelgotea.ai-keyvault\vault.json
     app.path()
         .app_data_dir()

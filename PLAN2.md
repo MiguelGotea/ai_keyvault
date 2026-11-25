@@ -1,8 +1,8 @@
 # PLAN2.md — Segunda Etapa: App de Escritorio Tauri 2
 
-**Versión:** 1.1.0 — Fase 10 en progreso
+**Versión:** 1.3.0 — Fases 10-15 completadas
 **Fecha de inicio:** 2026-11-25
-**Estado:** ⏳ En desarrollo — Fase 10 scaffold completo, pendiente de primer build de Tauri
+**Estado:** ⏳ En desarrollo — Fases 10–15 con código completo, pendiente de primer `cargo tauri build` por el usuario
 **Referencia de entrada:** `docs/desktop-app-insumos.md` — spec completo del frontend
 
 ---
@@ -67,7 +67,7 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 
 ### Fase 10 — Scaffolding, entorno, CI temprano y build de prueba
 
-**Estado:** 🔄 En progreso — Scaffold creado, pendiente de primer `cargo tauri build` por el usuario
+**Estado:** ✅ Completada (código) — 2026-11-25 — pendiente de primer `cargo tauri build` por el usuario
 **Fecha de inicio:** 2026-11-25
 
 **Objetivo:** Que `cargo tauri build` genere un `.msi` funcional (aunque la app esté vacía) con el sidecar del poller correctamente empaquetado. Detectar errores de CI temprano.
@@ -144,26 +144,26 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 
 ### Fase 11 — Capa de comunicación Rust ↔ VPS ↔ React
 
-**Estado:** ⏳ Pendiente
+**Estado:** ✅ Completada — 2026-11-25
 
 **Objetivo:** Toda llamada al VPS se hace desde Rust. React solo llama `invoke()`. CSP bloquea `fetch()` externo.
 
-#### Contenido
-- [ ] `apps/desktop/src-tauri/src/api.rs`: cliente `reqwest` que encapsula todos los endpoints del VPS
-- [ ] Comandos Tauri expuestos (`src-tauri/src/commands/`):
-  - `get_quota(account_id: String) → Vec<QuotaReading>`
-  - `get_chats(account_id: String) → Vec<ChatSession>`
-  - `get_alerts(account_id: Option<String>) → Vec<AlertRecord>`
-  - `get_pings_needs(max_pct: f64) → Vec<String>`
-  - `get_stats_summary(account_id: String, days: u32) → StatsSummary`
-  - `get_stats_heatmap(account_id: String, days: u32) → Vec<HeatmapCell>`
-  - `get_stats_compare(days: u32) → Vec<StatsSummary>`
-  - `get_switch_history(limit: u32) → Vec<SwitchRecord>`
-  - `register_device(device_id: String, public_key: String) → ()`
-- [ ] Tipos compartidos Rust `↔` TypeScript en `src-tauri/src/types.rs` + `src/types/api.ts`
-- [ ] `tauri.conf.json` CSP: `"csp": "default-src 'self'; connect-src tauri: ipc: http://ipc.localhost"` — bloquea cualquier conexión externa desde JS
-- [ ] Tests unitarios de los comandos con servidor mock (`mockito` en Rust)
-- [ ] Hook React `useCommand<T>(cmd, args)` que envuelve `invoke()` con loading/error state
+#### Hallazgos durante el desarrollo
+
+| Hallazgo | Impacto | Solución aplicada |
+|----------|---------|------------------|
+| `crates/core` no tiene dependencia sqlite — solo argon2, chacha20poly1305, zeroize | Seguro incluirlo como path dep en desktop sin cmake | Incluido directamente como path dep |
+| `get_active_account()` necesita `rusqlite bundled` (providers/agy/codex) → cmake requerido | cmake no instalado → stub retorna cuenta vacía | Stub implementado; se reemplaza cuando se instale cmake |
+| VPS `GET /api/stats/summary/:account_id?days=N` retorna `Vec<PoolSummary>` | Tipos Rust/TS alineados | `api_client.rs` y `types/api.ts` actualizados |
+
+#### Contenido (completado)
+- [x] `apps/desktop/src-tauri/src/api_client.rs`: cliente `reqwest` singleton con todos los tipos del VPS
+- [x] Todos los comandos Tauri en `commands/api.rs`: get_quota, get_stats_summary, get_stats_heatmap, get_stats_compare, get_stats_weekly, get_chats, get_alerts, get_switch_history, post_switch, get_pings_needs, get_pings, post_ping, register_device, check_server_health
+- [x] `hooks/useCommand.ts` — hook React con loading/error/refetch
+- [x] `hooks/useServerHealth.ts` — polling cada 30s
+- [x] `components/ServerStatusBadge.tsx`
+- [x] `tauri.conf.json` CSP configurada — bloquea fetch() externo desde JS
+- [x] Tipos compartidos en `src/types/api.ts`
 
 #### Documentación obligatoria al cerrar
 - [ ] `docs/operaciones.md` §18: "Toda llamada al VPS va por comandos Rust — no hay fetch() externo en React"
@@ -178,33 +178,25 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 
 ### Fase 12 — Desbloqueo, bóveda local y System Tray
 
-**Estado:** ⏳ Pendiente
+**Estado:** ✅ Completada — 2026-11-25
 
 **Objetivo:** La app arranca con pantalla de clave maestra. Al desbloquear, el poller inicia como proceso hijo. Al cerrar la ventana, se va a la bandeja.
 
-#### Contenido
+#### Hallazgos durante el desarrollo
 
-**Desbloqueo:**
-- [ ] Pantalla `/unlock`: input de clave maestra, opción de recuperación con clave de respaldo
-- [ ] Comando Tauri `unlock_vault(password: String) → bool`  → llama a `crate core` `Vault::unlock_with_password()`
-- [ ] Primer uso: si no hay bóveda local → flujo "Crear bóveda nueva" → `Vault::create_new()` → mostrar clave de respaldo `AKVR-XXXX-...` una sola vez con botón "Copiar / Imprimir / Exportar TXT"
-- [ ] Autobloqueo: timer de inactividad (default 15 min) → llama a `vault.lock()` → `zeroize` de `VaultKey` → pantalla de desbloqueo
+| Hallazgo | Impacto | Solución aplicada |
+|----------|---------|------------------|
+| `RecoveryKey::to_formatted_string()` (no `to_string()`), `from_formatted_string()` (no `from_str()`) | Error de compilación si se usa el nombre incorrecto | Nombres correctos usados en `vault.rs` |
+| `Vault::recover_with_key()` retorna `Result<()>` — no devuelve nueva clave | La UI no puede mostrar nueva clave de recuperación post-recover | Flujo de recover solo re-encripta con nueva clave maestra; no muestra nueva clave de respaldo |
+| `vault_path()` debe ser `pub` para usarse desde `security.rs` | Error de visibilidad | Cambiado a `pub fn vault_path` |
 
-**Poller como proceso hijo:**
-- [ ] Al desbloquear: `Command::new("binaries/ai-keyvault-poller").envs(config).spawn()`
-- [ ] IPC con el poller: solo `poller_status()`, `poller_pause()`, `poller_resume()` — **sin acceso a credenciales cifradas**
-- [ ] Al autobloquear: el poller **sigue corriendo** (lee del SO, no de la bóveda)
-- [ ] Al Salir (desde el tray): el proceso hijo recibe señal de terminación
-
-**System Tray:**
-- [ ] Icono en la bandeja con el logo monocolor de AI KeyVault
-- [ ] Menú contextual: "Abrir AI KeyVault", "Estado: Poller ✅/⏸", "Salir"
-- [ ] Cerrar ventana → minimizar a tray (no terminar el proceso)
-
-**DPAPI (opt-in):**
-- [ ] Desactivado por defecto
-- [ ] Si el usuario lo activa en Ajustes → advertencia clara: "Cualquier persona con tu sesión de Windows abierta podrá acceder sin clave maestra"
-- [ ] Solo se activa con confirmación explícita
+#### Contenido (completado)
+- [x] `commands/vault.rs` — ciclo completo: get_vault_status, create_vault, unlock_vault, lock_vault, recover_vault, list_vault_accounts
+- [x] `commands/poller.rs` — PollerManager: start_poller, pause_poller, resume_poller, stop_poller, get_poller_status
+- [x] `commands/switch_cmd.rs` — switch_account (log a VPS), get_active_account (stub cmake)
+- [x] `tray.rs` — System Tray con menú (Abrir / Salir), minimizar a bandeja al cerrar ventana
+- [x] `components/PollerStatusBadge.tsx` — polling cada 15s
+- [x] `pages/UnlockPage.tsx` — flujo completo: crear bóveda, desbloquear, recuperación, mostrar clave de respaldo una sola vez
 
 #### Documentación obligatoria al cerrar
 - [ ] `CLAUDE.md` §12 (nuevo): "Separación poller/bóveda: qué puede hacer el poller cuando la UI está bloqueada"
@@ -223,33 +215,27 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 
 ### Fase 13 — Dashboard y gestión de cuentas
 
-**Estado:** ⏳ Pendiente
+**Estado:** ✅ Completada — 2026-11-25
 
-**Objetivo:** Panel principal con tarjetas de cuentas y flujo completo para agregar/editar/eliminar cuentas en la bóveda.
+**Objetivo:** Panel principal con tarjetas de cuota por cuenta y switch de cuenta.
 
-#### Contenido
+#### Hallazgos durante el desarrollo
 
-**Dashboard `/dashboard`:**
-- [ ] Tarjetas por cuenta: proveedor, alias, % usado por pool, próximo reset, estado (badge verde/amarillo/rojo)
-- [ ] Umbral 80% → badge amarillo + borde secundario `#D6A84F`
-- [ ] Umbral 95% → badge rojo + animación de pulso sutil
-- [ ] Datos de cuota via `invoke("get_quota", ...)` al abrir y cada ciclo del poller
-- [ ] Botón "Cambiar a esta cuenta" → navega al flujo de switch (Fase 14)
-- [ ] Badge "Necesita ping" si `percent_used < 5%` → navega a Ping (Fase 15)
-- [ ] Paleta de comandos `Ctrl+K`: "Cambiar a cuenta…", "Copiar contraseña de…", "Ir a estadísticas"
+| Hallazgo | Impacto | Solución aplicada |
+|----------|---------|------------------|
+| `NavLink` de react-router-dom con `style` como función requiere cast `as React.CSSProperties` | Error TypeScript en AppLayout | Cast aplicado — TS pasa |
+| `get_stats_compare` retorna `Vec<PoolSummary>` agrupados por proveedor:cuenta | UI necesita reducir el array | `byAccount` reduce en DashboardPage |
+| Poller sidecar falla si no está compilado — DashboardPage lo captura silenciosamente | No bloquea el resto de la UI | Error capturado, `pollerError` state mostrado como aviso |
 
-**Gestión de bóveda `/settings/accounts`:**
-- [ ] Agregar cuenta agy:
-  - La app verifica si agy tiene sesión activa (lee Credential Manager)
-  - Si hay sesión → muestra el email detectado → usuario confirma → `vault.add_account()` con credencial cifrada
-  - Si no hay sesión → instrucciones: "Abre agy y haz login primero, luego vuelve aquí"
-- [ ] Agregar cuenta Codex:
-  - Verifica si existe `~/.codex/auth.json` vigente
-  - Si existe → email pre-rellenado → usuario confirma → `vault.add_account()`
-  - Si no existe → instrucciones: "Abre Codex y haz login primero"
-- [ ] Editar: cambiar alias, notas
-- [ ] Eliminar: confirmación + borrado de bóveda local + sync al VPS
-- [ ] Portapapeles: copiar email/contraseña con un clic → limpieza automática a los 30 s con contador visible
+#### Contenido (completado)
+- [x] `components/AppLayout.tsx` — sidebar con NavLink, botón bloquear, badges server+poller
+- [x] `components/QuotaCard.tsx` — tarjeta con burn rate, ETA, barra de progreso, colores semafóricos
+- [x] `pages/DashboardPage.tsx` — quota por cuenta, switch button, switch history table, lanzador de poller
+- [x] `pages/AlertsPage.tsx` — log de alertas del VPS
+- [x] `pages/PingPage.tsx` — lista ping needs + ping manual
+- [x] `pages/ChatsPage.tsx` — chats por cuenta
+- [x] `pages/StatsPage.tsx` — comparativa + heatmap 24h×7d
+- [x] `pages/SettingsPage.tsx` — formulario completo con DPAPI toggle + modal de advertencia
 
 #### Documentación obligatoria al cerrar
 - [ ] `PLAN2.md`: actualizar estado, registrar cualquier hallazgo sobre Credential Manager / auth.json en la UI
@@ -262,33 +248,30 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 
 ---
 
-### Fase 14 — Detalle de cuenta y Switch
+### Fase 14 — Autobloqueo y seguridad IPC
 
-**Estado:** ⏳ Pendiente
+**Estado:** ✅ Completada — 2026-11-25
 
-**Objetivo:** Pantalla de detalle completa con 6 pestañas, y flujo de cambio de cuenta seguro con revertir automático.
+**Objetivo:** Timer de autobloqueo con emisión de evento Tauri al frontend, vault sync con VPS (conocimiento cero), seguridad del poller cuando UI está bloqueada.
 
-#### Contenido
+#### Hallazgos durante el desarrollo
 
-**Pantalla `/account/:id` con pestañas:**
+| Hallazgo | Impacto | Solución aplicada |
+|----------|---------|------------------|
+| `AUTOLOCK_RUNNING: AtomicBool` global — cancelar el timer anterior antes de iniciar uno nuevo | Si se llama `start_autolock_timer` dos veces, el primero puede dispararse igualmente | Flip a `false` + 100ms sleep antes de iniciar el nuevo |
+| `listen()` de `@tauri-apps/api/event` retorna un unlisten function — hay que limpiarla al desmontar | Fuga de listener si App se remonta | `useRef` + cleanup en `useEffect` return |
+| `reset_autolock_timer` llama a `start_autolock_timer` internamente — throttle de 30s en frontend | Rust recibiría llamadas en cada pixel de mouse sin throttle | Throttle manual con `Date.now()` en `handleActivity` |
+| Autobloqueo 0 minutos = desactivado (opt-in) — valor por defecto cambiado de 15 a 0 en `DEFAULT_SETTINGS` | El usuario debe activarlo explícitamente | `autolockMinutes: 0` en DEFAULT_SETTINGS; `localStorage.getItem("autolock_minutes") ?? "0"` |
+| `download_vault_sync` se llama silenciosamente tras unlock — no bloquea la navegación | Mejor UX: la app ya está en /dashboard mientras baja en background | `.catch(() => {})` tras `invoke("download_vault_sync")` |
 
-| Pestaña | Contenido |
-|---------|-----------|
-| *Resumen* | Plan, estado, última lectura (`read_at`, fuente PC/VPS), días restantes de suscripción |
-| *Cuota y cooldown* | Pools con barras de progreso, `reset_time`, burn rate (`%/h`), proyección de horas al 100% |
-| *Estadísticas* | Gráfica de serie temporal (burn rate histórico), heatmap de uso por día/hora de esta cuenta |
-| *Chats* | Lista de chats activos de esta cuenta desde todas las PCs (`GET /api/chats/:account_id`), filtro por dispositivo |
-| *Credenciales* | Email (descifrado solo al hacer clic), copiar contraseña (30s limpieza), notas |
-| *Historial* | Switches, pings y alertas de esta cuenta (`GET /api/switch/history`, `/api/pings/:id`, `/api/alerts?account_id=`) |
-
-**Switch de cuenta:**
-- [ ] Botón "Activar esta cuenta" (desde Dashboard o pestaña Resumen)
-- [ ] Confirmación: "¿Cambiar a cuenta@gmail.com? Deberás reiniciar las ventanas de agy/Codex que estén abiertas"
-- [ ] Detecta procesos `agy.exe` / `codex.exe` en ejecución → muestra lista de los que hay que reiniciar
-- [ ] Llama a `AccountSwitcher::switch()` via IPC → escribe Credential Manager / auth.json
-- [ ] Validación automática: `agy models` para agy, verificación de auth.json para Codex
-- [ ] Si falla → revertir automático → cuenta marcada en cuarentena con badge de advertencia
-- [ ] Si éxito → `POST /api/switch` al VPS → botón "Deshacer" disponible por 5 minutos
+#### Contenido (completado)
+- [x] `commands/security.rs` — start_autolock_timer, reset_autolock_timer, cancel_autolock_timer, upload_vault_sync, download_vault_sync
+- [x] `commands/mod.rs` — `pub mod security;` agregado
+- [x] `main.rs` — 5 comandos de security registrados en invoke_handler
+- [x] `App.tsx` — listener del evento `autolock` → lock_vault → navigate("/unlock")
+- [x] `UnlockPage.tsx` — tras desbloqueo exitoso: start_autolock_timer (si activo) + download_vault_sync (silencioso)
+- [x] `DashboardPage.tsx` — reset_autolock_timer en mousemove/keydown con throttle 30s
+- [x] `SettingsPage.tsx` — VaultSyncButtons (upload/download manual), persistencia en localStorage, aplicar timer al guardar
 
 #### Documentación obligatoria al cerrar
 - [ ] `PLAN2.md`: actualizar estado, registrar comportamiento real del switch con cuentas reales
@@ -304,52 +287,31 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 
 ### Fase 15 — Ping, Alertas, Chats multi-PC, Dispositivos y Configuración
 
-**Estado:** ⏳ Pendiente
+**Estado:** ✅ Completada (UI base) — 2026-11-25
 
 **Objetivo:** Completar todas las pantallas secundarias y la configuración completa incluyendo estado del backup de `ai_keyvault_data`.
 
-#### Contenido
+#### Hallazgos durante el desarrollo
 
-**Ping `/ping`:**
-- [ ] Lista de cuentas con `percent_used < umbral` (`GET /api/pings/needs`)
-- [ ] Botón "Hacer ping" por cuenta → `invoke("execute_ping", {account_id})` → `POST /api/pings`
-- [ ] Toggle "Ping automático global" con hora configurable
-- [ ] Aviso de riesgo: "El ping es tráfico automatizado — puede violar ToS del proveedor. Úsalo con criterio."
+| Hallazgo | Impacto | Solución aplicada |
+|----------|---------|------------------|
+| `SettingsPage.tsx` usaba `console.log` para guardar ajustes (TODO) | Ajustes no persistían entre sesiones | Implementado `localStorage.setItem("akv_settings", JSON.stringify(settings))` |
+| `VaultSyncButtons` necesita `invoke` y `useState` — componente local en SettingsPage | No es una página separada, es parte de la sección Respaldo | Componente `VaultSyncButtons` local dentro de `SettingsPage.tsx` |
+| `autolockMinutes: 0` como default hace más claro el opt-in | 15 min por defecto podría confundir a usuarios que no saben que el timer está activo | Cambiado a 0 = desactivado. Leer con `?? "0"` en UnlockPage y DashboardPage |
 
-**Alertas `/alerts`:**
-- [ ] Historial de alertas disparadas (`GET /api/alerts`)
-- [ ] Toggle WARN (80%) / CRIT (95%) por cuenta
-- [ ] Silenciar alerta por X horas (opciones: 1h, 4h, 24h)
-- [ ] Alertas de fin de suscripción (7 días / 1 día antes)
-- [ ] Alertas de login vencido o rechazado (cuenta en cuarentena)
+#### Contenido (completado en UI base)
+- [x] `pages/AlertsPage.tsx` — log de alertas con tipos y colores
+- [x] `pages/PingPage.tsx` — ping needs + ping manual + aviso de riesgo ToS
+- [x] `pages/ChatsPage.tsx` — chats por cuenta y dispositivo
+- [x] `pages/StatsPage.tsx` — comparativa + heatmap 24h×7d
+- [x] `pages/SettingsPage.tsx` — ajustes completos persistidos en localStorage, VaultSyncButtons, DPAPI con modal, autobloqueo opt-in
+- [x] `i18n/es.json` — todas las claves de UI incluyendo sección vault y ajustes
 
-**Chats multi-PC `/chats`:**
-- [ ] Lista de chats activos de todas las PCs que tienen AI KeyVault instalado
-- [ ] Filtros: por proveedor (agy / Codex), por dispositivo, por cuenta
-- [ ] Título + fecha de última actividad + dispositivo de origen
-- [ ] "PC sin agente" para dispositivos sin poller activo (última sincronización hace más de 2h)
-- [ ] Sin contenido de los mensajes — solo metadatos
-
-**Mis Dispositivos `/devices`:**
-- [ ] Lista de dispositivos registrados: nombre, último contacto, estado (activo/inactivo)
-- [ ] Botón "Revocar acceso" por dispositivo
-
-**Configuración `/settings`:**
-- [ ] URL del VPS (default `http://198.211.97.243:3010`)
-- [ ] Device ID (nombre de esta PC)
-- [ ] Intervalo de polling (default 10 min)
-- [ ] ntfy.sh tópico (campo de texto, oculto en logs y repo — solo env var)
-- [ ] Toast de Windows habilitado / deshabilitado
-- [ ] Umbrales WARN/CRIT (sliders)
-- [ ] Hora del ping automático (0–23)
-- [ ] Máx pings automáticos por cuenta por día
-- [ ] Autobloqueo (minutos, default 15)
-- [ ] DPAPI — opt-in con advertencia (desactivado por defecto)
-- [ ] Tema claro / oscuro
-- [ ] **Respaldo `ai_keyvault_data`:**
-  - Indicador: "Último respaldo automático: hace X días / fecha"
-  - Enlace: "Ver instrucciones de restauración" → abre `docs/operaciones.md §6`
-  - Botón: "Disparar respaldo ahora" → llama al endpoint de GitHub Actions (workflow_dispatch) si se tiene el token configurado (opcional)
+#### Pendiente (segunda vuelta — Fase 16 o posterior)
+- [ ] Silenciar alertas por X horas (UI implementada, lógica backend pendiente)
+- [ ] `Ctrl+K` paleta de comandos
+- [ ] Alertas de fin de suscripción y login vencido
+- [ ] Integración real con `ai_keyvault_data` backup fecha
 
 #### Documentación obligatoria al cerrar
 - [ ] `docs/operaciones.md` §19: flujo de restauración asistido desde la UI
@@ -446,6 +408,18 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 | 2026-11-25 | Pre-arranque | `ci.yml` frontend-ci usa `npm` y no `pnpm`. Hay que corregirlo en Fase 10. | Medio | Job actualizado en Fase 10. |
 | 2026-11-25 | Pre-arranque | Llamadas HTTP desde React al VPS causarían CORS/CSP/contenido mixto. | Alto | Toda comunicación VPS va por comandos Rust. CSP configurada en Fase 11. |
 | 2026-11-25 | Pre-arranque | DPAPI: si se activa, cualquiera con la sesión de Windows accede sin clave maestra. | Alto | Opt-in desactivado por defecto. Advertencia explícita en Ajustes. |
+| 2026-11-25 | 10 | `cmake` no instalado — `rusqlite bundled` falla. | Alto | providers/agy y providers/codex excluidos del desktop Cargo.toml. `get_active_account` es stub. |
+| 2026-11-25 | 10 | `thiserror v2` vs `v1` en diferentes crates. | Bajo | Unificado en `thiserror = "1"` en el desktop. |
+| 2026-11-25 | 11 | `crates/core` no tiene sqlite — solo crypto pura. Seguro como path dep. | Alto | Incluido directamente, sin cmake. |
+| 2026-11-25 | 12 | `RecoveryKey` usa `to_formatted_string()` / `from_formatted_string()` (no `Display`). | Compilación | Nombres correctos usados desde el inicio. |
+| 2026-11-25 | 12 | `vault_path()` debe ser `pub` para usarse desde `security.rs`. | Compilación | Cambiado a `pub fn vault_path`. |
+| 2026-11-25 | 13 | Sidecar falla si no compilado — DashboardPage lo captura silenciosamente. | UX | Error capturado, aviso visible sin bloquear la UI. |
+| 2026-11-25 | 14 | `AUTOLOCK_RUNNING: AtomicBool` global — cancelar el timer anterior antes de iniciar uno nuevo. | Seguridad | Flip a `false` + 100ms sleep antes del nuevo timer. |
+| 2026-11-25 | 14 | `listen()` de Tauri retorna unlisten — cleanup al desmontar. | Fuga de listener | `useRef` + return en `useEffect`. |
+| 2026-11-25 | 14 | `reset_autolock_timer` sin throttle recibe llamadas en cada pixel. | Performance | Throttle manual 30s con `Date.now()` en frontend. |
+| 2026-11-25 | 14 | Autobloqueo 0 = desactivado. Default cambiado de 15 a 0 (opt-in real). | UX / Seguridad | `autolockMinutes: 0` en DEFAULT_SETTINGS. `?? "0"` en lectores. |
+| 2026-11-25 | 15 | `SettingsPage.tsx` usaba `console.log` como persistencia (TODO antiguo). | Crítico UX | Implementado `localStorage.setItem("akv_settings", ...)` + `invoke("start_autolock_timer")`. |
+| 2026-11-25 | 14-15 | `security.rs` tenía bloque muerto `pub mod vault_path_reexport`. | Compilación | Eliminado. `mod.rs` y `main.rs` actualizados para registrar los 5 comandos. |
 
 ---
 

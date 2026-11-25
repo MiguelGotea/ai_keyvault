@@ -71,6 +71,13 @@ export default function UnlockPage() {
     try {
       const result = await invoke<UnlockResult>("unlock_vault", { password });
       if (result.success) {
+        // Fase 14: iniciar timer de autobloqueo (15 min por defecto — opt-in en Settings)
+        const autolockMinutes = parseInt(localStorage.getItem("autolock_minutes") ?? "0");
+        if (autolockMinutes > 0) {
+          invoke("start_autolock_timer", { minutes: autolockMinutes }).catch(() => {});
+        }
+        // Fase 14: intentar descargar la bóveda del VPS (sincronización silenciosa)
+        invoke("download_vault_sync").catch(() => {}); // silencioso — no bloquea la navegación
         navigate("/dashboard");
       } else {
         setErrorMsg(result.error ?? "Clave incorrecta.");
@@ -95,6 +102,11 @@ export default function UnlockPage() {
         newPassword: newPasswordForRecovery,
       });
       if (result.success) {
+        // Tras recuperación también iniciamos sesión limpia
+        const autolockMinutes = parseInt(localStorage.getItem("autolock_minutes") ?? "0");
+        if (autolockMinutes > 0) {
+          invoke("start_autolock_timer", { minutes: autolockMinutes }).catch(() => {});
+        }
         navigate("/dashboard");
       } else {
         setErrorMsg(result.error ?? "Clave de recuperación incorrecta.");

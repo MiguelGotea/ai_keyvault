@@ -1,7 +1,9 @@
 /** SettingsPage — Fase 15: Configuración de la app.
  *  Incluye: servidor VPS, alertas, ping automático, seguridad, respaldo.
+ *  Fase 14: persistencia de autobloqueo en localStorage + Rust.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import es from "../i18n/es.json";
 
 const DEFAULT_SETTINGS = {
@@ -12,7 +14,7 @@ const DEFAULT_SETTINGS = {
   toastEnabled: true,
   pingHour: 8,
   pingMaxDaily: 2,
-  autolockMinutes: 15,
+  autolockMinutes: 0, // 0 = desactivado (opt-in, desactivado por defecto)
   dpapiEnabled: false,
   theme: "dark" as "dark" | "light",
 };
@@ -20,9 +22,21 @@ const DEFAULT_SETTINGS = {
 type Settings = typeof DEFAULT_SETTINGS;
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<Settings>(() => {
+    // Cargar ajustes persistidos en localStorage al iniciar
+    try {
+      const stored = localStorage.getItem("akv_settings");
+      if (stored) return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+    } catch { /* si está corrupto, usar defaults */ }
+    return DEFAULT_SETTINGS;
+  });
   const [saved, setSaved] = useState(false);
   const [showDpapiWarning, setShowDpapiWarning] = useState(false);
+
+  // Sincronizar autolockMinutes con la clave que usa UnlockPage y DashboardPage
+  useEffect(() => {
+    localStorage.setItem("autolock_minutes", String(settings.autolockMinutes));
+  }, [settings.autolockMinutes]);
 
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings(s => ({ ...s, [key]: value }));
@@ -43,8 +57,14 @@ export default function SettingsPage() {
   }
 
   function saveSettings() {
-    // TODO Fase 15: persistir con tauri-plugin-store o en vault.json
-    console.log("Guardando ajustes:", settings);
+    // Persistir ajustes en localStorage
+    localStorage.setItem("akv_settings", JSON.stringify(settings));
+    // Aplicar autobloqueo en Rust si está activo
+    if (settings.autolockMinutes > 0) {
+      invoke("start_autolock_timer", { minutes: settings.autolockMinutes }).catch(() => {});
+    } else {
+      invoke("cancel_autolock_timer").catch(() => {});
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   }
@@ -183,6 +203,9 @@ export default function SettingsPage() {
         <Row label={es.ajustes.ultimo_respaldo}>
           <span style={styles.hint}>Ver en GitHub: ai_keyvault_data</span>
         </Row>
+        <Row label="Sincronizar bóveda con VPS">
+          <VaultSyncButtons />
+        </Row>
       </section>
 
       {/* Guardar */}
@@ -200,6 +223,59 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div style={rowStyles.row}>
       <label style={rowStyles.label}>{label}</label>
       <div style={rowStyles.control}>{children}</div>
+    </div>
+  );
+}
+
+/** Botones de sincronización manual de la bóveda con el VPS (Fase 15). */
+function VaultSyncButtons() {
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  async function doSync(direction: "upload" | "download") {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const cmd = direction === "upload" ? "upload_vault_sync" : "download_vault_sync";
+      const result = await invoke<{ success: boolean; direction: string; error: string | null }>(cmd);
+      if (result.success) {
+        const label = result.direction === "none"
+          ? "Sin cambios en el servidor"
+          : `${result.direction === "upload" ? "⬆️ Subida" : "⬇️ Descarga"} completada`;
+        setSyncMsg(`✅ ${label}`);
+      } else {
+        setSyncMsg(`❌ ${result.error ?? "Error desconocido"}`);
+      }
+    } catch (e) {
+      setSyncMsg(`❌ ${String(e)}`);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button
+          style={{ padding: "6px 12px", fontSize: 12, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", cursor: "pointer", background: "var(--color-bg-secondary)", color: "var(--color-text)" }}
+          onClick={() => doSync("upload")}
+          disabled={syncing}
+        >
+          ⬆️ Subir bóveda al VPS
+        </button>
+        <button
+          style={{ padding: "6px 12px", fontSize: 12, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", cursor: "pointer", background: "var(--color-bg-secondary)", color: "var(--color-text)" }}
+          onClick={() => doSync("download")}
+          disabled={syncing}
+        >
+          ⬇️ Descargar bóveda del VPS
+        </button>
+      </div>
+      {syncMsg && (
+        <span style={{ fontSize: 12, color: syncMsg.startsWith("✅") ? "var(--color-success)" : "var(--color-danger)" }}>
+          {syncMsg}
+        </span>
+      )}
     </div>
   );
 }
