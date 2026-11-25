@@ -220,7 +220,8 @@ No hubo cambios directos al VPS en Fase 3. Los cambios fueron todos en el reposi
 | \providers/agy/tests/integration.rs\ | Tests de integracion real (marcados \#[ignore]\, no corren en CI Linux) |
 | \providers/codex/tests/integration.rs\ | Tests de integracion real (marcados \#[ignore]\) |
 | \.github/workflows/ci.yml\ | Quitados \continue-on-error\ en fmt/clippy/test. \cargo audit\ usa \.cargo/audit.toml\ |
-| \server/Cargo.toml\ | Eliminada dependencia \and\ sin uso (solo se usa en \crates/core\) |
+| \server/Cargo.toml\ | Eliminada dependencia \
+and\ sin uso (solo se usa en \crates/core\) |
 | \.cargo/audit.toml\ | Creado — 3 advisories documentados e ignorados: RUSTSEC-2023-0071 (rsa), RUSTSEC-2026-0459 (libsqlite3-sys), RUSTSEC-2026-0543 (chrono) |
 | \Cargo.lock\ | Actualizado con \cargo update\ |
 
@@ -552,4 +553,35 @@ CREATE TABLE chat_sessions (
   synced_at   TEXT NOT NULL,
   PRIMARY KEY (id, account_id)
 );
+```
+
+---
+
+## §14 — Fase 7: Estadísticas y Exportación (2026-11-25)
+
+### Arquitectura
+
+- **`server/src/stats.rs`**: cálculos puros sobre `quota_readings` (sin acceso a red).
+  - **Burn rate (`%/h`)**: suma deltas positivos consecutivos por pool (`curr.percent_used - prev.percent_used >= 0`) y divide entre las horas transcurridas. Si ocurre un reset de cuota (`delta < 0`), ese salto no contamina el ritmo de consumo.
+  - **Proyección**: `estimated_hours_to_100 = (100 - current_percent) / burn_rate`, más `estimated_exhaustion_at` en RFC 3339.
+  - **Mapa de calor**: agrupa deltas positivos por `(weekday 0..6, hour UTC 0..23)`.
+  - **Informe semanal**: mínimos, máximos y consumo acumulado por día y pool en los últimos 7 días.
+  - **Exportación**: CSV estándar (`Content-Disposition: attachment`) o JSON.
+
+### Endpoints nuevos
+
+| Método y ruta | Descripción |
+|---------------|-------------|
+| `GET /api/stats/summary/:account_id?days=7` | Resumen por pool con burn rate y proyección |
+| `GET /api/stats/heatmap/:account_id?days=30` | Mapa de calor por día de semana y hora UTC |
+| `GET /api/stats/compare?days=7` | Comparativa de todos los pools y cuentas |
+| `GET /api/stats/weekly/:account_id` | Informe semanal agrupado por día y pool |
+| `GET /api/stats/export/:account_id?format=csv\|json&days=30` | Exportación de la serie temporal |
+
+### Verificación rápida en VPS
+
+```bash
+curl "http://198.211.97.243:3010/api/stats/compare"
+curl "http://198.211.97.243:3010/api/stats/summary/batidospitayaclaude49%40gmail.com"
+curl "http://198.211.97.243:3010/api/stats/export/batidospitayaclaude49%40gmail.com?format=csv"
 ```

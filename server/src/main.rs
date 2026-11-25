@@ -1,6 +1,7 @@
 mod db;
 mod error;
 mod routes;
+mod stats;
 
 use axum::{
     routing::{get, post},
@@ -69,6 +70,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/api/chats", post(routes::post_chat_sessions))
         .route("/api/chats/:account_id", get(routes::get_chat_sessions))
+        .route("/api/stats/compare", get(routes::get_stats_compare))
+        .route(
+            "/api/stats/summary/:account_id",
+            get(routes::get_stats_summary),
+        )
+        .route(
+            "/api/stats/heatmap/:account_id",
+            get(routes::get_stats_heatmap),
+        )
+        .route(
+            "/api/stats/weekly/:account_id",
+            get(routes::get_stats_weekly),
+        )
+        .route(
+            "/api/stats/export/:account_id",
+            get(routes::get_stats_export),
+        )
         .layer(cors)
         .with_state(state);
 

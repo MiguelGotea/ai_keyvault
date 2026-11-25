@@ -343,13 +343,21 @@ crates/alerter/
 **Tiempo estimado:** 2-3 días
 
 ### Fase 7 — Estadísticas
-**Contenido:**
-- Serie temporal propia de lecturas
-- Burn rate y proyección
-- Mapa de calor por hora/día
-- Comparativa entre cuentas
-- Informe semanal
-- Exportación CSV/JSON
+**Estado:** ✅ Completada (2026-11-25)
+
+**Implementado:**
+- `server/src/stats.rs` — módulo puro de estadísticas con 4 tests unitarios:
+  - Burn rate (`%/hora`) ignorando caídas por reset de cuota
+  - Proyección de horas restantes y timestamp estimado al 100%
+  - Mapa de calor por `(día_semana, hora_UTC)`
+  - Informe semanal agrupado por `(fecha, pool)`
+  - Exportación CSV con escape estándar
+- `server/src/routes.rs` + `server/src/main.rs` — 5 endpoints REST:
+  - `GET /api/stats/summary/:account_id?days=7`
+  - `GET /api/stats/heatmap/:account_id?days=30`
+  - `GET /api/stats/compare?days=7`
+  - `GET /api/stats/weekly/:account_id`
+  - `GET /api/stats/export/:account_id?format=csv|json&days=30`
 
 **Tiempo estimado:** 3 días
 

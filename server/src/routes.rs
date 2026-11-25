@@ -1,6 +1,12 @@
 use crate::error::{Result, ServerError};
+use crate::stats::{
+    build_heatmap, build_weekly_report, summarize_pools, to_csv, HeatmapCell, PoolSummary,
+    ReadingSample, WeeklyReport,
+};
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
+    http::{header, StatusCode},
+    response::{IntoResponse, Response},
     Json,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -436,4 +442,136 @@ pub async fn get_chat_sessions(
         .collect();
 
     Ok(Json(chats))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 7. Estadísticas y Exportación (Fase 7)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct StatsQuery {
+    pub days: Option<i64>,
+    pub format: Option<String>,
+}
+
+async fn fetch_readings(
+    db: &SqlitePool,
+    account_id: Option<&str>,
+    days: i64,
+) -> Result<Vec<ReadingSample>> {
+    let cutoff = (Utc::now() - Duration::days(days.clamp(1, 365))).to_rfc3339();
+
+    let rows = match account_id {
+        Some(acc) => {
+            sqlx::query(
+                r#"
+                SELECT account_id, provider, pool, tokens_used, tokens_limit, percent_used, reset_time, source, read_at
+                FROM quota_readings
+                WHERE account_id = ? AND read_at >= ?
+                ORDER BY read_at ASC
+                LIMIT 5000
+                "#,
+            )
+            .bind(acc)
+            .bind(&cutoff)
+            .fetch_all(db)
+            .await?
+        }
+        None => {
+            sqlx::query(
+                r#"
+                SELECT account_id, provider, pool, tokens_used, tokens_limit, percent_used, reset_time, source, read_at
+                FROM quota_readings
+                WHERE read_at >= ?
+                ORDER BY read_at ASC
+                LIMIT 10000
+                "#,
+            )
+            .bind(&cutoff)
+            .fetch_all(db)
+            .await?
+        }
+    };
+
+    Ok(rows
+        .into_iter()
+        .map(|r| ReadingSample {
+            account_id: r.get("account_id"),
+            provider: r.get("provider"),
+            pool: r.get("pool"),
+            tokens_used: r.get("tokens_used"),
+            tokens_limit: r.get("tokens_limit"),
+            percent_used: r.get("percent_used"),
+            reset_time: r.get("reset_time"),
+            source: r.get("source"),
+            read_at: r.get("read_at"),
+        })
+        .collect())
+}
+
+/// `GET /api/stats/summary/:account_id` — Resumen por pool con burn rate y proyección.
+pub async fn get_stats_summary(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<String>,
+    Query(q): Query<StatsQuery>,
+) -> Result<Json<Vec<PoolSummary>>> {
+    let samples = fetch_readings(&state.db, Some(&account_id), q.days.unwrap_or(7)).await?;
+    Ok(Json(summarize_pools(&samples)))
+}
+
+/// `GET /api/stats/heatmap/:account_id` — Mapa de calor por día de semana y hora UTC.
+pub async fn get_stats_heatmap(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<String>,
+    Query(q): Query<StatsQuery>,
+) -> Result<Json<Vec<HeatmapCell>>> {
+    let samples = fetch_readings(&state.db, Some(&account_id), q.days.unwrap_or(30)).await?;
+    Ok(Json(build_heatmap(&samples)))
+}
+
+/// `GET /api/stats/compare` — Comparativa entre todas las cuentas registradas.
+pub async fn get_stats_compare(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<StatsQuery>,
+) -> Result<Json<Vec<PoolSummary>>> {
+    let samples = fetch_readings(&state.db, None, q.days.unwrap_or(7)).await?;
+    Ok(Json(summarize_pools(&samples)))
+}
+
+/// `GET /api/stats/weekly/:account_id` — Informe semanal agrupado por día y pool.
+pub async fn get_stats_weekly(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<String>,
+) -> Result<Json<WeeklyReport>> {
+    let samples = fetch_readings(&state.db, Some(&account_id), 7).await?;
+    Ok(Json(build_weekly_report(&account_id, &samples)))
+}
+
+/// `GET /api/stats/export/:account_id?format=csv|json&days=30` — Exportación de serie temporal.
+pub async fn get_stats_export(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<String>,
+    Query(q): Query<StatsQuery>,
+) -> Result<Response> {
+    let samples = fetch_readings(&state.db, Some(&account_id), q.days.unwrap_or(30)).await?;
+    let format = q.format.as_deref().unwrap_or("json").to_lowercase();
+
+    match format.as_str() {
+        "csv" => {
+            let csv_body = to_csv(&samples);
+            Ok((
+                StatusCode::OK,
+                [
+                    (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        "attachment; filename=\"keyvault-stats.csv\"",
+                    ),
+                ],
+                csv_body,
+            )
+                .into_response())
+        }
+        _ => Ok(Json(samples).into_response()),
+    }
 }
