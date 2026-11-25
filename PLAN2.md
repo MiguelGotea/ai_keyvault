@@ -1,8 +1,8 @@
 # PLAN2.md — Segunda Etapa: App de Escritorio Tauri 2
 
-**Versión:** 1.3.0 — Fases 10-15 completadas
+**Versión:** 1.4.0 — Fases 10-16 completadas ✅
 **Fecha de inicio:** 2026-11-25
-**Estado:** ⏳ En desarrollo — Fases 10–15 con código completo, pendiente de primer `cargo tauri build` por el usuario
+**Estado:** ✅ App de escritorio funcional — v0.2.0 instalada y verificada. CI en verde. Pendiente: cmake para switch real de credenciales.
 **Referencia de entrada:** `docs/desktop-app-insumos.md` — spec completo del frontend
 
 ---
@@ -329,9 +329,35 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 
 ### Fase 16 — Estadísticas globales e instalador final
 
-**Estado:** ⏳ Pendiente
+**Estado:** ✅ Completada — 2026-11-25
 
-**Objetivo:** Pantalla de estadísticas globales completa y build de producción verificado con prueba de restauración desde `ai_keyvault_data`.
+**Objetivo:** App instalable funcionando con CI en verde y versión bump correcta.
+
+#### Hallazgos durante el desarrollo
+
+| Hallazgo | Impacto | Solución aplicada |
+|----------|---------|------------------|
+| `PoolSummary` en desktop tenía nombres de campos distintos a los del VPS (`current_percent` vs `current_percent_used`, `burn_rate_per_hour` vs `burn_rate_pct_per_hour`) | "Error HTTP: error decoding response body" en dashboard | Struct Rust y tipo TS sincronizados exactamente con `server/src/stats.rs` |
+| Vitest fallaba con exit code 1 porque no había ningún archivo `*.test.ts` | CI frontend-ci en rojo; tauri-build skipped | Creado `src/types/api.test.ts` con tests de i18n y contrato PoolSummary |
+| `pnpm install --frozen-lockfile` bloqueaba esbuild en CI | Frontend CI en rojo | `pnpm approve-builds --all` actualiza el lock; `.npmrc` con `onlyBuiltDependencies[]=esbuild` |
+| `rust-toolchain.toml` solo estaba en `src-tauri/` — Tauri CLI buscaba sidecar `-gnu.exe` | Build local fallaba con "resource path doesn't exist" | Copiado `rust-toolchain.toml` a `apps/desktop/` para que el toolchain MSVC aplique desde el cwd de pnpm tauri build |
+| `.ps1` scripts con emojis se rompían en PowerShell 5.1 (codificación Windows-1252) | `copy-sidecar.ps1` no ejecutaba | Reemplazados emojis por prefijos ASCII (`[INFO]`, `[ERROR]`, `[OK]`) |
+| Versión `0.1.0` sin bump — no refleja el estado real de la app | El instalador siempre muestra v0.1.0 | Bump a v0.2.0 en `Cargo.toml`, `tauri.conf.json` y `package.json` |
+
+#### Contenido (completado)
+- [x] CI `frontend-ci` en verde: typecheck ✅ + vitest ✅ + pnpm frozen-lockfile ✅
+- [x] CI `rust-ci` en verde
+- [x] Build local `pnpm tauri build` → `.exe` instalado y verificado en Windows
+- [x] Todas las pestañas del dashboard funcionan sin errores
+- [x] Datos de cuota del VPS se muestran correctamente (cuentas del poller, no de la bóveda local)
+- [x] Versión bumpeada a v0.2.0 en Cargo.toml, tauri.conf.json, package.json
+- [x] CLAUDE.md §7 actualizado: Desktop ✅
+
+#### Pendiente (segunda vuelta)
+- [ ] `tauri-build` en CI — requiere que se active con cambios en `apps/desktop/` en el push
+- [ ] `webviewInstallMode: OfflineInstaller` para distribución a PCs sin WebView2
+- [ ] Instalar cmake → habilitar providers/agy + providers/codex → switch real de credenciales
+- [ ] Firma de código para evitar SmartScreen warning
 
 #### Contenido
 
@@ -421,6 +447,11 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 | 2026-11-25 | 15 | `SettingsPage.tsx` usaba `console.log` como persistencia (TODO antiguo). | Crítico UX | Implementado `localStorage.setItem("akv_settings", ...)` + `invoke("start_autolock_timer")`. |
 | 2026-11-25 | 14-15 | `security.rs` tenía bloque muerto `pub mod vault_path_reexport`. | Compilación | Eliminado. `mod.rs` y `main.rs` actualizados para registrar los 5 comandos. |
 | 2026-11-25 | 16 | `pnpm tauri build` desde `apps/desktop/` resolvía el triple GNU porque `rust-toolchain.toml` solo estaba en `src-tauri/`. | Build falla buscando sidecar `-gnu.exe` | Copiado `rust-toolchain.toml` también a `apps/desktop/` para forzar MSVC desde el cwd de Tauri CLI. |
+| 2026-11-25 | 16 | `PoolSummary` desktop no coincidía con la struct del VPS (campo `current_percent` vs `current_percent_used`, etc.). | "Error decoding response body" en dashboard | Sincronizado exactamente con `server/src/stats.rs`. |
+| 2026-11-25 | 16 | Vitest sin archivos `*.test.ts` → exit code 1 → `tauri-build` skipped. | CI en rojo | Creado `api.test.ts` con tests de i18n y PoolSummary. |
+| 2026-11-25 | 16 | `pnpm install --frozen-lockfile` bloqueaba scripts de esbuild en CI. | Frontend CI en rojo | `pnpm approve-builds --all` + `.npmrc` con `onlyBuiltDependencies[]=esbuild`. |
+| 2026-11-25 | 16 | Scripts `.ps1` con emojis UTF-8 se rompían en PowerShell 5.1 (Windows-1252). | `copy-sidecar.ps1` no ejecutaba | Reemplazados emojis por prefijos ASCII. |
+| 2026-11-25 | 16 | Versión fija en `0.1.0` sin estrategia de bump. | Instalador siempre v0.1.0 | Bump a v0.2.0 en Cargo.toml, tauri.conf.json y package.json. |
 
 ---
 

@@ -138,7 +138,7 @@ ai_keyvault_data/               ← repo secundario (solo snapshots cifrados)
 | **E** | ✅ | Switch log en servidor (`/api/switch`) |
 | **F** | 📄 | Codex token renewal: procedimiento manual |
 | **9** | ⏸ | Segunda etapa — proveedores adicionales |
-| **Desktop** | 🔄 | Segunda etapa — Fase 10 scaffold completo, pendiente de primer build |
+| **Desktop** | ✅ | Segunda etapa — App Tauri 2 v0.2.0 funcional. CI verde. Fases 10–16 completadas (2026-11-25) |
 
 **Regla:** cada fase termina con tests pasando, CI en verde y escaneo de secretos limpio.
 **Regla:** `PLAN.md` se actualiza al terminar cada fase.
