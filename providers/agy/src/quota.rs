@@ -119,6 +119,7 @@ pub fn read_account_email() -> Option<String> {
     None
 }
 
+
 /// Parsea la salida de texto de `agy --print /usage` en lecturas estructuradas.
 ///
 /// Formato soportado (una línea por pool, campos separados por espacios múltiples):
