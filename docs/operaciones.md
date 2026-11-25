@@ -372,3 +372,48 @@ Claude and GPT models   Weekly Limit Remaining  62%     2026-12-02T00:29:10Z
 ```
 INFO ✅ Cuota agy recolectada account_id=batidodpitayaclaude44@gmail.com pools=2
 ```
+
+---
+
+## 11. Cierre Fase 4 — Poller completo (2026-11-25)
+
+### Resumen de lo implementado
+
+**Poller (`crates/poller/`):** binario `ai-keyvault-poller` que corre periódicamente y:
+1. Lee cuota de agy via `agy --print /usage` → parsea 2-3 pools por ciclo
+2. Lee estado del token Codex via `~/.codex/auth.json`
+3. Adquiere lease exclusivo en el VPS antes de subir
+4. Sube lecturas via POST `/api/quota/readings`
+
+**Pools agy soportados:**
+| Pool | Nombre en BD | Descripción |
+|------|-------------|-------------|
+| Gemini (weekly) | `gemini-weekly` | Límite semanal de modelos Gemini |
+| Claude+GPT (weekly) | `claude-gpt-weekly` | Límite semanal de Claude y GPT |
+| Claude+GPT (5h) | `claude-gpt-5h` | Límite de 5 horas de Claude+GPT (si aparece) |
+
+**account_id de agy:** leído del Credential Manager de Windows (`gemini:antigravity` → campo `id_token_email` del blob JSON).
+
+**Variables de entorno del poller:**
+```
+AKYV_SERVER_URL=http://198.211.97.243:3010   # default
+AKYV_DEVICE_ID=<hostname>                    # default: nombre del equipo
+AKYV_POLL_INTERVAL=600                       # default: 600s (10 min)
+```
+
+### Verificación en producción (2026-11-25)
+
+```
+INFO ✅ Cuota agy recolectada account_id=batidospitayaclaude46@gmail.com pools=2
+INFO 📤 Lectura subida provider=agy pool=gemini-weekly percent_used=0.0
+INFO 📤 Lectura subida provider=agy pool=claude-gpt-weekly percent_used=45.0
+INFO ✅ Estado Codex recolectado account_id=batidospitayaclaude32@gmail.com valid=true
+INFO 📤 Lectura subida provider=codex pool=default percent_used=0.0
+INFO ✅ Ciclo completado
+```
+
+**Nota curl:** el `@` en el email requiere `%40` al hacer curl manual:
+```powershell
+curl.exe "http://198.211.97.243:3010/api/quota/readings/cuenta%40gmail.com"
+```
+El dashboard (Fase 6+) usará cliente HTTP con encoding automático.

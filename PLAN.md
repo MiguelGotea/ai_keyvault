@@ -237,11 +237,19 @@ apt install -y fail2ban
 - Script `crates/poller/scripts/test_poller_manual.ps1`.
 
 **Criterios de aceptación:**
-- [x] Lecturas subidas al VPS con `source` y `read_at` _(verificado: `TABLET-R5MH20CH` → `/api/quota/readings/batidospitayaclaude32@gmail.com`)_
+- [x] Lecturas subidas al VPS con `source` y `read_at` _(verificado: `TABLET-R5MH20CH` → VPS)_
 - [x] Lease funciona: solo un consultador activo por cuenta _(log: `🔒 Lease adquirido locked_until=...`)_
-- [x] Lecturas con fuente y antigüedad visibles _(curl devuelve `source`, `read_at`, `percent_used`)_
-- [x] agy cuota: parser reescrito para formato TSV real de `agy --print /usage` (2026-11-25)
+- [x] Lecturas con fuente y antigüedad visibles _(curl `%40` devuelve `source`, `read_at`, `percent_used`)_
+- [x] agy cuota funcionando: `gemini-weekly`, `claude-gpt-weekly`, `claude-gpt-5h` subidos al VPS _(2026-11-25)_
+- [x] account_id correcto desde Credential Manager de Windows _(`gemini:antigravity` → `id_token_email`)_
 - [ ] Datos coherentes entre PCs _(requiere 2 PCs corriendo el poller — se valida en Fase 5+)_
+
+**Estado final Fase 4 (2026-11-25):**
+- Parser agy reescrito para formato real (TSV con local datetime)
+- Pools soportados: `gemini-weekly`, `claude-gpt-weekly`, `claude-gpt-5h` (Five Hour opcional)
+- account_id via Credential Manager Win32 (`gemini:antigravity` → `id_token_email`)
+- 7 tests unitarios agy + 6 tests poller — todos en verde
+- CI completo en verde (fmt, clippy, tests, cargo audit)
 
 **Fix aplicado (2026-11-25):** `agy /usage` → `agy --print /usage`
   - `models.rs`: `PollerConfig`, `QuotaSnapshot`, `LeaseResponse`.
