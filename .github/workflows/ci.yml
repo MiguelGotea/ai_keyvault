@@ -131,8 +131,8 @@ jobs:
     needs: [ secrets-scan, frontend-ci ]
     if: |
       github.event_name == 'push' &&
-      (contains(github.event.head_commit.modified, 'apps/desktop') ||
-       contains(github.event.head_commit.added, 'apps/desktop'))
+      (contains(toJson(github.event.commits), 'apps/desktop') ||
+       contains(toJson(github.event.commits), 'apps\\desktop'))
     steps:
       - name: 📥 Checkout código
         uses: actions/checkout@v4
@@ -168,7 +168,8 @@ jobs:
           $src = "target\x86_64-pc-windows-msvc\release\ai-keyvault-poller.exe"
           $dst = "apps\desktop\src-tauri\binaries\ai-keyvault-poller-x86_64-pc-windows-msvc.exe"
           Copy-Item -Path $src -Destination $dst -Force
-          Write-Host "✅ Sidecar copiado: $((Get-Item $dst).Length / 1MB) MB"
+          $sizeMB = [math]::Round((Get-Item $dst).Length / 1MB, 2)
+          Write-Host "[OK] Sidecar copiado: $sizeMB MB"
         shell: pwsh
 
       - name: 🏗️ cargo tauri build

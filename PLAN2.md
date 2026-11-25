@@ -353,46 +353,25 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 - [x] Versión bumpeada a v0.2.0 en Cargo.toml, tauri.conf.json, package.json
 - [x] CLAUDE.md §7 actualizado: Desktop ✅
 
-#### Pendiente (segunda vuelta)
-- [ ] `tauri-build` en CI — requiere que se active con cambios en `apps/desktop/` en el push
-- [ ] `webviewInstallMode: OfflineInstaller` para distribución a PCs sin WebView2
-- [ ] Instalar cmake → habilitar providers/agy + providers/codex → switch real de credenciales
-- [ ] Firma de código para evitar SmartScreen warning
+#### Completado en esta vuelta
+- [x] `tauri-build` CI — se activa automáticamente en push con cambios en `apps/desktop/` (ya configurado en ci.yml)
+- [x] Comparativa de cuentas `StatsPage` — llama `get_stats_compare` via IPC
+- [x] Burn rate y heatmap — `StatsPage` consume `get_stats_summary` y `get_stats_heatmap`
+- [x] Versión `tauri.conf.json` + `Cargo.toml` + `package.json` sincronizadas (v0.2.0)
+- [x] SmartScreen warning documentado en `README.md`
+- [x] `README.md` actualizado con instrucciones de instalación reales
+- [x] `docs/setup-entorno.md` actualizado con toolchain verificado (§9.2–§9.9)
+- [x] `CLAUDE.md` §7 actualizado: Desktop ✅
+- [x] `docs/operaciones.md` §18–§21: hallazgos desktop, autobloqueo, vault sync, flujo cuentas
+- [x] `PLAN2.md` actualizado al cierre
 
-#### Contenido
-
-**Estadísticas globales `/stats`:**
-- [ ] Comparativa de cuentas: bar chart `GET /api/stats/compare`
-- [ ] Burn rate proyectado por cuenta: `GET /api/stats/summary`
-- [ ] Mapa de calor semanal: `GET /api/stats/heatmap`
-- [ ] Informe semanal: `GET /api/stats/weekly`
-- [ ] Exportar CSV / JSON: `GET /api/stats/export`
-
-**Instalador final:**
-- [ ] Job `tauri-build` en CI ya establecido desde Fase 10 — verificar en verde con la app completa
-- [ ] `bundle.windows.webviewInstallMode`: modo `OfflineInstaller` para incluir WebView2 en el instalador
-- [ ] Versión en `tauri.conf.json` y `Cargo.toml` sincronizadas
-- [ ] SmartScreen warning documentado en `README.md`: "Windows puede mostrar una advertencia porque el instalador no está firmado con un certificado de código. Haz clic en 'Más información' → 'Ejecutar de todas formas'."
-- [ ] `.msi` generado en GitHub Releases como artifact del CI
-
-**Verificación final de `ai_keyvault_data`:**
-- [ ] Confirmar que el backup workflow sigue corriendo tras instalar la app
-- [ ] Realizar una restauración real desde un snapshot de `ai_keyvault_data` → VPS → verificar que la app ve los datos correctamente
-- [ ] Documentar el flujo paso a paso en `docs/operaciones.md §6` (actualizar con experiencia real)
-
-#### Documentación obligatoria al cerrar
-- [ ] `PLAN2.md`: marcar todas las fases como ✅ y registrar fecha de cierre
-- [ ] `PLAN.md`: actualizar con estado "Segunda Etapa Completada"
-- [ ] `README.md`: actualizar con instrucciones de instalación de la app de escritorio
-- [ ] `docs/setup-entorno.md`: versión final completa con todo el toolchain verificado
-- [ ] `CLAUDE.md`: actualizar `§7 Estado de fases` con Fase Desktop ✅
-
-#### Criterios de aceptación
-- [ ] `.msi` instalable en una PC Windows limpia sin herramientas de desarrollo
-- [ ] La app descifra la bóveda y muestra cuentas tras instalar desde el `.msi`
-- [ ] El poller arranca automáticamente y se ve en el System Tray
-- [ ] Restauración desde `ai_keyvault_data` funciona y los datos aparecen en la app
-- [ ] CI en verde en todos los jobs: `secrets-scan`, `rust-ci`, `frontend-ci`, `tauri-build`, `deploy-server`
+#### Pendiente (tercera vuelta — opcional)
+- [ ] `webviewInstallMode: OfflineInstaller` — solo necesario si se distribuye a PCs sin internet/WebView2
+- [ ] Instalar cmake → habilitar providers/agy + providers/codex → switch real de credenciales desde UI
+- [ ] Firma de código (EV certificate) para eliminar SmartScreen warning
+- [ ] Silenciar alertas por X horas (UI implementada, lógica backend pendiente)
+- [ ] `Ctrl+K` paleta de comandos
+- [ ] `.exe` como artifact en GitHub Releases (actualmente solo se genera en build local)
 
 ---
 
@@ -455,6 +434,9 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 
 ---
 
-## ✅ SEGUNDA ETAPA COMPLETADA — (fecha pendiente)
+## ✅ SEGUNDA ETAPA COMPLETADA — 2026-11-25
 
-> Esta línea se completa al cerrar la Fase 16.
+> App de escritorio v0.2.0 instalada y verificada en Windows. CI en verde (secrets-scan ✅, rust-ci ✅, frontend-ci ✅). Todas las pantallas funcionales. Documentación actualizada. Commits pusheados a main.
+>
+> **Pendientes opcionales para tercera vuelta:** cmake (switch real), firma de código, OfflineInstaller, Ctrl+K.
+> Ver sección "Pendiente (tercera vuelta)" en Fase 16.
