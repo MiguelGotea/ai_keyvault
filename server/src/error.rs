@@ -6,16 +6,17 @@ use axum::{
 use serde_json::json;
 use thiserror::Error;
 
-#[allow(dead_code)]
 #[derive(Error, Debug)]
 pub enum ServerError {
     #[error("Base de datos error: {0}")]
     Database(#[from] sqlx::Error),
 
     #[error("No autorizado: {0}")]
+    #[allow(dead_code)]
     Unauthorized(String),
 
     #[error("Conflicto o bloqueo activo: {0}")]
+    #[allow(dead_code)]
     Conflict(String),
 
     #[error("Petición inválida: {0}")]

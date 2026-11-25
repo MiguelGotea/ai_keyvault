@@ -1,18 +1,19 @@
 # CLAUDE.md — Reglas de trabajo para AI KeyVault
 
-> Este archivo es leído automáticamente por Claude Code al abrir el proyecto.
+> Este archivo es leído automáticamente por el agente de desarrollo al abrir el proyecto.
 > **No eliminar. No modificar sin actualizar la versión.**
 
-Versión: 1.0.0 | Fecha: 2026-11-22
+Versión: 2.0.0 | Fecha: 2026-11-25
 
 ---
 
-
 ## 1. Qué es este proyecto
 
-**AI KeyVault** es una bóveda + tablero personal para administrar cuentas de agentes de IA de programación (Antigravity/agy, Codex, Claude, Gemini, OpenCode, Grok y otros). Es una **herramienta personal** del autor para sus propias cuentas en sus propias PCs. No tiene fines comerciales ni de distribución masiva.
+**AI KeyVault** es una bóveda + tablero personal para administrar cuentas de agentes de IA de programación (Antigravity/agy, Codex, y en segunda etapa Claude, Gemini, Grok y otros). Es una **herramienta personal** del autor para sus propias cuentas en sus propias PCs. No tiene fines comerciales ni de distribución masiva.
 
-**Alcance ético (obligatorio en README y aquí):**
+**Estado al 2026-11-25:** Primera etapa **completada**. El backend (servidor VPS + poller + alerter + providers) está 100% operativo. La segunda etapa es la **app de escritorio Tauri 2**.
+
+**Alcance ético (obligatorio):**
 - Uso exclusivo con cuentas propias en PCs propias.
 - No evade bloqueos ni comparte cuentas con terceros.
 - La rotación de cuentas y el ping son decisiones del usuario, configurables y con registro completo.
@@ -24,8 +25,6 @@ Versión: 1.0.0 | Fecha: 2026-11-22
 
 ### 2.1 Secretos — NUNCA en el repositorio
 
-Los siguientes elementos **jamás** deben aparecer en ningún archivo del repo `ai_keyvault`:
-
 | Categoría | Ejemplos |
 |-----------|---------|
 | Contraseñas reales | passwords de cuentas del autor |
@@ -35,7 +34,7 @@ Los siguientes elementos **jamás** deben aparecer en ningún archivo del repo `
 | Claves de cifrado | clave maestra, clave de respaldo, vault key |
 | Llaves SSH | llaves privadas de cualquier tipo |
 | Archivos .env reales | cualquier .env con datos reales |
-| Tópico de ntfy | el tópico aleatorio de notificaciones |
+| Tópico de ntfy | el tópico aleatorio de notificaciones (`AKYV_NTFY_TOPIC`) |
 | Snapshots sin cifrar | dumps de BD o bóveda sin cifrar |
 | Capturas con datos | screenshots con datos reales visibles |
 
@@ -53,7 +52,7 @@ account_id: 00000000-0000-0000-0000-000000000000
 
 ### 2.3 Repo `ai_keyvault_data`
 
-Solo recibe snapshots **ya cifrados** del lado del cliente. El servidor no puede descifrar nada. Este repo no es una bóveda — es solo un respaldo cifrado.
+Solo recibe snapshots **ya cifrados** del lado del cliente. El servidor no puede descifrar nada.
 
 ---
 
@@ -86,20 +85,27 @@ Logos: `assets/branding/AI_KeyVault_Color.png` y `assets/branding/AI_KeyVault_Mo
 
 ```
 ai_keyvault/                    ← repo principal
-  apps/desktop/                 ← app Tauri 2 (Rust + TypeScript)
-  crates/core/                  ← bóveda, cifrado, sincronización (Rust)
-  providers/{agy,codex,...}/    ← adaptadores de proveedor (Rust)
-  server/                       ← API del VPS (Rust/axum + SQLite)
-  agent/                        ← agente local Windows (servicio background)
-  docs/{research,adr}/          ← investigación y decisiones técnicas
+  apps/desktop/                 ← [SEGUNDA ETAPA] app Tauri 2 (Rust + TypeScript)
+  crates/
+    core/                       ← bóveda, cifrado, sincronización (Rust) ✅
+    poller/                     ← poller de cuota multi-dispositivo ✅
+    alerter/                    ← detector umbrales + notificador ✅
+  providers/
+    agy/                        ← adaptador Antigravity (Credential Manager) ✅
+    codex/                      ← adaptador Codex (auth.json + SQLite) ✅
+  server/                       ← API del VPS (Rust/axum + SQLite) ✅
+  docs/
+    research/                   ← investigación con evidencia verificada ✅
+    adr/                        ← Architecture Decision Records ✅
+    desktop-app-insumos.md      ← spec completo para segunda etapa ✅
+    operaciones.md              ← VPS, deploy, BD, variables ✅
   assets/branding/              ← logos e íconos
-  .scripts/                     ← herramientas de desarrollo (sin secretos)
-  .github/workflows/            ← CI, escaneo de secretos, deploy, respaldo
+  .github/workflows/            ← CI, escaneo de secretos, deploy
 
 ai_keyvault_data/               ← repo secundario (solo snapshots cifrados)
 ```
 
-**Stack decidido:** Tauri 2 (Rust + TypeScript/React). Ver `docs/adr/ADR-001-stack.md`.
+**Stack:** Tauri 2 (Rust + TypeScript/React). Ver `docs/adr/ADR-001-stack.md`.
 
 ---
 
@@ -113,20 +119,26 @@ ai_keyvault_data/               ← repo secundario (solo snapshots cifrados)
 
 ---
 
-## 7. Orden de trabajo (fases)
+## 7. Estado de fases
 
-| Fase | Contenido |
-|------|-----------|
-| **0** | Investigación, ADRs, `cooldown-logger` ← **aquí estamos** |
-| **1** | Núcleo seguro: bóveda, cifrado, autobloqueo |
-| **2** | Servidor VPS: API, sync, deploy |
-| **3** | Adaptadores agy + Codex |
-| **4** | Cuota y planes |
-| **5** | Alertas (Windows + ntfy.sh) |
-| **6** | Agente de chats |
-| **7** | Estadísticas |
-| **8** | Ping mínimo |
-| **9** | Proveedores adicionales |
+| Fase | Estado | Contenido |
+|------|--------|-----------|
+| **0** | ✅ | Investigación, ADRs, cooldown-logger |
+| **1** | ✅ | Núcleo seguro: bóveda y cifrado |
+| **2** | ✅ | Servidor VPS: API, sync, deploy |
+| **3** | ✅ | Adaptadores agy + Codex |
+| **4** | ✅ | Cuota y planes con lease anti-duplicado |
+| **5** | ✅ | Alertas (Windows toast + ntfy.sh) |
+| **6** | ✅ | Chats agy + Codex (metadatos) |
+| **7** | ✅ | Estadísticas: burn rate, heatmap, comparativa, CSV |
+| **8** | ✅ | Ping mínimo (manual + automático) |
+| **A** | ✅ | Codex chats: `state_5.sqlite` tabla `threads` |
+| **C** | ✅ | Cooldown H1 confirmada con datos reales |
+| **D** | ✅ | Alert log en servidor (`/api/alerts`) |
+| **E** | ✅ | Switch log en servidor (`/api/switch`) |
+| **F** | 📄 | Codex token renewal: procedimiento manual |
+| **9** | ⏸ | Segunda etapa — proveedores adicionales |
+| **Desktop** | ⏳ | Segunda etapa — app Tauri 2 |
 
 **Regla:** cada fase termina con tests pasando, CI en verde y escaneo de secretos limpio.
 **Regla:** `PLAN.md` se actualiza al terminar cada fase.
@@ -136,12 +148,11 @@ ai_keyvault_data/               ← repo secundario (solo snapshots cifrados)
 ## 8. Convenciones de código
 
 ### Rust
-- Edition 2021. `rustfmt` + `clippy -D warnings`.
-- Errores tipados con `thiserror`. Sin `unwrap()` en código de producción.
-- `zeroize` para borrar claves de memoria al desbloquear/cerrar.
+- Edition 2021. `rustfmt` + `clippy -D warnings`. Sin `unwrap()` en código de producción.
+- Errores tipados con `thiserror`. `zeroize` para borrar claves de memoria.
 - Dependencias mínimas; auditar con `cargo audit` en CI.
 
-### TypeScript (frontend Tauri)
+### TypeScript (frontend Tauri — segunda etapa)
 - Strict mode. ESLint + Prettier.
 - Sin `any`. Tipos explícitos en la API con el backend Rust.
 - i18n: todos los textos en `apps/desktop/src/i18n/es.json`.
@@ -153,26 +164,29 @@ ai_keyvault_data/               ← repo secundario (solo snapshots cifrados)
 
 ---
 
-## 9. CI obligatorio (en cada PR y push a main)
+## 9. CI obligatorio (en cada push a main)
 
 1. `cargo fmt --check`
 2. `cargo clippy -D warnings`
 3. `cargo test`
-4. `cargo audit`
-5. `gitleaks detect` — falla el pipeline si encuentra secretos
-6. `eslint` + `tsc --noEmit`
-7. `vitest run`
-8. Build de Tauri (en release solo desde `main`)
+4. `gitleaks detect` — falla el pipeline si encuentra secretos
+5. `cross build --target x86_64-unknown-linux-gnu` → deploy al VPS
 
 ---
 
 ## 10. VPS y deploy
 
-- VPS: DigitalOcean (198.211.97.243). Usuario no root. Servicio `systemd` con sandboxing.
-- Deploy: GitHub Actions con llave SSH restringida. Ver `.github/workflows/deploy-server.yml`.
-- El servidor vive en `/opt/ai-keyvault/` — aislado de los otros proyectos (`/opt/gmb-worker/`, `/root/retails-nicaragua/`).
-- **Caddy** maneja TLS. Puerto interno del servidor: 3010 (no expuesto directo).
-- Secrets en GitHub Actions Secrets. Ninguno en el repo.
+- **IP:** `198.211.97.243` **Puerto:** `3010` (IP directa, sin Caddy/TLS por ahora)
+- **Ruta:** `/opt/ai-keyvault/`
+- **Servicio:** `systemd ai-keyvault`
+- **Usuario deploy:** `ai-keyvault-deploy` con SSH restringido
+- **BD:** `/opt/ai-keyvault/data/keyvault.db` (SQLite)
+- **Secrets:** en GitHub Actions Secrets. Ninguno en el repo.
+
+**Reglas de trabajo con el VPS:**
+- Usar MCP SSH (`run-command`) para comandos en el VPS — NO `sftp-upload` ni `privileged-command`
+- El sandbox no tiene red — `cargo check/update/run` los corre el usuario
+- **Nunca hacer commit manualmente** — el usuario corre `.\gitpush.ps1 "mensaje"`
 
 ---
 
@@ -190,11 +204,29 @@ Toda afirmación sobre APIs, endpoints o archivos locales no documentados oficia
 
 ---
 
-## 12. Checklist antes de hacer commit
+## 12. Hallazgos clave verificados (no investigar de nuevo)
+
+| Hallazgo | Verificado |
+|----------|-----------|
+| `agy --print /usage` → 3 líneas TSV con datetime local CST | ✅ 2026-11-25 |
+| `AgyCredentialManager::read()` es función asociada (no método) | ✅ |
+| Pools agy reales: `gemini-weekly`, `claude-gpt-weekly`, `claude-gpt-5h` | ✅ |
+| Codex: `~/.codex/state_5.sqlite` tabla `threads`, campo `messages` JSON | ✅ |
+| Hipótesis H1 confirmada: reloj empieza con primer uso | ✅ 2026-11-25 |
+| `@` en URLs de curl Windows: usar `%40` encoding | ✅ |
+| `winrt-notification 0.5` → `STATUS_ACCESS_VIOLATION` en tests Windows | ✅ |
+| Toast de Windows: usar PowerShell `NotifyIcon` (no winrt) | ✅ |
+| `&&` no válido en PowerShell (usar `;` o `-eq 0`) | ✅ |
+| PATH necesario: `C:\msys64\mingw64\bin;$env:USERPROFILE\.cargo\bin` | ✅ |
+
+---
+
+## 13. Checklist antes de hacer commit
 
 - [ ] ¿Hay algún secreto real en los archivos modificados?
 - [ ] ¿Los fixtures de tests usan datos falsos?
-- [ ] ¿`gitleaks detect` pasa sin errores?
-- [ ] ¿`cargo test` y `vitest run` pasan?
+- [ ] ¿`cargo fmt --all` pasa sin diferencias?
+- [ ] ¿`cargo clippy --all-targets -- -D warnings` pasa sin errores?
 - [ ] ¿Se actualizó `PLAN.md` si terminó una fase?
-- [ ] ¿El commit message sigue el formato convencional?
+- [ ] ¿El commit message sigue el formato convencional en español?
+- [ ] ¿Se actualizó `docs/operaciones.md` si hubo cambios en el VPS?

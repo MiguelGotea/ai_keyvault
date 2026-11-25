@@ -18,8 +18,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct AppState {
     pub db: SqlitePool,
-    #[allow(dead_code)]
-    pub server_master_key: String,
+    pub _server_master_key: String,
 }
 
 // ─────────────────────────────────────────────

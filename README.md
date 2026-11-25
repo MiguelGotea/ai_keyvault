@@ -6,7 +6,8 @@
 
 <p align="center">
   <strong>Bóveda y tablero personal para cuentas de agentes de IA de programación</strong><br/>
-  Administra todas tus cuentas de Antigravity, Codex, Claude, Gemini, OpenCode y Grok desde un solo lugar.
+  Administra todas tus cuentas de Antigravity (agy) y Codex desde un solo lugar,<br/>
+  con sincronización multi-PC, alertas inteligentes y estadísticas propias.
 </p>
 
 ---
@@ -23,48 +24,103 @@
 
 ---
 
-## ✨ Funcionalidades principales
+## 📦 Estado del proyecto — 2026-11-25
 
-| Funcionalidad | Descripción |
-|---------------|-------------|
-| 🔐 **Bóveda cifrada** | Correo, contraseña y tokens guardados con XChaCha20-Poly1305 |
-| 📊 **Panel de cuota** | % usado por ventana, próximo reinicio, fuente y antigüedad de cada lectura |
-| 🔄 **Cambio de cuenta** | La herramienta ejecuta el cambio en Credential Manager / auth.json — tú no corres scripts |
-| 🔔 **Alertas inteligentes** | Notificación Windows + ntfy.sh al celular con sugerencia de cuenta alternativa |
-| 💬 **Chats activos** | Metadatos de chats de todas tus PCs con la herramienta instalada |
-| 📈 **Estadísticas** | Serie temporal propia: burn rate, proyección, mapa de calor, comparativa de cuentas |
-| 🏓 **Ping mínimo** | Inicia el cooldown de la ventana con el menor consumo posible (manual por defecto) |
-| 🖥️ **Multi-dispositivo** | Sincronización vía API propia en VPS, clave de cifrado nunca sale del cliente |
+### Primera etapa: Backend + API (✅ Completada)
+
+| Fase | Estado | Contenido |
+|------|--------|-----------|
+| 0 | ✅ | Investigación, ADRs, cooldown-logger, estructura |
+| 1 | ✅ | Núcleo seguro: bóveda cifrada (Argon2id + XChaCha20), clave de respaldo |
+| 2 | ✅ | Servidor VPS (axum + SQLite), CI/CD, deploy automático |
+| 3 | ✅ | Adaptadores agy + Codex: lectura de cuota, auth.json, Credential Manager |
+| 4 | ✅ | Poller de cuota con lease anti-duplicado, multi-dispositivo |
+| 5 | ✅ | Alerter: Windows toast + ntfy.sh, umbrales WARN/CRIT, cooldown |
+| 6 | ✅ | Chats agy + Codex: metadatos sincronizados vía VPS |
+| 7 | ✅ | Estadísticas: burn rate, heatmap, comparativa, exportación CSV |
+| 8 | ✅ | Ping mínimo: detecta cuentas sin ventana activa, manual + automático |
+| A | ✅ | Codex chats: lee `~/.codex/state_5.sqlite` tabla `threads` |
+| C | ✅ | Cooldown H1 confirmada con datos reales |
+| D | ✅ | Alert log: historial de alertas en VPS (`/api/alerts`) |
+| E | ✅ | Switch log: historial de cambios de cuenta (`/api/switch`) |
+| F | 📄 | Codex token renewal: documentado como procedimiento manual |
+| 9 | ⏸ | **Segunda etapa** — proveedores adicionales (Claude, Gemini, Grok) |
+
+### Segunda etapa: App de escritorio (⏳ Pendiente)
+
+Ver sección **App de Escritorio** más abajo.
+
+---
+
+## ✨ Funcionalidades del backend (operativas)
+
+| Funcionalidad | Estado | Endpoint |
+|---------------|--------|----------|
+| 🔒 Bóveda cifrada sync | ✅ | `POST/GET /api/vault/sync` |
+| 📊 Cuota multi-cuenta | ✅ | `GET /api/quota/readings/:id` |
+| 🔔 Alert log | ✅ | `GET/POST /api/alerts` |
+| 💬 Chats agy + Codex | ✅ | `GET /api/chats/:id` |
+| 🏓 Ping log | ✅ | `GET/POST /api/pings` |
+| 🔄 Switch log | ✅ | `GET/POST /api/switch` |
+| 📈 Estadísticas | ✅ | `GET /api/stats/*` |
+| 🏥 Health | ✅ | `GET /health` |
 
 ---
 
 ## 🏗️ Arquitectura
 
 ```
-Cliente (Windows)          VPS (DigitalOcean)         GitHub
-─────────────────          ──────────────────         ──────
-App Tauri 2 (Rust+TS)  →  API Rust/axum + SQLite  ←  Actions (deploy)
-Agente local (bg)          Caddy (TLS)                ai_keyvault_data
-Caché DPAPI                                           (snapshots cifrados)
+Cliente Windows (poller local)     VPS (198.211.97.243:3010)     GitHub
+──────────────────────────────     ─────────────────────────     ──────
+ai-keyvault-poller (bg)       →    API Rust/axum + SQLite    ←   Actions CI/CD
+  ├─ collector (agy + codex)       /opt/ai-keyvault/
+  ├─ chat_collector                  bin/ai-keyvault-server
+  ├─ pinger                          data/keyvault.db
+  ├─ alerter (toast + ntfy)          .env (secrets)
+  └─ scheduler (cada 10min)        systemd: ai-keyvault
 ```
 
 **Principio de conocimiento cero:** el servidor solo almacena texto cifrado. La clave que descifra nunca sale de tus PCs.
 
 ---
 
-## 🚀 Instalación en una PC nueva
+## 🖥️ App de Escritorio — Segunda Etapa
 
-> **Prerequisitos:** Windows 10/11, conexión a internet.
+> Ver [`docs/desktop-app-insumos.md`](docs/desktop-app-insumos.md) para el spec completo.
 
-1. Descarga el instalador desde [Releases](https://github.com/MiguelGotea/ai_keyvault/releases).
-2. Ejecuta `AI_KeyVault_Setup_vX.X.X.exe`.
-3. Al abrir por primera vez, ingresa:
-   - **URL del servidor:** `https://keyvault.tudominio.com` (o la IP del VPS)
-   - **Usuario:** tu usuario de AI KeyVault
-   - **Clave maestra:** tu clave maestra personal
-4. La bóveda se descarga y descifra localmente. Listo.
+La segunda etapa consiste en crear la **UI de escritorio (Tauri 2)** que consume el backend ya operativo. Todo el backend está listo — la app es una capa de presentación + integración local.
 
-> Si es la primera PC, en lugar del paso 3 crearás la bóveda y recibirás tu **clave de respaldo** (guárdala en papel, offline).
+**Decisiones ya tomadas (no reabrir):**
+- **Framework:** Tauri 2 (Rust + TypeScript/React) — ver `docs/adr/ADR-001-stack.md`
+- **Idioma UI:** 100% español, textos en `apps/desktop/src/i18n/es.json`
+- **Tema:** Claro y oscuro intercambiables
+- **Colores:** `#064E3B` (primario) + `#D6A84F` (secundario)
+- **Sin telemetría** hacia terceros
+
+---
+
+## 🚀 Poller — cómo correr en una PC nueva
+
+```powershell
+# 1. Variables de entorno (.env o PowerShell)
+$env:AKYV_SERVER_URL    = "http://198.211.97.243:3010"
+$env:AKYV_DEVICE_ID     = "MI-PC-NOMBRE"
+$env:AKYV_POLL_INTERVAL = "600"          # 10 min
+$env:RUST_LOG           = "info"
+
+# 2. Alertas opcionales
+$env:AKYV_NTFY_TOPIC    = "tu-topico-secreto"  # NO al repo
+$env:AKYV_TOAST_ENABLED = "true"
+
+# 3. Ping automático (deshabilitado por defecto)
+$env:AKYV_PING_ENABLED  = "false"   # activar con "true"
+$env:AKYV_PING_HOUR     = "8"       # hora local (0-23)
+$env:AKYV_PING_MAX_PCT  = "5.0"     # % máximo para pingear
+
+# 4. Correr
+$env:PATH = "C:\msys64\mingw64\bin;$env:USERPROFILE\.cargo\bin;$env:PATH"
+cargo run --package ai-keyvault-poller
+```
 
 ---
 
@@ -72,12 +128,10 @@ Caché DPAPI                                           (snapshots cifrados)
 
 - **Argon2id** como KDF (parámetros en `docs/adr/ADR-002-cifrado.md`).
 - **XChaCha20-Poly1305** para cifrado autenticado.
-- **DPAPI** de Windows para caché local rápida.
-- **Ed25519** para autenticación de dispositivos con el servidor.
-- Autobloqueo configurable (por defecto 15 min).
-- Portapapeles limpiado automáticamente a los 30 s.
+- **Ed25519** para autenticación de dispositivos.
 - Sin telemetría hacia terceros.
 - `gitleaks` en CI — ningún secreto puede entrar al repo.
+- Nunca aparecen en el repo: tokens, emails reales, `auth.json`, `.env` reales, tópico ntfy.
 
 ---
 
@@ -85,40 +139,33 @@ Caché DPAPI                                           (snapshots cifrados)
 
 ```
 ai_keyvault/
-  apps/desktop/           # App Tauri 2 (UI + lógica de escritorio)
-  crates/core/            # Bóveda, cifrado, sincronización (Rust)
-  providers/              # Adaptadores: agy, codex, claude, gemini, opencode, grok
-  server/                 # API del VPS (Rust/axum)
-  agent/                  # Agente local Windows (segundo plano)
-  docs/research/          # Investigación con evidencia
-  docs/adr/               # Architecture Decision Records
-  assets/branding/        # Logos e íconos
-  .scripts/               # Herramientas de desarrollo
-  .github/workflows/      # CI, escaneo de secretos, deploy, respaldo
+  server/                   # API del VPS (Rust/axum + SQLite)
+  crates/
+    core/                   # Bóveda, cifrado, sincronización (Rust)
+    poller/                 # Poller de cuota multi-dispositivo
+    alerter/                # Detector de umbrales y notificador
+  providers/
+    agy/                    # Adaptador Antigravity (Credential Manager + cuota)
+    codex/                  # Adaptador Codex (auth.json + chats SQLite)
+  apps/
+    desktop/                # [SEGUNDA ETAPA] App Tauri 2
+  docs/
+    adr/                    # Architecture Decision Records
+    research/               # Investigación con evidencia verificada
+    operaciones.md          # VPS, deploy, tablas BD, variables de entorno
+    desktop-app-insumos.md  # Spec completo para segunda etapa
+  assets/branding/          # Logos e íconos
+  .github/workflows/        # CI (fmt, clippy, test, deploy)
 ```
-
----
-
-## 🗺️ Fases de desarrollo
-
-Ver [`PLAN.md`](PLAN.md) para el detalle completo.
-
-| Fase | Estado | Contenido |
-|------|--------|-----------|
-| 0 | 🔄 En progreso | Investigación, ADRs, cooldown-logger |
-| 1 | ⏳ Pendiente | Núcleo seguro: bóveda y cifrado |
-| 2 | ⏳ Pendiente | Servidor VPS y sincronización |
-| 3 | ⏳ Pendiente | Adaptadores agy + Codex |
-| 4–9 | ⏳ Pendiente | Cuota, alertas, chats, estadísticas... |
 
 ---
 
 ## 📖 Documentación adicional
 
 - [`CLAUDE.md`](CLAUDE.md) — Reglas de trabajo para el agente de desarrollo
-- [`PLAN.md`](PLAN.md) — Plan detallado por fases con criterios de aceptación
+- [`PLAN.md`](PLAN.md) — Plan detallado por fases con estado actual
+- [`docs/operaciones.md`](docs/operaciones.md) — VPS, BD, deploy, variables de entorno
+- [`docs/desktop-app-insumos.md`](docs/desktop-app-insumos.md) — Spec app de escritorio
 - [`docs/adr/`](docs/adr/) — Decisiones técnicas justificadas
 - [`docs/research/`](docs/research/) — Investigación con evidencia verificada
-- [`docs/threat-model.md`](docs/threat-model.md) — Modelo de amenazas
-- [`docs/operaciones.md`](docs/operaciones.md) — VPS, deploy, respaldo, restauración
 - [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) — Licencias de dependencias

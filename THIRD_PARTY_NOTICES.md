@@ -8,6 +8,8 @@ sus licencias y los avisos de copyright correspondientes.
 2. Registrar el proyecto aquí con licencia, URL y descripción del uso.
 3. Verificar que la licencia sea compatible con el uso personal de este proyecto.
 
+*Última actualización: 2026-11-25*
+
 ---
 
 ## Proyectos de referencia (código consultado / adaptado)
@@ -16,62 +18,101 @@ sus licencias y los avisos de copyright correspondientes.
 - **Autor:** hrmasss
 - **Licencia:** MIT
 - **URL:** https://github.com/hrmasss/antigravity-swap
-- **Uso:** Referencia para la implementación del adaptador `agy`: lectura/escritura de credenciales en Windows Credential Manager, consulta de cuota via `cloudcode-pa.googleapis.com`, verificación con `agy models`, y estructura de tests con `fake_agy`.
-- **Estado:** Referencia de diseño — código aún no incorporado.
+- **Uso:** Referencia para el adaptador `agy`: lectura/escritura de credenciales en Windows Credential Manager, verificación con `agy models`.
+- **Estado:** Referencia de diseño — código no incorporado directamente.
 
 ### codex-switcher
 - **Autor:** Lampese
 - **Licencia:** MIT
 - **URL:** https://github.com/Lampese/codex-switcher
-- **Uso:** Referencia para el adaptador `codex`: cambio atómico de `auth.json`, lectura de cuota y estadísticas.
-- **Estado:** Referencia de diseño — código aún no incorporado.
+- **Uso:** Referencia para el adaptador `codex`: cambio atómico de `auth.json`.
+- **Estado:** Referencia de diseño — código no incorporado directamente.
 
 ### codex-cli-account-switcher
 - **Autor:** bashar94
 - **Licencia:** MIT
 - **URL:** https://github.com/bashar94/codex-cli-account-switcher
 - **Uso:** Referencia adicional para el cambio de cuenta de Codex.
-- **Estado:** Referencia de diseño — código aún no incorporado.
+- **Estado:** Referencia de diseño — código no incorporado directamente.
 
 ### claude-swap
 - **Autor:** realiti4
-- **Licencia:** Por verificar antes de incorporar
+- **Licencia:** Por verificar antes de incorporar (segunda etapa)
 - **URL:** https://github.com/realiti4/claude-swap
-- **Uso:** Referencia para el adaptador `claude`.
-- **Estado:** Referencia de diseño — licencia pendiente de verificación.
-
-### harness-swap / hswap
-- **Autor:** realiti4 (por confirmar)
-- **Licencia:** Por verificar antes de incorporar
-- **URL:** Por confirmar
-- **Uso:** Referencia para adaptadores adicionales.
-- **Estado:** Pendiente de localizar y verificar licencia.
+- **Uso:** Referencia para el adaptador `claude` (segunda etapa).
+- **Estado:** Pendiente para segunda etapa.
 
 ---
 
-## Dependencias de Rust (por confirmar al agregar Cargo.toml)
+## Dependencias de Rust (versiones al 2026-11-25)
 
-> Esta sección se actualizará al agregar el archivo `Cargo.toml` con las dependencias reales.
-> Usar `cargo license` para generar la lista automáticamente.
+Generado con `cargo metadata`. Licencias verificadas.
 
-| Crate | Versión | Licencia | Uso previsto |
-|-------|---------|----------|--------------|
-| `argon2` | TBD | MIT/Apache-2.0 | KDF Argon2id |
-| `chacha20poly1305` | TBD | MIT/Apache-2.0 | Cifrado XChaCha20-Poly1305 |
-| `zeroize` | TBD | MIT/Apache-2.0 | Borrado seguro de claves en memoria |
-| `axum` | TBD | MIT | Framework HTTP para el servidor |
-| `sqlx` | TBD | MIT/Apache-2.0 | SQLite en el servidor |
-| `tauri` | TBD | MIT/Apache-2.0 | Framework de escritorio |
-| `ed25519-dalek` | TBD | BSD-3 | Autenticación de dispositivos |
-| `serde` | TBD | MIT/Apache-2.0 | Serialización |
-| `thiserror` | TBD | MIT/Apache-2.0 | Tipos de error |
-| `tokio` | TBD | MIT | Runtime async |
+### Servidor (`server/`)
+
+| Crate | Versión | Licencia | Uso |
+|-------|---------|----------|-----|
+| `axum` | 0.7 | MIT | Framework HTTP |
+| `tokio` | 1.40 | MIT | Runtime async |
+| `tower-http` | 0.5 | MIT | Middlewares HTTP (CORS, trace) |
+| `sqlx` | 0.8 | MIT/Apache-2.0 | SQLite async |
+| `serde` | 1.0 | MIT/Apache-2.0 | Serialización |
+| `serde_json` | 1.0 | MIT/Apache-2.0 | JSON |
+| `uuid` | 1.10 | MIT/Apache-2.0 | UUIDs v4 |
+| `chrono` | 0.4 | MIT/Apache-2.0 | Fechas y tiempos |
+| `sha2` | 0.10 | MIT/Apache-2.0 | Hash SHA-256 |
+| `hex` | 0.4 | MIT/Apache-2.0 | Encoding hexadecimal |
+| `thiserror` | 1.0 | MIT/Apache-2.0 | Tipos de error |
+| `dotenvy` | 0.15 | MIT/Apache-2.0 | Variables de entorno |
+| `tracing` | 0.1 | MIT | Logs estructurados |
+| `tracing-subscriber` | 0.3 | MIT | Salida de logs |
+
+### Núcleo (`crates/core/`)
+
+| Crate | Versión | Licencia | Uso |
+|-------|---------|----------|-----|
+| `argon2` | 0.5 | MIT/Apache-2.0 | KDF Argon2id |
+| `chacha20poly1305` | 0.10 | MIT/Apache-2.0 | Cifrado XChaCha20-Poly1305 |
+| `zeroize` | 1.8 | MIT/Apache-2.0 | Borrado seguro de claves |
+| `rand` | 0.8 | MIT/Apache-2.0 | Generación de nonces y salts |
+| `base64` | 0.22 | MIT/Apache-2.0 | Encoding Base64 |
+| `ed25519-dalek` | 2.1 | BSD-3-Clause | Firma Ed25519 (auth de dispositivos) |
+
+### Poller (`crates/poller/`)
+
+| Crate | Versión | Licencia | Uso |
+|-------|---------|----------|-----|
+| `reqwest` | 0.12 | MIT/Apache-2.0 | HTTP client async |
+| `tokio` | 1.40 | MIT | Runtime async |
+| `chrono` | 0.4 | MIT/Apache-2.0 | Fechas y tiempos |
+
+### Alerter (`crates/alerter/`)
+
+| Crate | Versión | Licencia | Uso |
+|-------|---------|----------|-----|
+| `reqwest` | 0.12 | MIT/Apache-2.0 | HTTP a ntfy.sh (bloqueante) |
+| `dirs-next` | 2.0 | MIT/Apache-2.0 | Directorio home del usuario |
+
+### Provider agy (`providers/agy/`)
+
+| Crate | Versión | Licencia | Uso |
+|-------|---------|----------|-----|
+| `regex` | 1.11 | MIT/Apache-2.0 | Parseo de salida `agy /usage` |
+| `dirs-next` | 2.0 | MIT/Apache-2.0 | Ruta a brain/ de agy |
+| `windows-sys` | 0.59 | MIT/Apache-2.0 | Win32 Credential Manager API |
+
+### Provider Codex (`providers/codex/`)
+
+| Crate | Versión | Licencia | Uso |
+|-------|---------|----------|-----|
+| `rusqlite` | 0.32 | MIT | Lectura de `state_5.sqlite` de Codex |
 
 ---
 
-## Dependencias de Node/TypeScript (por confirmar al agregar package.json)
+## Dependencias de Node/TypeScript (segunda etapa — pendientes)
 
-> Esta sección se actualizará al configurar el frontend Tauri.
+> Esta sección se actualizará al configurar el frontend Tauri 2 en `apps/desktop/`.
+> Usar `npm licenses` o `license-checker` para generar la lista automáticamente.
 
 | Paquete | Versión | Licencia | Uso previsto |
 |---------|---------|----------|--------------|
@@ -82,4 +123,12 @@ sus licencias y los avisos de copyright correspondientes.
 
 ---
 
-*Última actualización: 2026-11-22*
+## Nota sobre `ed25519-dalek`
+
+`ed25519-dalek` usa licencia **BSD-3-Clause**, que es compatible con uso personal y comercial, siempre que se conserve el aviso de copyright. Este aviso debe incluirse en cualquier distribución del binario de AI KeyVault.
+
+```
+Copyright (c) 2017-2019 isis agora lovecruft <isis@patternsinthevoid.net>
+Copyright (c) 2017-2019 Web 3 Foundation <https://web3.foundation>
+All rights reserved.
+```

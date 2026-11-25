@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = Arc::new(AppState {
         db: pool,
-        server_master_key,
+        _server_master_key: server_master_key,
     });
 
     let cors = CorsLayer::new()

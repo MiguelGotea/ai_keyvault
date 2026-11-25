@@ -1,14 +1,72 @@
 # PLAN.md — Plan de Desarrollo de AI KeyVault
 
-**Versión:** 0.1 (Fase 0 en progreso)
-**Última actualización:** 2026-11-22
-**Estado:** ⏳ Esperando aprobación del usuario para continuar a Fase 1
+**Versión:** 1.0.0 — Primera Etapa Completada
+**Última actualización:** 2026-11-25
+**Estado:** ✅ Backend operativo en VPS `198.211.97.243:3010`. ⏳ Segunda etapa: app de escritorio Tauri 2.
 
 ---
 
 ## Resumen ejecutivo
 
-AI KeyVault es una bóveda + tablero personal para administrar cuentas de agentes de IA de programación. Stack: **Tauri 2** (Rust + TypeScript) para escritorio, **Rust/axum** para el servidor VPS, **SQLite** como BD, **XChaCha20-Poly1305** para cifrado, **Argon2id** como KDF. Monorepo en `ai_keyvault`.
+AI KeyVault es una bóveda + tablero personal para administrar cuentas de agentes de IA de programación. Stack: **Tauri 2** (Rust + TypeScript) para escritorio (segunda etapa), **Rust/axum** para el servidor VPS, **SQLite** como BD, **XChaCha20-Poly1305** para cifrado, **Argon2id** como KDF. Monorepo en `ai_keyvault`.
+
+**Estado al cierre de primera etapa (2026-11-25):**
+- Fases 0–8 completadas ✅ — Backend 100% operativo
+- Fases A (switch de cuenta), C (chats Codex), D (switch log), E (alert log) completadas ✅
+- Fase F (re-login automático) documentada como procedimiento manual ✅
+- Fase 9 (proveedores adicionales) pospuesta a segunda etapa ⏸
+- Hipótesis H1 confirmada: cooldown empieza con el primer uso de la semana
+- Siguiente etapa: app de escritorio Tauri 2 (ver `docs/desktop-app-insumos.md`)
+
+---
+
+## Estado al cierre — Primera Etapa Completada ✅
+
+### Fases completadas
+
+| Fase | Nombre | Estado |
+|------|--------|--------|
+| 0 | Investigación y base | ✅ Completada |
+| 1 | Núcleo seguro (crates/core) | ✅ Completada |
+| 2 | Servidor VPS | ✅ Completada |
+| 3 | Adaptadores agy + Codex | ✅ Completada |
+| 4 | Cuota y planes (poller) | ✅ Completada |
+| 5 | Alertas | ✅ Completada |
+| 6 | Agente de chats (agy) | ✅ Completada |
+| 7 | Estadísticas | ✅ Completada |
+| 8 | Ping mínimo | ✅ Completada |
+| A | Switch de cuenta (agy + Codex) | ✅ Completada |
+| C | Chats Codex (reader + endpoints) | ✅ Completada |
+| D | Switch log (tabla + endpoints REST) | ✅ Completada |
+| E | Alert log (tabla + endpoints REST) | ✅ Completada |
+| F | Re-login automático | 📄 Documentado como procedimiento manual |
+| 9 | Proveedores adicionales | ⏸ Pospuesta — Segunda Etapa |
+
+### Estado del VPS (verificado 2026-11-25)
+
+| Elemento | Estado |
+|----------|--------|
+| Servidor activo `198.211.97.243:3010` | ✅ Operativo |
+| `GET /health` | ✅ `{"status":"healthy"}` |
+| `GET /api/alerts` | ✅ Tabla existe, `[]` sin alertas aún |
+| `GET /api/switch/history` | ✅ Tabla existe, `[]` |
+| `GET /api/pings/needs` | ✅ Operativo |
+| Tablas BD | ✅ `devices`, `vault_snapshots`, `quota_readings`, `quota_leases`, `chat_sessions`, `ping_log`, `switch_log`, `alert_log` |
+| Deploy automático (GitHub Actions) | ✅ `deploy-server.yml` en verde |
+| Caddy instalado | ✅ (sin subdominio — acceso directo por IP:3010) |
+
+### Hallazgos críticos confirmados
+
+| Supuesto original | Realidad verificada |
+|-------------------|---------------------|
+| Pools agy: `gemini-5h`, `3p-5h`, `gemini-weekly`, `3p-weekly` | Solo ventanas semanales en cuentas personales. `claude-gpt-5h` opcional si aparece |
+| Endpoint `cloudcode-pa.googleapis.com` disponible | HTTP 403 en cuentas personales — solo Enterprise |
+| Cuota agy vía API JSON | Solo vía `agy --print /usage` (texto parseado) |
+| Codex: JSON por sesión en `~/.codex/sessions/` | SQLite: `~/.codex/state_5.sqlite` tabla `threads` |
+| Codex: endpoint `/wham/profiles/me` | HTTP 404 — endpoint descartado |
+| agy token es JWT | Token opaco (`ya29`), vida ~1h, ruta: `gemini:antigravity` → `token.access_token` |
+| **H1 (cooldown con primer uso)** | **Confirmada** — el contador de 167h aparece solo cuando hay consumo |
+| Chats ChatGPT.com / Gemini.com trackeables | Solo agentes locales (agy `brain/`, Codex `state_5.sqlite`) — chats web viven en la nube sin API pública |
 
 ---
 
@@ -423,24 +481,16 @@ crates/alerter/
 
 ---
 
-## ⏸️ FASE 0 COMPLETA — Esperando aprobación para Fase 1
+## ✅ PRIMERA ETAPA COMPLETADA — 2026-11-25
 
-### Estado del VPS (verificado 2026-11-22)
-| Elemento | Estado |
-|----------|--------|
-| `/opt/ai-keyvault/{bin,config,data,logs,backups}` | ✅ Creados |
-| `.env` del servidor | ✅ Creado |
-| Usuario `ai-keyvault-deploy` con SSH | ✅ Configurado |
-| Caddy instalado | ✅ Instalado (Caddyfile pendiente de configurar con subdominio) |
-| Servicio `systemd` `ai-keyvault` | ⏳ Pendiente (se crea en Fase 2 cuando exista el binario) |
-| `bin/ai-keyvault-server` | ⏳ Pendiente (se compila en Fase 2) |
+El backend está 100% operativo. La segunda etapa (app de escritorio Tauri 2) comienza en un chat nuevo usando `docs/desktop-app-insumos.md` como spec de entrada.
 
-### Qué falta antes de Fase 1 (solo tu aprobación)
+### Próximos pasos para segunda etapa
 
-1. **¿Apruebas el stack Tauri 2?** (ADR-001)
-2. **¿Apruebas el modelo de cifrado** Argon2id + XChaCha20-Poly1305? (ADR-002)
-3. **¿Apruebas la sincronización** LWW + Ed25519 + lease? (ADR-003)
-4. **¿Apruebas el modelo de ping/alertas** configurable por hipótesis? (ADR-004)
-5. **Subdominio para el VPS:** ¿cuál subdominio en Spaceship apuntará al VPS? (ej. `keyvault.tudominio.com`). Necesito el dominio para configurar el Caddyfile.
-
-Una vez aprobado, arranco directamente con la **Fase 1: Núcleo seguro** (Argon2id, Vault Key, clave de respaldo, XChaCha20, zeroize, autobloqueo) en Rust.
+1. Leer `docs/desktop-app-insumos.md` — spec completo del frontend Tauri 2
+2. Iniciar Fase 10: Scaffolding Tauri 2 (`src-tauri/` + `src/`)
+3. Implementar autenticación local (Argon2id) y desbloqueo de bóveda
+4. Dashboard de cuota (consumir endpoints `/api/stats/*`)
+5. Switch de cuenta con 1 click (consumir `/api/switch`)
+6. Pantalla de alertas y ping (consumir `/api/alerts`, `/api/pings`)
+7. Firma del instalador y distribución (Fase final)
