@@ -75,7 +75,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/pings/:account_id", get(routes::get_pings))
         .route("/api/switch", post(routes::post_switch))
         .route("/api/switch/history", get(routes::get_switch_history))
-        .route("/api/alerts", post(routes::post_alert).get(routes::get_alert_log))
+        .route(
+            "/api/alerts",
+            post(routes::post_alert).get(routes::get_alert_log),
+        )
         .route("/api/stats/compare", get(routes::get_stats_compare))
         .route(
             "/api/stats/summary/:account_id",

@@ -62,7 +62,7 @@ pub fn scan_codex_chats() -> Result<Vec<CodexChat>> {
         &path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
-    .map_err(|e| CodexError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())))?;
+    .map_err(|e| CodexError::Io(std::io::Error::other(e.to_string())))?;
 
     // Verificar que la tabla `threads` existe (versión de Codex puede variar)
     let table_exists: bool = conn
@@ -93,9 +93,7 @@ pub fn scan_codex_chats() -> Result<Vec<CodexChat>> {
             LIMIT 200
             "#,
         )
-        .map_err(|e| {
-            CodexError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
-        })?;
+        .map_err(|e| CodexError::Io(std::io::Error::other(e.to_string())))?;
 
     let chats: Vec<CodexChat> = stmt
         .query_map([], |row| {
@@ -105,9 +103,7 @@ pub fn scan_codex_chats() -> Result<Vec<CodexChat>> {
             let updated_at: String = row.get(3)?;
             Ok((id, messages_json, created_at, updated_at))
         })
-        .map_err(|e| {
-            CodexError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
-        })?
+        .map_err(|e| CodexError::Io(std::io::Error::other(e.to_string())))?
         .filter_map(|r| r.ok())
         .map(|(id, messages_json, created_at, updated_at)| {
             let title = extract_first_user_message(messages_json.as_deref());
@@ -180,7 +176,8 @@ mod tests {
 
     #[test]
     fn test_extract_saltar_assistant() {
-        let json = r#"[{"role":"assistant","content":"hola"},{"role":"user","content":"mi pregunta"}]"#;
+        let json =
+            r#"[{"role":"assistant","content":"hola"},{"role":"user","content":"mi pregunta"}]"#;
         let title = extract_first_user_message(Some(json));
         assert_eq!(title, Some("mi pregunta".to_string()));
     }

@@ -766,9 +766,7 @@ pub async fn post_switch(
     Json(body): Json<PostSwitchBody>,
 ) -> Result<Json<serde_json::Value>> {
     let provider = body.provider.unwrap_or_else(|| "agy".to_string());
-    let switched_at = body
-        .switched_at
-        .unwrap_or_else(|| Utc::now().to_rfc3339());
+    let switched_at = body.switched_at.unwrap_or_else(|| Utc::now().to_rfc3339());
 
     sqlx::query(
         r#"
@@ -919,9 +917,7 @@ pub async fn post_alert(
     Json(body): Json<PostAlertBody>,
 ) -> Result<Json<serde_json::Value>> {
     let provider = body.provider.unwrap_or_else(|| "agy".to_string());
-    let detected_at = body
-        .detected_at
-        .unwrap_or_else(|| Utc::now().to_rfc3339());
+    let detected_at = body.detected_at.unwrap_or_else(|| Utc::now().to_rfc3339());
 
     sqlx::query(
         r#"
