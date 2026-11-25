@@ -144,7 +144,7 @@ export default function DashboardPage() {
       {/* Tarjetas por cuenta */}
       {Object.entries(byAccount).map(([key, pools]) => {
         const [provider, accountId] = key.split(":");
-        const hasAlert = pools.some(p => p.current_percent >= 80);
+        const hasAlert = pools.some(p => p.current_percent_used >= 80);
         return (
           <section key={key} style={styles.accountSection}>
             <div style={styles.accountHeader}>

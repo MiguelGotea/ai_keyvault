@@ -52,13 +52,20 @@ pub struct PoolSummary {
     pub account_id: String,
     pub provider: String,
     pub pool: String,
-    pub current_percent: f64,
-    pub burn_rate_per_hour: Option<f64>,
+    /// Porcentaje de uso actual (0-100). Nombre exacto del VPS: current_percent_used.
+    pub current_percent_used: f64,
+    /// Tokens consumidos (bruto).
+    pub tokens_used: i64,
+    /// Límite de tokens del pool.
+    pub tokens_limit: i64,
+    /// Tasa de quema en %/hora calculada sobre deltas positivos recientes.
+    pub burn_rate_pct_per_hour: f64,
+    /// Tiempo estimado hasta llegar al 100% (horas). Calculado en el desktop.
     pub estimated_hours_to_100: Option<f64>,
+    /// Momento estimado de agotamiento (calculado en el desktop).
     pub estimated_exhaustion_at: Option<String>,
     pub reset_time: Option<String>,
-    pub last_read_at: Option<String>,
-    pub source: Option<String>,
+    pub last_read_at: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function QuotaCard({ pool, onSelectAccount }: Props) {
-  const pct = Math.round(pool.current_percent);
+  const pct = Math.round(pool.current_percent_used);
   const isCrit = pct >= 95;
   const isWarn = pct >= 80 && !isCrit;
 
@@ -91,11 +91,11 @@ export default function QuotaCard({ pool, onSelectAccount }: Props) {
 
       {/* Metadatos */}
       <div style={styles.meta}>
-        {pool.burn_rate_per_hour !== null && (
+        {pool.burn_rate_pct_per_hour > 0 && (
           <div style={styles.metaItem}>
             <span style={styles.metaLabel}>Burn</span>
             <span style={styles.metaValue}>
-              {pool.burn_rate_per_hour?.toFixed(2)}%/h
+              {pool.burn_rate_pct_per_hour.toFixed(2)}%/h
             </span>
           </div>
         )}

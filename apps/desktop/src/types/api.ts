@@ -61,13 +61,17 @@ export interface PoolSummary {
   account_id: string;
   provider: string;
   pool: string;
-  current_percent: number;
-  burn_rate_per_hour: number | null;
+  /** Porcentaje de uso actual (0-100). Campo VPS: current_percent_used. */
+  current_percent_used: number;
+  tokens_used: number;
+  tokens_limit: number;
+  /** Tasa de quema en %/hora. Campo VPS: burn_rate_pct_per_hour. */
+  burn_rate_pct_per_hour: number;
+  /** Calculado en el desktop — puede ser null si burn_rate == 0. */
   estimated_hours_to_100: number | null;
   estimated_exhaustion_at: string | null;
   reset_time: string | null;
-  last_read_at: string | null;
-  source: string | null;
+  last_read_at: string;
 }
 
 // ── Stats ────────────────────────────────────────────────────────────────────

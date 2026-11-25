@@ -48,7 +48,7 @@ export default function StatsPage() {
         {compare.data && compare.data.length > 0 && (
           <div style={styles.compareGrid}>
             {compare.data.map(pool => {
-              const pct = pool.current_percent;
+              const pct = pool.current_percent_used;
               const color = pct >= 95 ? "var(--color-danger)" : pct >= 80 ? "var(--color-warning)" : "var(--color-success)";
               return (
                 <div key={`${pool.account_id}-${pool.pool}`} style={styles.compareCard}>
@@ -58,8 +58,8 @@ export default function StatsPage() {
                   <div style={styles.barTrack}>
                     <div style={{ ...styles.barFill, width: `${Math.min(pct, 100)}%`, background: color }} />
                   </div>
-                  {pool.burn_rate_per_hour !== null && (
-                    <div style={styles.compareMeta}>Burn {pool.burn_rate_per_hour?.toFixed(2)}%/h</div>
+                  {pool.burn_rate_pct_per_hour > 0 && (
+                    <div style={styles.compareMeta}>Burn {pool.burn_rate_pct_per_hour.toFixed(2)}%/h</div>
                   )}
                 </div>
               );
