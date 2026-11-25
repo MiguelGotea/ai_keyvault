@@ -27,8 +27,12 @@ pub fn collect_agy(device_id: &str) -> Result<Vec<QuotaSnapshot>> {
     }
 
     let text = String::from_utf8_lossy(&output.stdout);
-    let readings = parse_usage_output(&text)
-        .map_err(|e| PollerError::AgyError(format!("Error al parsear agy /usage: {e}")))?;
+    let readings = parse_usage_output(&text).map_err(|e| {
+        // Loguear los primeros 500 chars del output para diagnóstico
+        let preview: String = text.chars().take(500).collect();
+        tracing::debug!("Salida raw de agy --print /usage:\n{}", preview);
+        PollerError::AgyError(format!("Error al parsear agy /usage: {e}"))
+    })?;
 
     if readings.is_empty() {
         warn!("agy /usage no devolvió lecturas de cuota");
