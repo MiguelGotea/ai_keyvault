@@ -5,6 +5,7 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   # ─────────────────────────────────────────────
@@ -129,10 +130,7 @@ jobs:
     name: 🖥️ Tauri Build (Windows MSVC)
     runs-on: windows-latest
     needs: [ secrets-scan, frontend-ci ]
-    if: |
-      github.event_name == 'push' &&
-      (contains(toJson(github.event.commits), 'apps/desktop') ||
-       contains(toJson(github.event.commits), 'apps\\desktop'))
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - name: 📥 Checkout código
         uses: actions/checkout@v4
