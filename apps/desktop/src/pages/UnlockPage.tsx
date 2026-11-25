@@ -1,68 +1,280 @@
-/** UnlockPage — Fase 11: pantalla de desbloqueo con verificación real del servidor.
- *  La lógica de desbloqueo con clave maestra se implementa en Fase 12.
- *  Por ahora: verifica conexión con VPS via invoke() → Rust → reqwest.
+/** UnlockPage — Fase 12: pantalla de desbloqueo con bóveda local real.
+ *  - Primer uso → flujo de creación con clave maestra
+ *  - Uso normal → desbloqueo con clave maestra
+ *  - Recuperación → clave de respaldo AKVR-...
  */
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { invoke } from "@tauri-apps/api/core";
 import { useServerHealth } from "../hooks/useServerHealth";
+import { useCommand } from "../hooks/useCommand";
 import ServerStatusBadge from "../components/ServerStatusBadge";
+import type { VaultStatus } from "../types/api";
 import es from "../i18n/es.json";
+
+type ScreenMode = "unlock" | "create" | "recovery" | "show_recovery_key";
+
+interface UnlockResult { success: boolean; error: string | null; accounts_count: number; }
+interface CreateVaultResult { success: boolean; recovery_key: string | null; error: string | null; }
 
 export default function UnlockPage() {
   const navigate = useNavigate();
   const health = useServerHealth();
 
+  const [mode, setMode] = useState<ScreenMode>("unlock");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [recoveryInput, setRecoveryInput] = useState("");
+  const [newPasswordForRecovery, setNewPasswordForRecovery] = useState("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [recoveryKeyToShow, setRecoveryKeyToShow] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // Verificar si existe bóveda en disco
+  const { data: vaultStatus } = useCommand<VaultStatus>("get_vault_status");
+
+  useEffect(() => {
+    if (vaultStatus && !vaultStatus.initialized) {
+      setMode("create");
+    }
+  }, [vaultStatus]);
+
+  // ── Crear bóveda nueva ──────────────────────────────────────────────────────
+  async function handleCreate() {
+    if (!password) return setErrorMsg("Ingresa una clave maestra.");
+    if (password !== confirmPassword) return setErrorMsg("Las claves no coinciden.");
+    if (password.length < 12) return setErrorMsg("La clave debe tener al menos 12 caracteres.");
+
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const result = await invoke<CreateVaultResult>("create_vault", { password });
+      if (result.success && result.recovery_key) {
+        setRecoveryKeyToShow(result.recovery_key);
+        setMode("show_recovery_key");
+      } else {
+        setErrorMsg(result.error ?? "Error desconocido al crear la bóveda.");
+      }
+    } catch (e) {
+      setErrorMsg(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Desbloquear bóveda ──────────────────────────────────────────────────────
+  async function handleUnlock() {
+    if (!password) return setErrorMsg("Ingresa tu clave maestra.");
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const result = await invoke<UnlockResult>("unlock_vault", { password });
+      if (result.success) {
+        navigate("/dashboard");
+      } else {
+        setErrorMsg(result.error ?? "Clave incorrecta.");
+      }
+    } catch (e) {
+      setErrorMsg(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Recuperar bóveda ────────────────────────────────────────────────────────
+  async function handleRecover() {
+    if (!recoveryInput) return setErrorMsg("Ingresa la clave de recuperación.");
+    if (!newPasswordForRecovery || newPasswordForRecovery.length < 12)
+      return setErrorMsg("La nueva clave debe tener al menos 12 caracteres.");
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const result = await invoke<UnlockResult>("recover_vault", {
+        recoveryKeyStr: recoveryInput,
+        newPassword: newPasswordForRecovery,
+      });
+      if (result.success) {
+        navigate("/dashboard");
+      } else {
+        setErrorMsg(result.error ?? "Clave de recuperación incorrecta.");
+      }
+    } catch (e) {
+      setErrorMsg(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Copiar clave de recuperación ────────────────────────────────────────────
+  async function copyRecoveryKey() {
+    if (!recoveryKeyToShow) return;
+    try {
+      await navigator.clipboard.writeText(recoveryKeyToShow);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+    } catch {
+      setErrorMsg("No se pudo copiar. Escríbela manualmente.");
+    }
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        {/* Logo / título */}
+        {/* Header */}
         <div style={styles.header}>
           <span style={styles.icon}>🔐</span>
           <h1 style={styles.title}>{es.app.nombre}</h1>
-          <p style={styles.subtitle}>{es.app.descripcion}</p>
+          <p style={styles.subtitle}>
+            {mode === "create" && es.vault.primer_uso}
+            {mode === "unlock" && es.unlock.subtitulo}
+            {mode === "recovery" && "Recuperación con clave de respaldo"}
+            {mode === "show_recovery_key" && "Guarda tu clave de recuperación"}
+          </p>
         </div>
 
         {/* Estado del servidor */}
         <div style={styles.statusRow}>
-          <span style={styles.label}>Conexión VPS:</span>
           <ServerStatusBadge health={health} />
-          <button style={styles.recheckBtn} onClick={health.recheck} disabled={health.checking}>
-            ↻
-          </button>
+          <button style={styles.recheckBtn} onClick={health.recheck} disabled={health.checking}>↻</button>
         </div>
 
-        {health.error && (
-          <div style={styles.errorBox}>
-            ⚠️ {health.error}
+        {/* Error */}
+        {errorMsg && <div style={styles.errorBox}>⚠️ {errorMsg}</div>}
+
+        {/* ── PANTALLA: MOSTRAR CLAVE DE RECUPERACIÓN ── */}
+        {mode === "show_recovery_key" && recoveryKeyToShow && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={styles.warningBox}>
+              <strong>⚠️ Guarda esta clave ahora mismo.</strong><br />
+              Esta es tu única forma de recuperar la bóveda si olvidas la clave maestra.
+              <strong> No se mostrará de nuevo.</strong>
+            </div>
+            <div style={styles.recoveryKeyBox}>
+              <code style={styles.recoveryKeyText}>{recoveryKeyToShow}</code>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button style={{ ...styles.btn, flex: 1 }} onClick={copyRecoveryKey}>
+                {copied ? "✅ Copiado" : "📋 Copiar al portapapeles"}
+              </button>
+            </div>
+            <button
+              style={{ ...styles.btn, ...styles.btnPrimary }}
+              onClick={() => navigate("/dashboard")}
+            >
+              Ya guardé la clave → Continuar
+            </button>
           </div>
         )}
 
-        {/* Campo de clave maestra — placeholder Fase 11 */}
-        <div style={styles.inputGroup}>
-          <label style={styles.inputLabel}>{es.vault.clave_maestra}</label>
-          <input
-            type="password"
-            placeholder="••••••••••••"
-            style={styles.input}
-            disabled
-            title="Implementado en Fase 12"
-          />
-          <p style={styles.inputHint}>
-            ⚠️ Autenticación real en Fase 12
-          </p>
-        </div>
+        {/* ── PANTALLA: CREAR BÓVEDA ── */}
+        {mode === "create" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>{es.vault.clave_maestra}</label>
+              <input
+                type="password"
+                placeholder="Mínimo 12 caracteres"
+                style={styles.input}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleCreate()}
+                autoFocus
+              />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>Confirmar clave maestra</label>
+              <input
+                type="password"
+                placeholder="Repite la clave"
+                style={styles.input}
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleCreate()}
+              />
+            </div>
+            <button
+              style={{ ...styles.btn, ...styles.btnPrimary }}
+              onClick={handleCreate}
+              disabled={loading}
+            >
+              {loading ? "Creando…" : es.vault.crear_boveda}
+            </button>
+          </div>
+        )}
 
-        {/* Botón de desbloqueo — placeholder */}
-        <button
-          style={{ ...styles.btn, ...styles.btnPrimary }}
-          onClick={() => navigate("/dashboard")}
-          title="En Fase 12 validará la clave maestra"
-        >
-          {es.vault.desbloquear} →
-        </button>
+        {/* ── PANTALLA: DESBLOQUEAR ── */}
+        {mode === "unlock" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>{es.vault.clave_maestra}</label>
+              <input
+                type="password"
+                placeholder="••••••••••••"
+                style={styles.input}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleUnlock()}
+                autoFocus
+              />
+            </div>
+            <button
+              style={{ ...styles.btn, ...styles.btnPrimary }}
+              onClick={handleUnlock}
+              disabled={loading}
+            >
+              {loading ? "Verificando…" : es.vault.desbloquear}
+            </button>
+            <button
+              style={styles.btnLink}
+              onClick={() => { setMode("recovery"); setErrorMsg(null); }}
+            >
+              {es.unlock.enlace_recuperacion}
+            </button>
+          </div>
+        )}
 
-        <p style={styles.note}>
-          Fase 11 — Capa de comunicación Rust ↔ VPS ↔ React activa
-        </p>
+        {/* ── PANTALLA: RECUPERACIÓN ── */}
+        {mode === "recovery" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>Clave de recuperación (AKVR-…)</label>
+              <input
+                type="text"
+                placeholder="AKVR-XXXX-XXXX-XXXX-…"
+                style={{ ...styles.input, fontFamily: "var(--font-mono)", fontSize: 12 }}
+                value={recoveryInput}
+                onChange={e => setRecoveryInput(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>Nueva clave maestra</label>
+              <input
+                type="password"
+                placeholder="Mínimo 12 caracteres"
+                style={styles.input}
+                value={newPasswordForRecovery}
+                onChange={e => setNewPasswordForRecovery(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleRecover()}
+              />
+            </div>
+            <button
+              style={{ ...styles.btn, ...styles.btnPrimary }}
+              onClick={handleRecover}
+              disabled={loading}
+            >
+              {loading ? "Verificando…" : "Recuperar bóveda"}
+            </button>
+            <button
+              style={styles.btnLink}
+              onClick={() => { setMode("unlock"); setErrorMsg(null); }}
+            >
+              ← Volver al desbloqueo normal
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -82,7 +294,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: "1px solid var(--color-border)",
     borderRadius: "var(--radius-xl)",
     padding: 40,
-    maxWidth: 440,
+    maxWidth: 460,
     width: "100%",
     display: "flex",
     flexDirection: "column",
@@ -97,30 +309,16 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: "center",
   },
   icon: { fontSize: 48, lineHeight: 1 },
-  title: {
-    fontSize: 22,
-    fontWeight: 700,
-    color: "var(--color-primary)",
-    margin: 0,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: "var(--color-text-secondary)",
-    margin: 0,
-  },
+  title: { fontSize: 22, fontWeight: 700, color: "var(--color-primary)", margin: 0 },
+  subtitle: { fontSize: 13, color: "var(--color-text-secondary)", margin: 0 },
   statusRow: {
     display: "flex",
     gap: 8,
     alignItems: "center",
-    padding: "10px 14px",
+    padding: "8px 12px",
     background: "var(--color-bg-secondary)",
     borderRadius: "var(--radius-md)",
     border: "1px solid var(--color-border-subtle)",
-  },
-  label: {
-    fontSize: 12,
-    color: "var(--color-text-secondary)",
-    flexShrink: 0,
   },
   recheckBtn: {
     marginLeft: "auto",
@@ -130,7 +328,6 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--color-text-secondary)",
     fontSize: 14,
     padding: "2px 6px",
-    borderRadius: "var(--radius-sm)",
   },
   errorBox: {
     padding: "10px 14px",
@@ -140,16 +337,31 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: "#991B1B",
   },
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 6,
+  warningBox: {
+    padding: "12px 14px",
+    background: "#FFFBEB",
+    border: "1px solid #FDE68A",
+    borderRadius: "var(--radius-md)",
+    fontSize: 12,
+    color: "#92400E",
+    lineHeight: 1.5,
   },
-  inputLabel: {
-    fontSize: 13,
-    fontWeight: 500,
+  recoveryKeyBox: {
+    padding: "14px 16px",
+    background: "var(--color-bg-secondary)",
+    border: "2px solid var(--color-secondary)",
+    borderRadius: "var(--radius-md)",
+    textAlign: "center",
+  },
+  recoveryKeyText: {
+    fontFamily: "var(--font-mono)",
+    fontSize: 12,
     color: "var(--color-text)",
+    wordBreak: "break-all",
+    letterSpacing: "0.05em",
   },
+  inputGroup: { display: "flex", flexDirection: "column", gap: 6 },
+  inputLabel: { fontSize: 13, fontWeight: 500, color: "var(--color-text)" },
   input: {
     padding: "10px 14px",
     border: "1px solid var(--color-border)",
@@ -158,15 +370,9 @@ const styles: Record<string, React.CSSProperties> = {
     outline: "none",
     background: "var(--color-bg)",
     color: "var(--color-text)",
-    fontFamily: "var(--font-mono)",
-  },
-  inputHint: {
-    fontSize: 11,
-    color: "var(--color-text-disabled)",
-    margin: 0,
   },
   btn: {
-    padding: "12px 16px",
+    padding: "11px 16px",
     borderRadius: "var(--radius-md)",
     border: "1px solid var(--color-border)",
     background: "var(--color-bg-secondary)",
@@ -180,10 +386,13 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#fff",
     border: "none",
   },
-  note: {
-    fontSize: 11,
-    color: "var(--color-text-disabled)",
-    textAlign: "center",
-    margin: 0,
+  btnLink: {
+    background: "none",
+    border: "none",
+    color: "var(--color-text-secondary)",
+    fontSize: 12,
+    cursor: "pointer",
+    textAlign: "center" as const,
+    textDecoration: "underline",
   },
 };

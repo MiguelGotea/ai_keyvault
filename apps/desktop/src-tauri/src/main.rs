@@ -11,6 +11,7 @@ mod api_client;
 mod commands;
 mod tray;
 
+use commands::vault::VaultState;
 use tauri::Manager;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -29,6 +30,8 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_fs::init())
+        // Estado global de la bóveda (Mutex<Option<Vault>>)
+        .manage(VaultState::default())
         .setup(|app| {
             // Configurar el icono de la bandeja del sistema
             tray::setup_tray(app)?;
@@ -47,8 +50,13 @@ fn main() {
             // Health / conectividad
             commands::health::ping_server,
             commands::api::check_server_health,
-            // Estado de la bóveda local
+            // Bóveda local (Fase 12)
             commands::vault::get_vault_status,
+            commands::vault::create_vault,
+            commands::vault::unlock_vault,
+            commands::vault::lock_vault,
+            commands::vault::recover_vault,
+            commands::vault::list_vault_accounts,
             // Cuota y estadísticas (VPS)
             commands::api::get_quota,
             commands::api::get_stats_summary,

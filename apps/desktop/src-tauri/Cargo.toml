@@ -34,11 +34,12 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
 
-# NOTA: Las dependencias de crates/core, providers/agy y providers/codex
-# se añadirán en Fase 11-12 cuando se implementen los comandos de bóveda y switch.
-# Por ahora el desktop se comunica con el backend VPS via HTTP (Rust/reqwest),
-# sin necesitar SQLite (rusqlite bundled requiere cmake, que no está instalado).
-# Para el primer build de prueba (Fase 10) solo necesitamos Tauri + reqwest.
+# Bóveda local — crate puro (sin sqlite, sin cmake requerido)
+ai-keyvault-core = { path = "../../../crates/core" }
+
+# NOTA FASE 12: providers/agy y providers/codex usan rusqlite bundled (requiere cmake).
+# Se agregarán en Fase 13 (switch de cuenta) solo si se instala cmake, o bien
+# se implementará una interfaz alternativa que lea las credenciales sin el provider crate.
 
 [profile.dev]
 incremental = true

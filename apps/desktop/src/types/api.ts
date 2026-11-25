@@ -20,6 +20,27 @@ export interface VaultStatus {
   initialized: boolean;
   locked: boolean;
   version: string;
+  accounts_count: number;
+}
+
+export interface AccountInfo {
+  id: string;
+  provider: string;
+  alias: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UnlockResult {
+  success: boolean;
+  error: string | null;
+  accounts_count: number;
+}
+
+export interface CreateVaultResult {
+  success: boolean;
+  recovery_key: string | null;
+  error: string | null;
 }
 
 // ── Quota ────────────────────────────────────────────────────────────────────
