@@ -1,33 +1,59 @@
-/** AlertsPage — Fase 14: Log de alertas del VPS. */
+/**
+ * AlertsPage — Log de alertas del VPS.
+ * Solo muestra alertas de cuentas que están en la bóveda.
+ */
+import { useMemo } from "react";
 import { useCommand } from "../hooks/useCommand";
-import type { AlertRecord } from "../types/api";
+import type { AlertRecord, AccountInfo } from "../types/api";
 import es from "../i18n/es.json";
 
 export default function AlertsPage() {
+  // Cuentas de la bóveda (fuente de verdad)
+  const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
   const alerts = useCommand<AlertRecord[]>("get_alerts", {});
+
+  // Filtrar alertas por cuentas que están en la bóveda
+  const vaultAliases = useMemo(
+    () => new Set((vaultAccounts.data ?? []).map(a => a.alias)),
+    [vaultAccounts.data]
+  );
+
+  const filteredAlerts = useMemo(
+    () => (alerts.data ?? []).filter(a => vaultAliases.has(a.account_id)),
+    [alerts.data, vaultAliases]
+  );
+
+  const isLoading = alerts.loading || vaultAccounts.loading;
 
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <h2 style={styles.title}>{es.alertas.titulo}</h2>
-        <button style={styles.refreshBtn} onClick={alerts.refetch} disabled={alerts.loading}>
-          {alerts.loading ? "⏳" : "↻"} Actualizar
+        <button style={styles.refreshBtn} onClick={alerts.refetch} disabled={isLoading}>
+          {isLoading ? "⏳" : "↻"} Actualizar
         </button>
       </div>
 
-      {alerts.loading && <div style={styles.hint}>Cargando alertas…</div>}
+      {isLoading && <div style={styles.hint}>Cargando alertas…</div>}
       {alerts.error && <div style={styles.error}>{alerts.error}</div>}
 
-      {alerts.data?.length === 0 && (
+      {!isLoading && (vaultAccounts.data ?? []).length === 0 && (
+        <div style={styles.empty}>
+          <span style={{ fontSize: 36 }}>🗝️</span>
+          <p>No hay cuentas en la bóveda. Agrega una cuenta primero.</p>
+        </div>
+      )}
+
+      {!isLoading && (vaultAccounts.data ?? []).length > 0 && filteredAlerts.length === 0 && (
         <div style={styles.empty}>
           <span style={{ fontSize: 36 }}>✅</span>
           <p>{es.alertas.sin_alertas}</p>
         </div>
       )}
 
-      {alerts.data && alerts.data.length > 0 && (
+      {filteredAlerts.length > 0 && (
         <div style={styles.list}>
-          {alerts.data.map(alert => (
+          {filteredAlerts.map(alert => (
             <div
               key={alert.id}
               style={{

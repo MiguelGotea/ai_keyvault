@@ -65,7 +65,7 @@ fn main() {
             commands::vault::delete_vault_account,
             commands::vault::get_account_email,
             commands::vault::decrypt_account_tokens,
-            commands::vault::import_current_agy_credential,
+            commands::vault::add_agy_account_oauth,  // OAuth: lanza agy login → captura credencial → guarda en bóveda
             // Cuota y estadísticas (VPS)
             commands::api::get_quota,
             commands::api::get_stats_summary,

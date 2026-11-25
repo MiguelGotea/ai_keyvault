@@ -1,16 +1,31 @@
-/** PingPage — Fase 14: Ping mínimo para cuentas con cuota alta. */
+/**
+ * PingPage — Ping mínimo para cuentas con cuota alta.
+ * Solo muestra cuentas que están en la bóveda.
+ */
 import { invoke } from "@tauri-apps/api/core";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useCommand } from "../hooks/useCommand";
-import type { PingNeedItem } from "../types/api";
+import type { PingNeedItem, AccountInfo } from "../types/api";
 import es from "../i18n/es.json";
 
 export default function PingPage() {
   const [pinging, setPinging] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, string>>({});
 
-  // El comando get_pings_needs retorna Vec<PingNeedItem> (array de objetos completos)
+  // Cuentas de la bóveda (fuente de verdad)
+  const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
   const needs = useCommand<PingNeedItem[]>("get_pings_needs", { maxPct: 80 });
+
+  // Filtrar: solo mostrar cuentas en la bóveda
+  const vaultAliases = useMemo(
+    () => new Set((vaultAccounts.data ?? []).map(a => a.alias)),
+    [vaultAccounts.data]
+  );
+
+  const filteredNeeds = useMemo(
+    () => (needs.data ?? []).filter(item => vaultAliases.has(item.account_id)),
+    [needs.data, vaultAliases]
+  );
 
   async function doPing(item: PingNeedItem) {
     const key = `${item.provider}:${item.account_id}:${item.pool}`;
@@ -33,25 +48,34 @@ export default function PingPage() {
     }
   }
 
+  const isLoading = needs.loading || vaultAccounts.loading;
+
   return (
     <div style={styles.page}>
       <h2 style={styles.title}>{es.ping.titulo}</h2>
       <p style={styles.subtitle}>{es.ping.subtitulo}</p>
       <div style={styles.warningBox}>⚠️ {es.ping.advertencia}</div>
 
-      {needs.loading && <div style={styles.hint}>Verificando cuentas…</div>}
+      {isLoading && <div style={styles.hint}>Verificando cuentas…</div>}
       {needs.error && <div style={styles.error}>{needs.error}</div>}
 
-      {!needs.loading && needs.data?.length === 0 && (
+      {!isLoading && (vaultAccounts.data ?? []).length === 0 && (
+        <div style={styles.empty}>
+          <span style={{ fontSize: 36 }}>🗝️</span>
+          <p>No hay cuentas en la bóveda. Agrega una cuenta primero.</p>
+        </div>
+      )}
+
+      {!isLoading && (vaultAccounts.data ?? []).length > 0 && filteredNeeds.length === 0 && (
         <div style={styles.empty}>
           <span style={{ fontSize: 36 }}>✅</span>
           <p>{es.ping.sin_cuentas}</p>
         </div>
       )}
 
-      {needs.data && needs.data.length > 0 && (
+      {filteredNeeds.length > 0 && (
         <div style={styles.list}>
-          {needs.data.map(item => {
+          {filteredNeeds.map(item => {
             const key = `${item.provider}:${item.account_id}:${item.pool}`;
             return (
               <div key={key} style={styles.row}>

@@ -389,70 +389,109 @@ pub async fn decrypt_account_tokens(
     }
 }
 
-/// Importa la cuenta agy actualmente activa en el Credential Manager de Windows
-/// y la guarda en la bóveda como una nueva cuenta. Alias es el nombre amigable.
-/// La credencial se lee de "gemini:antigravity" — que es donde agy guarda su sesión.
+/// Lanza `agy login` para abrir el flujo OAuth en el navegador.
+/// Espera hasta 120 segundos a que aparezca una credencial NUEVA en el
+/// Credential Manager (distinta al email previo). Luego la cifra en la bóveda.
+///
+/// Flujo:
+///   1. Lee la credencial actual (si existe) para detectar el cambio.
+///   2. Lanza `agy login` que abre el navegador de Google OAuth.
+///   3. Poll cada 2 s hasta que `gemini:antigravity` tenga una credencial
+///      con un `id_token_email` distinto (o nueva si no había ninguna antes).
+///   4. Guarda el blob completo cifrado en la bóveda + sincroniza al VPS.
 #[command]
-pub async fn import_current_agy_credential(
+pub async fn add_agy_account_oauth(
     app: AppHandle,
     vault_state: State<'_, VaultState>,
     alias: String,
 ) -> Result<AddAccountResult, String> {
-    #[cfg(target_os = "windows")]
-    {
-        use crate::commands::switch_cmd::read_agy_credential;
+    use crate::commands::switch_cmd::read_agy_credential;
+    use tauri_plugin_shell::ShellExt;
+    use tokio::time::{sleep, Duration};
 
-        let cred_json = match read_agy_credential() {
-            Some(json) => json,
-            None => return Ok(AddAccountResult {
+    // 1. Capturar email previo (para detectar cambio)
+    let prev_email: Option<String> = read_agy_credential().and_then(|json| {
+        serde_json::from_str::<serde_json::Value>(&json).ok()?
+            .get("id_token_email")
+            .or_else(|| {
+                // re-parse needed
+                None
+            })
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    });
+
+    // 2. Lanzar `agy login` en background (no bloqueante)
+    app.shell()
+        .command("agy")
+        .args(["login"])
+        .spawn()
+        .map_err(|e| format!("No se pudo lanzar 'agy login': {e}. Asegúrate de que agy esté instalado."))?;
+
+    // 3. Poll hasta 120 s esperando credencial nueva
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    let new_cred_json = loop {
+        sleep(Duration::from_secs(2)).await;
+        if std::time::Instant::now() > deadline {
+            return Ok(AddAccountResult {
                 success: false,
                 id: None,
-                error: Some("No hay ninguna cuenta agy activa en el Credential Manager. Inicia sesión en Antigravity primero.".into()),
-            }),
-        };
-
-        // Extraer email del blob JSON
-        let email = {
-            let val: serde_json::Value = serde_json::from_str(&cred_json)
-                .map_err(|e| format!("El blob de credencial no es JSON válido: {e}"))?;
-            val.get("id_token_email")
-                .or_else(|| val.get("email"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown@agy")
-                .to_string()
-        };
-
-        // Usar alias como el email si no se proporcionó uno
-        let alias_final = if alias.trim().is_empty() { email.clone() } else { alias.trim().to_string() };
-
-        let mut guard = vault_state.vault.lock().unwrap();
-        match &mut *guard {
-            Some(vault) if vault.is_unlocked() => {
-                // Verificar que no existe ya una cuenta con el mismo alias o email
-                let already_exists = vault.state().accounts.iter().any(|a| a.alias == alias_final);
-                if already_exists {
-                    return Ok(AddAccountResult {
-                        success: false,
-                        id: None,
-                        error: Some(format!("Ya existe una cuenta con el alias '{alias_final}' en la bóveda.")),
-                    });
-                }
-
-                match vault.add_account("agy", &alias_final, &email, None, Some(&cred_json), None) {
-                    Ok(uuid) => {
-                        save_vault_state(&app, vault.state())?;
-                        Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
-                    }
-                    Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
+                error: Some("Tiempo de espera agotado (120 s). Completa el login en el navegador y vuelve a intentarlo.".into()),
+            });
+        }
+        if let Some(json) = read_agy_credential() {
+            // Parsear email actual
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json) {
+                let cur_email = val.get("id_token_email")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                // Si no había credencial antes → cualquier nueva vale
+                // Si había una → esperamos que cambie el email
+                let is_new = match (&prev_email, &cur_email) {
+                    (None, Some(_)) => true,
+                    (Some(prev), Some(cur)) => prev != cur,
+                    _ => false,
+                };
+                if is_new {
+                    break json;
                 }
             }
-            Some(_) => Err("La bóveda está bloqueada".into()),
-            None => Err("No hay bóveda cargada".into()),
         }
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = (app, vault_state, alias);
-        Err("Importar credencial agy solo disponible en Windows".into())
+    };
+
+    // 4. Extraer email del nuevo blob
+    let new_email = {
+        let val: serde_json::Value = serde_json::from_str(&new_cred_json)
+            .map_err(|e| format!("Blob de credencial inválido: {e}"))?;
+        val.get("id_token_email")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown@agy")
+            .to_string()
+    };
+
+    let alias_final = if alias.trim().is_empty() { new_email.clone() } else { alias.trim().to_string() };
+
+    // 5. Guardar en bóveda
+    let mut guard = vault_state.vault.lock().unwrap();
+    match &mut *guard {
+        Some(vault) if vault.is_unlocked() => {
+            let already_exists = vault.state().accounts.iter().any(|a| a.alias == alias_final);
+            if already_exists {
+                return Ok(AddAccountResult {
+                    success: false,
+                    id: None,
+                    error: Some(format!("Ya existe una cuenta con el alias '{alias_final}'. Usa otro alias.")),
+                });
+            }
+            match vault.add_account("agy", &alias_final, &new_email, None, Some(&new_cred_json), None) {
+                Ok(uuid) => {
+                    save_vault_state(&app, vault.state())?;
+                    Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
+                }
+                Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
+            }
+        }
+        Some(_) => Err("La bóveda está bloqueada".into()),
+        None => Err("No hay bóveda cargada".into()),
     }
 }
