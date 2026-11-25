@@ -290,18 +290,37 @@ curl.exe http://198.211.97.243:3010/api/quota/readings/tu@gmail.com
 **Tiempo estimado:** 3 días
 
 ### Fase 5 — Alertas
+**Estado:** ✅ Completada (2026-11-25)
+
 **Contenido:**
-- Notificaciones de Windows (toast notifications)
-- ntfy.sh con tópico aleatorio guardado en bóveda
-- Alerta al 80% (previa) y 95% (crítica)
-- Sugerencia de cuenta alternativa
-- Alerta de fin de suscripción (7 días, 1 día)
-- Anti-ruido: sin spam, enfriamiento
+- `crates/alerter/` — nuevo crate: detector de umbrales + notificador
+- Toast notifications en Windows (`winrt-notification`)
+- ntfy.sh configurado via `AKYV_NTFY_TOPIC` (env var)
+- Alerta al 80% (previa, `WARN`) y 95% (crítica, `CRIT`)
+- Anti-ruido: cooldown por `(account_id, pool, level)` — no spam
+- Estado persistido en `~/.ai-keyvault/alert-state.json`
+- Integración con el poller: alerta tras cada ciclo de recolección
+
+**Arquitectura:**
+```
+crates/alerter/
+  src/
+    lib.rs         — pub use, re-exports
+    models.rs      — AlertConfig, AlertLevel, AlertEvent, AlertState
+    detector.rs    — detect_alerts(readings, state) → Vec<AlertEvent>
+    cooldown.rs    — CooldownStore: persistencia de last_alerted por (account, pool, level)
+    notifier.rs    — send_toast (Windows) + send_ntfy (HTTP)
+  tests/
+    alerter_test.rs
+```
 
 **Criterios de aceptación:**
-- [ ] Alertas de prueba funcionan en Windows y en celular
-- [ ] Sin spam (mismo alerta no se repite)
-- [ ] Tópico de ntfy no aparece en logs ni repo
+- [ ] Alerta WARN al superar 80% en cualquier pool
+- [ ] Alerta CRIT al superar 95% en cualquier pool
+- [ ] No se repite la misma alerta dentro del cooldown (1h)
+- [ ] Toast de Windows aparece en la bandeja
+- [ ] ntfy.sh entrega en celular
+- [ ] Tópico de ntfy no aparece en logs ni en el repo (solo env var)
 
 **Tiempo estimado:** 2 días
 

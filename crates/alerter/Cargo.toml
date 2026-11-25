@@ -1,0 +1,31 @@
+[package]
+name = "ai-keyvault-alerter"
+version = "0.1.0"
+edition = "2021"
+authors = ["AI KeyVault Team"]
+description = "Detector de umbrales de cuota y notificador (Windows toast + ntfy.sh)"
+license = "MIT"
+
+[lib]
+name = "ai_keyvault_alerter"
+path = "src/lib.rs"
+
+[dependencies]
+# Serialización
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Fechas
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logs
+tracing = "0.1"
+
+# HTTP para ntfy.sh (bloqueante — el alerter no es async)
+reqwest = { version = "0.12", features = ["json", "blocking"] }
+
+# Directorio home del usuario
+dirs-next = "2.0"
+
+[dev-dependencies]
+chrono = { version = "0.4", features = ["serde"] }

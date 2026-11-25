@@ -19,6 +19,9 @@ path = "src/lib.rs"
 ai-keyvault-provider-agy = { path = "../../providers/agy" }
 ai-keyvault-provider-codex = { path = "../../providers/codex" }
 
+# Alerter (Fase 5)
+ai-keyvault-alerter = { path = "../alerter" }
+
 # Async runtime
 tokio = { version = "1.40", features = ["full"] }
 

@@ -5,8 +5,10 @@
 //! 2. Recolecta cuota de todos los providers locales.
 //! 3. Agrupa por account_id y para cada cuenta intenta adquirir el lease.
 //! 4. Si adquiere el lease, sube las lecturas.
+//! 5. Evalúa umbrales y dispara alertas (toast + ntfy.sh) si corresponde.
 
 use crate::{collector, lease, uploader, PollerConfig};
+use ai_keyvault_alerter::{AlertConfig, AlertManager, AlertReading};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
@@ -37,6 +39,10 @@ async fn run_loop(config: Arc<PollerConfig>) {
     // La primera iteración se dispara de inmediato
     ticker.tick().await;
 
+    // AlertManager se crea una vez y mantiene estado de cooldown
+    let alert_config = AlertConfig::from_env();
+    let mut alert_manager = AlertManager::new(alert_config);
+
     info!(
         device_id = %config.device_id,
         server = %config.server_url,
@@ -46,11 +52,15 @@ async fn run_loop(config: Arc<PollerConfig>) {
 
     loop {
         ticker.tick().await;
-        run_cycle(&client, &config).await;
+        run_cycle(&client, &config, &mut alert_manager).await;
     }
 }
 
-async fn run_cycle(client: &reqwest::Client, config: &PollerConfig) {
+async fn run_cycle(
+    client: &reqwest::Client,
+    config: &PollerConfig,
+    alert_manager: &mut AlertManager,
+) {
     info!("🔄 Iniciando ciclo de consulta de cuota");
 
     // 1. Verificar servidor
@@ -66,13 +76,26 @@ async fn run_cycle(client: &reqwest::Client, config: &PollerConfig) {
         return;
     }
 
-    // 3. Agrupar por account_id
+    // 3. Evaluar alertas (antes de subir — así alertamos aunque falle el upload)
+    let alert_readings: Vec<AlertReading> = snapshots
+        .iter()
+        .map(|s| AlertReading {
+            account_id: s.account_id.clone(),
+            provider: s.provider.clone(),
+            pool: s.pool.clone(),
+            percent_used: s.percent_used,
+            reset_time: s.reset_time.clone(),
+        })
+        .collect();
+    alert_manager.check_and_notify(&alert_readings);
+
+    // 4. Agrupar por account_id
     let mut by_account: HashMap<String, Vec<_>> = HashMap::new();
     for s in snapshots {
         by_account.entry(s.account_id.clone()).or_default().push(s);
     }
 
-    // 4. Para cada cuenta: adquirir lease y subir
+    // 5. Para cada cuenta: adquirir lease y subir
     for (account_id, account_snapshots) in &by_account {
         match lease::acquire(client, config, account_id).await {
             Ok(true) => {

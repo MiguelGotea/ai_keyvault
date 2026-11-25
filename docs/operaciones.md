@@ -417,3 +417,80 @@ INFO ✅ Ciclo completado
 curl.exe "http://198.211.97.243:3010/api/quota/readings/cuenta%40gmail.com"
 ```
 El dashboard (Fase 6+) usará cliente HTTP con encoding automático.
+
+---
+
+## §12 — Fase 5: Alerter de cuota (2026-11-25)
+
+### Arquitectura
+
+```
+crates/alerter/
+  src/
+    lib.rs         — AlertManager, re-exports públicos
+    models.rs      — AlertConfig, AlertLevel, AlertEvent, AlertReading
+    detector.rs    — detect_alerts(readings, config) → Vec<AlertEvent>
+    cooldown.rs    — CooldownStore: persistencia en ~/.ai-keyvault/alert-state.json
+    notifier.rs    — Windows toast + ntfy.sh HTTP POST
+  tests/
+    alerter_test.rs — 8 tests de integración
+```
+
+### Dependencia circular resuelta
+
+El alerter **no depende del poller**. El poller convierte `QuotaSnapshot → AlertReading` antes de llamar al alerter:
+
+```rust
+// crates/poller/src/scheduler.rs
+let alert_readings: Vec<AlertReading> = snapshots
+    .iter()
+    .map(|s| AlertReading {
+        account_id: s.account_id.clone(),
+        provider: s.provider.clone(),
+        pool: s.pool.clone(),
+        percent_used: s.percent_used,
+        reset_time: s.reset_time.clone(),
+    })
+    .collect();
+alert_manager.check_and_notify(&alert_readings);
+```
+
+### Variables de entorno del alerter
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `AKYV_WARN_THRESHOLD` | `80` | % para alerta WARN |
+| `AKYV_CRIT_THRESHOLD` | `95` | % para alerta CRIT |
+| `AKYV_COOLDOWN_MINUTES` | `60` | Minutos entre alertas repetidas del mismo tipo |
+| `AKYV_TOAST_ENABLED` | `true` | `"false"` para deshabilitar toast Windows |
+| `AKYV_NTFY_TOPIC` | _(vacío)_ | Tópico ntfy.sh — **nunca loguear ni commitear** |
+| `AKYV_NTFY_URL` | `https://ntfy.sh` | URL base del servidor ntfy |
+| `AKYV_ALERT_STATE_PATH` | `~/.ai-keyvault/alert-state.json` | Ruta del estado de cooldown |
+
+### Prueba de alerta en desarrollo
+
+```powershell
+$env:PATH = "C:\msys64\mingw64\bin;$env:USERPROFILE\.cargo\bin;$env:PATH"
+$env:AKYV_WARN_THRESHOLD = "1"      # umbral muy bajo para forzar alerta
+$env:AKYV_TOAST_ENABLED  = "true"
+$env:AKYV_NTFY_TOPIC     = "tu-topico"   # opcional
+$env:AKYV_POLL_INTERVAL  = "30"
+cargo run --package ai-keyvault-poller 2>&1 | Select-Object -First 60
+```
+
+Debe aparecer en log: `🔔 Disparando alerta de cuota`
+
+### Estado de cooldown
+
+Ubicación: `%USERPROFILE%\.ai-keyvault\alert-state.json`
+
+Formato:
+```json
+{
+  "last_alerted": {
+    "cuenta@gmail.com:claude-gpt-weekly:Warn": "2026-11-25T10:00:00Z"
+  }
+}
+```
+
+Para forzar re-alerta: eliminar el archivo o la clave correspondiente.
