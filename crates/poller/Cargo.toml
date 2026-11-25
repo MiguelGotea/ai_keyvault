@@ -6,6 +6,14 @@ authors = ["AI KeyVault Team"]
 description = "Consulta periódica de cuota de agy y Codex con lease anti-duplicado"
 license = "MIT"
 
+[[bin]]
+name = "ai-keyvault-poller"
+path = "src/main.rs"
+
+[lib]
+name = "ai_keyvault_poller"
+path = "src/lib.rs"
+
 [dependencies]
 # Providers de cuota
 ai-keyvault-provider-agy = { path = "../../providers/agy" }
@@ -26,6 +34,7 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Logs
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Errores
 thiserror = "1.0"

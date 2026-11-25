@@ -232,6 +232,32 @@ apt install -y fail2ban
   - `uploader.rs`: POST individual a `/api/quota/readings` por cada snapshot.
   - `scheduler.rs`: loop tokio cada 10 min (configurable), agrupa por `account_id`.
   - `models.rs`: `PollerConfig`, `QuotaSnapshot`, `LeaseResponse`.
+  - `main.rs`: binario ejecutable con configuración por variables de entorno (`AKYV_SERVER_URL`, `AKYV_DEVICE_ID`, `AKYV_POLL_INTERVAL`).
+- **6 tests unitarios** (sin red, sin providers reales).
+- **1 test de integración** `#[ignore]`: ciclo completo con servidor real y agy instalado.
+- Script `crates/poller/scripts/test_poller_manual.ps1` para prueba manual en Windows.
+
+**Pendiente para cerrar criterios:**
+- [ ] Correr el poller en esta PC y verificar lecturas en el servidor
+- [ ] Datos coherentes entre PCs (mismo % visto desde dos PCs)
+- [ ] Lecturas con fuente y antigüedad visibles (endpoint GET `/api/quota/readings/:id`)
+- [ ] Lease funciona: solo un consultador activo por cuenta
+
+**Cómo probar el poller localmente:**
+```powershell
+$env:PATH = "C:\msys64\mingw64\bin;$env:USERPROFILE\.cargo\bin;$env:PATH"
+$env:AKYV_POLL_INTERVAL = "30"   # 30s para prueba rápida
+$env:RUST_LOG = "ai_keyvault_poller=info"
+cargo run --package ai-keyvault-poller
+# Ctrl+C para detener tras el primer ciclo
+```
+
+**Verificar lecturas en el servidor (PowerShell):**
+```powershell
+# Reemplazar ACCOUNT_ID con tu email de agy
+curl.exe http://198.211.97.243:3010/api/quota/readings/tu@gmail.com
+```
+  - `models.rs`: `PollerConfig`, `QuotaSnapshot`, `LeaseResponse`.
 - **5 tests unitarios** (sin red, sin providers reales): config defaults, serialización JSON, payload de lease y upload, snapshot de Codex.
 - **1 test de integración** `#[ignore]`: ciclo completo con servidor real y agy instalado.
 
