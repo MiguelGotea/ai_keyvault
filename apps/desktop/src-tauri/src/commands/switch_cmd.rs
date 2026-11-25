@@ -93,6 +93,40 @@ mod credman {
             Err(format!("CredWriteW falló (código {err}). Verifica permisos."))
         }
     }
+
+    /// Elimina una credencial del Credential Manager de Windows.
+    pub fn delete_credential(target: &str) {
+        use windows_sys::Win32::Security::Credentials::{CredDeleteW, CRED_TYPE_GENERIC};
+        let target_w = to_wide(target);
+        unsafe { CredDeleteW(target_w.as_ptr(), CRED_TYPE_GENERIC, 0) };
+    }
+}
+
+/// Respalda el blob crudo actual de `gemini:antigravity` y lo borra del Credential Manager
+/// para forzar que `agy` inicie un nuevo flujo OAuth en el navegador.
+pub fn backup_and_clear_agy_credential() -> Option<Vec<u8>> {
+    #[cfg(target_os = "windows")]
+    {
+        let backup = credman::read_credential_raw("gemini:antigravity");
+        credman::delete_credential("gemini:antigravity");
+        backup
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
+/// Restaura un blob crudo respaldado en `gemini:antigravity`.
+pub fn restore_agy_credential(blob: &[u8]) {
+    #[cfg(target_os = "windows")]
+    {
+        let _ = credman::write_credential_raw("gemini:antigravity", "antigravity", blob);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = blob;
+    }
 }
 
 /// Lee la credencial agy activa del Credential Manager y la devuelve como JSON String.

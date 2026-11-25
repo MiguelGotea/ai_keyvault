@@ -10,6 +10,7 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::{command, AppHandle, State};
+use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 use tracing::{info, warn};
 
@@ -34,6 +35,8 @@ pub struct PollerStatus {
 
 pub struct PollerManager {
     pub status: Mutex<PollerStatus>,
+    /// Handle del proceso hijo para poder terminarlo limpiamente al salir.
+    pub child: Mutex<Option<CommandChild>>,
 }
 
 impl Default for PollerManager {
@@ -45,8 +48,32 @@ impl Default for PollerManager {
                 last_poll_at: None,
                 error: None,
             }),
+            child: Mutex::new(None),
         }
     }
+}
+
+/// Mata el proceso del poller si está corriendo (incluyendo instancias huérfanas en Windows).
+pub fn kill_poller_process(poller: &PollerManager) {
+    if let Ok(mut child_guard) = poller.child.lock() {
+        if let Some(child) = child_guard.take() {
+            let _ = child.kill();
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let _ = std::process::Command::new("taskkill")
+            .args(["/F", "/IM", "ai-keyvault-poller.exe"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+    }
+    if let Ok(mut status_guard) = poller.status.lock() {
+        status_guard.state = PollerState::Stopped;
+        status_guard.pid = None;
+    }
+    info!("⏹ Proceso poller terminado");
 }
 
 // ── Comandos Tauri ────────────────────────────────────────────────────────────
@@ -90,6 +117,9 @@ pub async fn start_poller(
         Ok((_rx, child)) => {
             let pid = child.pid();
             info!("✅ Poller iniciado con PID {pid}");
+            if let Ok(mut child_guard) = poller.child.lock() {
+                *child_guard = Some(child);
+            }
             let mut guard = poller.status.lock().unwrap();
             guard.state = PollerState::Running;
             guard.pid = Some(pid);
@@ -136,9 +166,6 @@ pub async fn resume_poller(poller: State<'_, PollerManager>) -> Result<(), Strin
 /// Después de esto la app cierra el proceso hijo.
 #[command]
 pub async fn stop_poller(poller: State<'_, PollerManager>) -> Result<(), String> {
-    let mut guard = poller.status.lock().unwrap();
-    guard.state = PollerState::Stopped;
-    guard.pid = None;
-    info!("⏹ Poller detenido");
+    kill_poller_process(&poller);
     Ok(())
 }

@@ -137,8 +137,13 @@ pub async fn create_vault(
             save_vault_state(&app, vault.state())?;
 
             // Guardar la bóveda desbloqueada en memoria
-            let mut guard = vault_state.vault.lock().unwrap();
-            *guard = Some(vault);
+            {
+                let mut guard = vault_state.vault.lock().unwrap();
+                *guard = Some(vault);
+            }
+
+            // Sincronizar con el VPS (best-effort)
+            let _ = crate::commands::security::sync_vault_to_vps(&app).await;
 
             Ok(CreateVaultResult {
                 success: true,
@@ -231,8 +236,11 @@ pub async fn recover_vault(
             // Guardar bóveda re-cifrada con nueva contraseña
             save_vault_state(&app, vault.state())?;
             let count = vault.state().accounts.len();
-            let mut guard = vault_state.vault.lock().unwrap();
-            *guard = Some(vault);
+            {
+                let mut guard = vault_state.vault.lock().unwrap();
+                *guard = Some(vault);
+            }
+            let _ = crate::commands::security::sync_vault_to_vps(&app).await;
             Ok(UnlockResult {
                 success: true,
                 error: None,
@@ -256,7 +264,7 @@ pub struct AddAccountResult {
     pub error: Option<String>,
 }
 
-/// Agrega una cuenta a la bóveda local cifrada.
+/// Agrega una cuenta a la bóveda local cifrada y sincroniza al VPS.
 #[command]
 pub async fn add_vault_account(
     app: AppHandle,
@@ -268,30 +276,37 @@ pub async fn add_vault_account(
     tokens_json: Option<String>,
     notes: Option<String>,
 ) -> Result<AddAccountResult, String> {
-    let mut guard = vault_state.vault.lock().unwrap();
-    match &mut *guard {
-        Some(vault) if vault.is_unlocked() => {
-            match vault.add_account(
-                &provider,
-                &alias,
-                &email,
-                password.as_deref(),
-                tokens_json.as_deref(),
-                notes.as_deref(),
-            ) {
-                Ok(uuid) => {
-                    save_vault_state(&app, vault.state())?;
-                    Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
+    let res: AddAccountResult = {
+        let mut guard = vault_state.vault.lock().unwrap();
+        match &mut *guard {
+            Some(vault) if vault.is_unlocked() => {
+                match vault.add_account(
+                    &provider,
+                    &alias,
+                    &email,
+                    password.as_deref(),
+                    tokens_json.as_deref(),
+                    notes.as_deref(),
+                ) {
+                    Ok(uuid) => {
+                        save_vault_state(&app, vault.state())?;
+                        Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
+                    }
+                    Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
                 }
-                Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
             }
+            Some(_) => Err("La bóveda está bloqueada".to_string()),
+            None => Err("No hay bóveda cargada".to_string()),
         }
-        Some(_) => Err("La bóveda está bloqueada".into()),
-        None => Err("No hay bóveda cargada".into()),
+    }?;
+
+    if res.success {
+        let _ = crate::commands::security::sync_vault_to_vps(&app).await;
     }
+    Ok(res)
 }
 
-/// Elimina una cuenta de la bóveda por su UUID.
+/// Elimina una cuenta de la bóveda por su UUID y sincroniza al VPS.
 #[command]
 pub async fn delete_vault_account(
     app: AppHandle,
@@ -300,21 +315,28 @@ pub async fn delete_vault_account(
 ) -> Result<bool, String> {
     use uuid::Uuid;
     let uid = Uuid::parse_str(&account_uuid).map_err(|_| "UUID inválido".to_string())?;
-    let mut guard = vault_state.vault.lock().unwrap();
-    match &mut *guard {
-        Some(vault) if vault.is_unlocked() => {
-            let before = vault.state().accounts.len();
-            vault.state_mut().accounts.retain(|a| a.id != uid);
-            vault.state_mut().updated_at = chrono::Utc::now();
-            let removed = vault.state().accounts.len() < before;
-            if removed {
-                save_vault_state(&app, vault.state())?;
+    let removed: bool = {
+        let mut guard = vault_state.vault.lock().unwrap();
+        match &mut *guard {
+            Some(vault) if vault.is_unlocked() => {
+                let before = vault.state().accounts.len();
+                vault.state_mut().accounts.retain(|a| a.id != uid);
+                vault.state_mut().updated_at = chrono::Utc::now();
+                let removed = vault.state().accounts.len() < before;
+                if removed {
+                    save_vault_state(&app, vault.state())?;
+                }
+                Ok(removed)
             }
-            Ok(removed)
+            Some(_) => Err("La bóveda está bloqueada".to_string()),
+            None => Err("No hay bóveda cargada".to_string()),
         }
-        Some(_) => Err("La bóveda está bloqueada".into()),
-        None => Err("No hay bóveda cargada".into()),
+    }?;
+
+    if removed {
+        let _ = crate::commands::security::sync_vault_to_vps(&app).await;
     }
+    Ok(removed)
 }
 
 /// Descifra y devuelve el email de una cuenta (para mostrar en UI).
@@ -389,70 +411,108 @@ pub async fn decrypt_account_tokens(
     }
 }
 
-/// Lanza `agy login` para abrir el flujo OAuth en el navegador.
-/// Espera hasta 120 segundos a que aparezca una credencial NUEVA en el
-/// Credential Manager (distinta al email previo). Luego la cifra en la bóveda.
-///
-/// Flujo:
-///   1. Lee la credencial actual (si existe) para detectar el cambio.
-///   2. Lanza `agy login` que abre el navegador de Google OAuth.
-///   3. Poll cada 2 s hasta que `gemini:antigravity` tenga una credencial
-///      con un `id_token_email` distinto (o nueva si no había ninguna antes).
-///   4. Guarda el blob completo cifrado en la bóveda + sincroniza al VPS.
+static OAUTH_CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Cancela la espera del login OAuth en curso.
+#[command]
+pub async fn cancel_agy_oauth() -> Result<(), String> {
+    OAUTH_CANCELLED.store(true, std::sync::atomic::Ordering::Relaxed);
+    Ok(())
+}
+
+/// Busca el ejecutable de `agy` en PATH o en `%LOCALAPPDATA%\agy\bin\agy.exe`.
+fn find_agy_binary() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app) = std::env::var("LOCALAPPDATA") {
+            let candidate = std::path::PathBuf::from(local_app)
+                .join("agy")
+                .join("bin")
+                .join("agy.exe");
+            if candidate.exists() {
+                return Some(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+    Some("agy".to_string())
+}
+
+/// Inicia el login OAuth de Antigravity (`agy`):
+///   1. Respalda y limpia temporalmente `gemini:antigravity` para forzar un login nuevo.
+///   2. Abre `agy` en una ventana de consola visible (`cmd /c start`) para que dispare
+///      el login de Google en el navegador.
+///   3. Hace polling cada 1.5 s (hasta 120 s o hasta que el usuario cancele).
+///   4. Al detectar la nueva credencial, la cifra en la bóveda y sincroniza al VPS.
+///   5. Si se cancela o expira, restaura la credencial previa.
 #[command]
 pub async fn add_agy_account_oauth(
     app: AppHandle,
     vault_state: State<'_, VaultState>,
     alias: String,
 ) -> Result<AddAccountResult, String> {
-    use crate::commands::switch_cmd::read_agy_credential;
-    use tauri_plugin_shell::ShellExt;
+    use crate::commands::switch_cmd::{
+        backup_and_clear_agy_credential, read_agy_credential, restore_agy_credential,
+    };
+    use std::sync::atomic::Ordering;
     use tokio::time::{sleep, Duration};
 
-    // 1. Capturar email previo (para detectar cambio)
-    let prev_email: Option<String> = read_agy_credential().and_then(|json| {
-        serde_json::from_str::<serde_json::Value>(&json).ok()?
-            .get("id_token_email")
-            .or_else(|| {
-                // re-parse needed
-                None
-            })
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-    });
+    OAUTH_CANCELLED.store(false, Ordering::Relaxed);
 
-    // 2. Lanzar `agy login` en background (no bloqueante)
-    app.shell()
-        .command("agy")
-        .args(["login"])
-        .spawn()
-        .map_err(|e| format!("No se pudo lanzar 'agy login': {e}. Asegúrate de que agy esté instalado."))?;
+    let agy_bin = find_agy_binary()
+        .ok_or_else(|| "No se encontró agy.exe en el sistema.".to_string())?;
 
-    // 3. Poll hasta 120 s esperando credencial nueva
+    // 1. Respaldar credencial actual y limpiar Credential Manager para forzar login OAuth
+    let backup = backup_and_clear_agy_credential();
+
+    // 2. Lanzar agy en una ventana visible para que dispare el flujo OAuth en el navegador
+    #[cfg(target_os = "windows")]
+    let spawn_res = std::process::Command::new("cmd")
+        .args(["/c", "start", "Login Antigravity (AI KeyVault)", &agy_bin])
+        .spawn();
+    #[cfg(not(target_os = "windows"))]
+    let spawn_res = std::process::Command::new(&agy_bin).spawn();
+
+    if let Err(e) = spawn_res {
+        if let Some(blob) = backup {
+            restore_agy_credential(&blob);
+        }
+        return Ok(AddAccountResult {
+            success: false,
+            id: None,
+            error: Some(format!("No se pudo abrir agy ({agy_bin}): {e}")),
+        });
+    }
+
+    // 3. Poll hasta 120 s esperando la nueva credencial o cancelación
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(120);
     let new_cred_json = loop {
-        sleep(Duration::from_secs(2)).await;
+        sleep(Duration::from_millis(1500)).await;
+
+        if OAUTH_CANCELLED.load(Ordering::Relaxed) {
+            if let Some(blob) = backup {
+                restore_agy_credential(&blob);
+            }
+            return Ok(AddAccountResult {
+                success: false,
+                id: None,
+                error: Some("Login cancelado por el usuario.".into()),
+            });
+        }
+
         if std::time::Instant::now() > deadline {
+            if let Some(blob) = backup {
+                restore_agy_credential(&blob);
+            }
             return Ok(AddAccountResult {
                 success: false,
                 id: None,
                 error: Some("Tiempo de espera agotado (120 s). Completa el login en el navegador y vuelve a intentarlo.".into()),
             });
         }
+
         if let Some(json) = read_agy_credential() {
-            // Parsear email actual
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json) {
-                let cur_email = val.get("id_token_email")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                // Si no había credencial antes → cualquier nueva vale
-                // Si había una → esperamos que cambie el email
-                let is_new = match (&prev_email, &cur_email) {
-                    (None, Some(_)) => true,
-                    (Some(prev), Some(cur)) => prev != cur,
-                    _ => false,
-                };
-                if is_new {
+                if val.get("id_token_email").and_then(|v| v.as_str()).is_some() {
                     break json;
                 }
             }
@@ -469,29 +529,43 @@ pub async fn add_agy_account_oauth(
             .to_string()
     };
 
-    let alias_final = if alias.trim().is_empty() { new_email.clone() } else { alias.trim().to_string() };
+    let alias_final = if alias.trim().is_empty() {
+        new_email.clone()
+    } else {
+        alias.trim().to_string()
+    };
 
     // 5. Guardar en bóveda
-    let mut guard = vault_state.vault.lock().unwrap();
-    match &mut *guard {
-        Some(vault) if vault.is_unlocked() => {
-            let already_exists = vault.state().accounts.iter().any(|a| a.alias == alias_final);
-            if already_exists {
-                return Ok(AddAccountResult {
-                    success: false,
-                    id: None,
-                    error: Some(format!("Ya existe una cuenta con el alias '{alias_final}'. Usa otro alias.")),
-                });
-            }
-            match vault.add_account("agy", &alias_final, &new_email, None, Some(&new_cred_json), None) {
-                Ok(uuid) => {
-                    save_vault_state(&app, vault.state())?;
-                    Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
+    let res: AddAccountResult = {
+        let mut guard = vault_state.vault.lock().unwrap();
+        match &mut *guard {
+            Some(vault) if vault.is_unlocked() => {
+                let already_exists = vault.state().accounts.iter().any(|a| a.alias == alias_final);
+                if already_exists {
+                    Ok(AddAccountResult {
+                        success: false,
+                        id: None,
+                        error: Some(format!("Ya existe una cuenta con el alias '{alias_final}'. Usa otro alias.")),
+                    })
+                } else {
+                    match vault.add_account("agy", &alias_final, &new_email, None, Some(&new_cred_json), None) {
+                        Ok(uuid) => {
+                            save_vault_state(&app, vault.state())?;
+                            Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
+                        }
+                        Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
+                    }
                 }
-                Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
             }
+            Some(_) => Err("La bóveda está bloqueada".to_string()),
+            None => Err("No hay bóveda cargada".to_string()),
         }
-        Some(_) => Err("La bóveda está bloqueada".into()),
-        None => Err("No hay bóveda cargada".into()),
+    }?;
+
+    // 6. Sincronizar con el VPS (best-effort)
+    if res.success {
+        let _ = crate::commands::security::sync_vault_to_vps(&app).await;
     }
+
+    Ok(res)
 }

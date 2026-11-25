@@ -30,15 +30,41 @@ export default function UnlockPage() {
   const [loading, setLoading] = useState(false);
   const [recoveryKeyToShow, setRecoveryKeyToShow] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [checkingCloud, setCheckingCloud] = useState(false);
+  const [cloudNotice, setCloudNotice] = useState<string | null>(null);
 
   // Verificar si existe bóveda en disco
-  const { data: vaultStatus } = useCommand<VaultStatus>("get_vault_status");
+  const { data: vaultStatus, refetch: refetchVaultStatus } = useCommand<VaultStatus>("get_vault_status");
+
+  // Si no hay bóveda local, intentar descargarla del VPS antes de mostrar "Crear bóveda"
+  async function checkCloudVault() {
+    setCheckingCloud(true);
+    setErrorMsg(null);
+    try {
+      const res = await invoke<{ success: boolean; direction: string; error: string | null }>(
+        "download_vault_sync"
+      );
+      if (res.success && res.direction === "download") {
+        await refetchVaultStatus();
+        setMode("unlock");
+        setCloudNotice("☁️ Bóveda encontrada en la nube. Ingresa tu clave maestra para desbloquear.");
+      } else {
+        setMode("create");
+      }
+    } catch {
+      setMode("create");
+    } finally {
+      setCheckingCloud(false);
+    }
+  }
 
   useEffect(() => {
     if (vaultStatus && !vaultStatus.initialized) {
-      setMode("create");
+      checkCloudVault();
+    } else if (vaultStatus && vaultStatus.initialized) {
+      setMode("unlock");
     }
-  }, [vaultStatus]);
+  }, [vaultStatus?.initialized]);
 
   // ── Crear bóveda nueva ──────────────────────────────────────────────────────
   async function handleCreate() {
@@ -152,7 +178,15 @@ export default function UnlockPage() {
           <button style={styles.recheckBtn} onClick={health.recheck} disabled={health.checking}>↻</button>
         </div>
 
-        {/* Error */}
+        {/* Error / aviso nube */}
+        {checkingCloud && (
+          <div style={styles.warningBox}>☁️ Verificando si ya tienes una bóveda en la nube…</div>
+        )}
+        {cloudNotice && !errorMsg && (
+          <div style={{ ...styles.warningBox, background: "#ECFDF5", borderColor: "#A7F3D0", color: "#065F46" }}>
+            {cloudNotice}
+          </div>
+        )}
         {errorMsg && <div style={styles.errorBox}>⚠️ {errorMsg}</div>}
 
         {/* ── PANTALLA: MOSTRAR CLAVE DE RECUPERACIÓN ── */}
@@ -209,9 +243,16 @@ export default function UnlockPage() {
             <button
               style={{ ...styles.btn, ...styles.btnPrimary }}
               onClick={handleCreate}
-              disabled={loading}
+              disabled={loading || checkingCloud}
             >
               {loading ? "Creando…" : es.vault.crear_boveda}
+            </button>
+            <button
+              style={styles.btnLink}
+              onClick={checkCloudVault}
+              disabled={checkingCloud}
+            >
+              ☁️ ¿Ya tienes bóveda en la nube? Reintentar descarga
             </button>
           </div>
         )}

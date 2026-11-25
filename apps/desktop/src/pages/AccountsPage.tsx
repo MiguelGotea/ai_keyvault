@@ -233,13 +233,24 @@ export default function AccountsPage() {
                   Esperando que completes el login…
                 </p>
                 <p style={{ fontSize: 13, color: "var(--color-text-secondary)", textAlign: "center", lineHeight: 1.6, margin: 0 }}>
-                  El navegador debería haberse abierto con la página de Google.<br/>
-                  Inicia sesión con la cuenta <strong>"{alias}"</strong> y la app capturará las credenciales automáticamente.
+                  Se abrió la ventana de <strong>Antigravity (agy)</strong>.<br/>
+                  Completa el login con Google para la cuenta <strong>"{alias}"</strong> y la app capturará las credenciales automáticamente.
                 </p>
                 <div style={styles.waitHint}>
                   Tienes hasta <strong>2 minutos</strong> para completar el login.
                 </div>
                 {error && <div style={{ ...styles.errorBox, width: "100%" }}>{error}</div>}
+                <button
+                  style={styles.cancelBtn}
+                  onClick={async () => {
+                    await invoke("cancel_agy_oauth").catch(() => {});
+                    setWaiting(false);
+                    setLaunched(false);
+                    setShowModal(false);
+                  }}
+                >
+                  ✕ Cancelar espera
+                </button>
               </div>
             )}
 

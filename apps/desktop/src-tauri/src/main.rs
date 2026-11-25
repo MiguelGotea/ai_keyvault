@@ -65,7 +65,8 @@ fn main() {
             commands::vault::delete_vault_account,
             commands::vault::get_account_email,
             commands::vault::decrypt_account_tokens,
-            commands::vault::add_agy_account_oauth,  // OAuth: lanza agy login → captura credencial → guarda en bóveda
+            commands::vault::add_agy_account_oauth,
+            commands::vault::cancel_agy_oauth,
             // Cuota y estadísticas (VPS)
             commands::api::get_quota,
             commands::api::get_stats_summary,
@@ -101,6 +102,12 @@ fn main() {
             commands::security::upload_vault_sync,
             commands::security::download_vault_sync,
         ])
-        .run(tauri::generate_context!())
-        .expect("Error al arrancar la aplicación AI KeyVault");
+        .build(tauri::generate_context!())
+        .expect("Error al construir la aplicación AI KeyVault")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                let poller = app_handle.state::<PollerManager>();
+                commands::poller::kill_poller_process(&poller);
+            }
+        });
 }

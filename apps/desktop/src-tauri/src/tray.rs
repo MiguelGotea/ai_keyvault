@@ -30,6 +30,8 @@ pub fn setup_tray<R: Runtime>(app: &mut App<R>) -> tauri::Result<()> {
             }
             "salir" => {
                 info!("👋 Cerrando AI KeyVault desde el tray");
+                let poller = app.state::<crate::commands::poller::PollerManager>();
+                crate::commands::poller::kill_poller_process(&poller);
                 app.exit(0);
             }
             _ => {}

@@ -83,24 +83,46 @@ pub struct VaultSyncResult {
 }
 
 /// Sube la bóveda cifrada al VPS (conocimiento cero — el servidor no puede descifrarla).
-/// Mapea: POST /api/vault/sync  
-/// La bóveda ya está cifrada con XChaCha20 — solo la cargamos como bytes opacos.
+/// Mapea: POST /api/vault/sync con `{ device_id, encrypted_payload }`.
+pub async fn sync_vault_to_vps(app: &AppHandle) -> Result<(), String> {
+    use crate::commands::vault::vault_path;
+
+    let path = vault_path(app);
+    if !path.exists() {
+        return Err("No hay bóveda local para subir".into());
+    }
+
+    let vault_str = std::fs::read_to_string(&path)
+        .map_err(|e| format!("No se pudo leer vault.json: {e}"))?;
+
+    let device_id = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "desktop-win".to_string());
+    let payload = serde_json::json!({
+        "device_id": device_id,
+        "encrypted_payload": vault_str,
+    });
+
+    let resp = http_client()
+        .post(&format!("{SERVER_URL}/api/vault/sync"))
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| format!("Error al subir bóveda: {e}"))?;
+
+    if resp.status().is_success() {
+        info!("☁️ Bóveda sincronizada con VPS");
+        Ok(())
+    } else {
+        Err(format!("Error del servidor al sincronizar: {}", resp.status()))
+    }
+}
+
+/// Sube la bóveda cifrada al VPS (conocimiento cero — el servidor no puede descifrarla).
+/// Mapea: POST /api/vault/sync
 #[command]
 pub async fn upload_vault_sync(
     app: AppHandle,
     vault_state: State<'_, VaultState>,
 ) -> Result<VaultSyncResult, String> {
-    use crate::commands::vault::vault_path;
-
-    let path = vault_path(&app);
-    if !path.exists() {
-        return Ok(VaultSyncResult {
-            success: false,
-            direction: "upload".into(),
-            error: Some("No hay bóveda local para subir".into()),
-        });
-    }
-
     // Verificar que la bóveda está desbloqueada (solo subir si el usuario está activo)
     {
         let guard = vault_state.vault.lock().unwrap();
@@ -113,39 +135,26 @@ pub async fn upload_vault_sync(
         }
     }
 
-    let vault_bytes = std::fs::read(&path)
-        .map_err(|e| format!("No se pudo leer vault.json: {e}"))?;
-
-    let resp = http_client()
-        .post(&format!("{SERVER_URL}/api/vault/sync"))
-        .header("Content-Type", "application/json")
-        .body(vault_bytes)
-        .send()
-        .await
-        .map_err(|e| format!("Error al subir bóveda: {e}"))?;
-
-    if resp.status().is_success() {
-        info!("☁️ Bóveda sincronizada con VPS");
-        Ok(VaultSyncResult {
+    match sync_vault_to_vps(&app).await {
+        Ok(()) => Ok(VaultSyncResult {
             success: true,
             direction: "upload".into(),
             error: None,
-        })
-    } else {
-        Ok(VaultSyncResult {
+        }),
+        Err(e) => Ok(VaultSyncResult {
             success: false,
             direction: "upload".into(),
-            error: Some(format!("Error del servidor: {}", resp.status())),
-        })
+            error: Some(e),
+        }),
     }
 }
 
 /// Descarga la bóveda cifrada del VPS y la guarda localmente.
-/// Solo se usa en el primer uso en un dispositivo nuevo o para restaurar.
-/// Mapea: GET /api/vault/sync
+/// Mapea: GET /api/vault/sync -> `{ version, device_id, encrypted_payload, checksum_sha256, updated_at }`
 #[command]
 pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, String> {
     use crate::commands::vault::vault_path;
+    use ai_keyvault_core::vault::EncryptedVaultState;
 
     let resp = http_client()
         .get(&format!("{SERVER_URL}/api/vault/sync"))
@@ -153,9 +162,21 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
         .await
         .map_err(|e| format!("Error al descargar bóveda: {e}"))?;
 
-    if resp.status().is_success() {
-        let bytes = resp.bytes().await
-            .map_err(|e| format!("Error leyendo respuesta: {e}"))?;
+    let status = resp.status();
+    if status.is_success() {
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("Error leyendo respuesta del servidor: {e}"))?;
+
+        let encrypted_payload = body
+            .get("encrypted_payload")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "La respuesta del servidor no contiene encrypted_payload".to_string())?;
+
+        // Validar que es un EncryptedVaultState válido antes de escribir a disco
+        serde_json::from_str::<EncryptedVaultState>(encrypted_payload)
+            .map_err(|e| format!("La bóveda descargada tiene formato inválido: {e}"))?;
 
         let path = vault_path(&app);
         if let Some(parent) = path.parent() {
@@ -163,26 +184,27 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
                 .map_err(|e| format!("No se pudo crear directorio: {e}"))?;
         }
 
-        std::fs::write(&path, &bytes)
+        std::fs::write(&path, encrypted_payload.as_bytes())
             .map_err(|e| format!("Error guardando bóveda descargada: {e}"))?;
 
-        info!("⬇️ Bóveda descargada del VPS ({} bytes)", bytes.len());
+        info!("⬇️ Bóveda descargada del VPS ({} bytes)", encrypted_payload.len());
         Ok(VaultSyncResult {
             success: true,
             direction: "download".into(),
             error: None,
         })
-    } else if resp.status().as_u16() == 404 {
+    } else if status.as_u16() == 400 || status.as_u16() == 404 {
+        // El servidor devuelve 400 ("No existe ninguna bóveda sincronizada aún") cuando está vacío
         Ok(VaultSyncResult {
             success: true,
             direction: "none".into(),
-            error: None, // No hay bóveda en el servidor — primer uso
+            error: None,
         })
     } else {
         Ok(VaultSyncResult {
             success: false,
             direction: "download".into(),
-            error: Some(format!("Error del servidor: {}", resp.status())),
+            error: Some(format!("Error del servidor: {}", status)),
         })
     }
 }
