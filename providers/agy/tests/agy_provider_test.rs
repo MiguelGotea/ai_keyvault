@@ -23,7 +23,11 @@ Claude and GPT models  Five Hour Limit Remaining  62%   2026-11-24 23:57 CST
 ";
 
     let readings = parse_usage_output(fake_output).expect("Debe parsear correctamente");
-    assert_eq!(readings.len(), 3, "Deben existir 3 pools (gemini-weekly, claude-gpt-weekly, claude-gpt-5h)");
+    assert_eq!(
+        readings.len(),
+        3,
+        "Deben existir 3 pools (gemini-weekly, claude-gpt-weekly, claude-gpt-5h)"
+    );
 
     let gemini = readings.iter().find(|r| r.pool == AgyPool::Gemini).unwrap();
     assert!(
@@ -211,6 +215,10 @@ Final line
     let readings = parse_usage_output(fake_output).expect("Debe parsear 3 pools");
     assert_eq!(readings.len(), 3);
     assert!(readings.iter().any(|r| r.pool == AgyPool::Gemini));
-    assert!(readings.iter().any(|r| r.pool == AgyPool::ClaudeGpt && r.window == "weekly"));
-    assert!(readings.iter().any(|r| r.pool == AgyPool::ClaudeGpt && r.window == "5h"));
+    assert!(readings
+        .iter()
+        .any(|r| r.pool == AgyPool::ClaudeGpt && r.window == "weekly"));
+    assert!(readings
+        .iter()
+        .any(|r| r.pool == AgyPool::ClaudeGpt && r.window == "5h"));
 }
