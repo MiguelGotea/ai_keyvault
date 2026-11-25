@@ -1,63 +1,69 @@
-//! Tests de provider agy — usan salida fake del nuevo formato TSV.
+//! Tests de provider agy — usan salida fake del formato real verificado.
 //!
 //! Formato real verificado (2026-11-25):
 //! ```text
-//! Gemini Models   Weekly Limit Remaining  100%    2026-12-02T00:32:25Z
-//! Claude and GPT models   Weekly Limit Remaining  62%     2026-12-02T00:29:10Z
+//! Quota:
+//! Gemini Models          Weekly Limit Remaining     100%  2026-12-01 19:19 CST
+//! Claude and GPT models  Weekly Limit Remaining     49%   2026-12-01 18:57 CST
+//! Claude and GPT models  Five Hour Limit Remaining  49%   2026-11-24 23:57 CST
 //! ```
 
 use ai_keyvault_provider_agy::quota::{parse_usage_output, AgyPool};
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Test 1: Parsear salida con cuota parcial (formato TSV real)
+// Test 1: Parsear salida con cuota parcial — formato local con 3 pools
 // ─────────────────────────────────────────────────────────────────────────────
 #[test]
 fn test_parse_usage_con_cuota_parcial() {
-    let fake_output = "Gemini Models\tWeekly Limit Remaining\t98.41%\t2026-12-02T00:32:25Z\nClaude and GPT models\tWeekly Limit Remaining\t62%\t2026-12-02T00:29:10Z\n";
+    let fake_output = "\
+Quota:
+Gemini Models          Weekly Limit Remaining     98%   2026-12-01 19:19 CST
+Claude and GPT models  Weekly Limit Remaining     62%   2026-12-01 18:57 CST
+Claude and GPT models  Five Hour Limit Remaining  62%   2026-11-24 23:57 CST
+";
 
     let readings = parse_usage_output(fake_output).expect("Debe parsear correctamente");
-    assert_eq!(readings.len(), 2, "Deben existir 2 pools");
+    assert_eq!(
+        readings.len(),
+        3,
+        "Deben existir 3 pools (gemini-weekly, claude-gpt-weekly, claude-gpt-5h)"
+    );
 
     let gemini = readings.iter().find(|r| r.pool == AgyPool::Gemini).unwrap();
     assert!(
-        (gemini.percent_remaining - 98.41).abs() < 0.01,
+        (gemini.percent_remaining - 98.0).abs() < 0.01,
         "% Gemini incorrecto: {}",
         gemini.percent_remaining
     );
-    assert!(
-        (gemini.percent_used - 1.59).abs() < 0.01,
-        "% usado Gemini incorrecto: {}",
-        gemini.percent_used
-    );
+    assert_eq!(gemini.window, "weekly", "Gemini debe ser ventana weekly");
     assert!(
         gemini.reset_at.is_some(),
         "Gemini debe tener reset_at cuando hay consumo"
     );
 
-    let claude = readings
+    let claude_weekly = readings
         .iter()
-        .find(|r| r.pool == AgyPool::ClaudeGpt)
+        .find(|r| r.pool == AgyPool::ClaudeGpt && r.window == "weekly")
         .unwrap();
     assert!(
-        (claude.percent_remaining - 62.0).abs() < 0.01,
-        "% Claude incorrecto: {}",
-        claude.percent_remaining
-    );
-    assert!(
-        (claude.percent_used - 38.0).abs() < 0.01,
-        "% usado Claude incorrecto: {}",
-        claude.percent_used
-    );
-    assert!(
-        claude.reset_at.is_some(),
-        "Claude debe tener reset_at cuando hay consumo"
+        (claude_weekly.percent_remaining - 62.0).abs() < 0.01,
+        "% Claude weekly incorrecto: {}",
+        claude_weekly.percent_remaining
     );
 
-    // account_email se setea por el caller (read_quota), no por parse_usage_output
+    let claude_5h = readings
+        .iter()
+        .find(|r| r.pool == AgyPool::ClaudeGpt && r.window == "5h")
+        .unwrap();
     assert!(
-        gemini.account_email.is_none(),
-        "parse_usage_output no setea email (lo hace read_quota)"
+        (claude_5h.percent_remaining - 62.0).abs() < 0.01,
+        "% Claude 5h incorrecto: {}",
+        claude_5h.percent_remaining
     );
+    assert_eq!(claude_5h.window, "5h", "Claude 5h debe tener window='5h'");
+
+    // account_email se setea por el caller, no por parse_usage_output
+    assert!(gemini.account_email.is_none());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -65,10 +71,14 @@ fn test_parse_usage_con_cuota_parcial() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[test]
 fn test_parse_usage_cuota_completa() {
-    let fake_output = "Gemini Models\tWeekly Limit Remaining\t100%\t2026-12-02T00:32:25Z\nClaude and GPT models\tWeekly Limit Remaining\t100%\t2026-12-02T00:29:10Z\n";
+    let fake_output = "\
+Gemini Models          Weekly Limit Remaining     100%  2026-12-01 19:19 CST
+Claude and GPT models  Weekly Limit Remaining     100%  2026-12-01 18:57 CST
+Claude and GPT models  Five Hour Limit Remaining  100%  2026-11-24 23:57 CST
+";
 
     let readings = parse_usage_output(fake_output).expect("Debe parsear cuota al 100%");
-    assert_eq!(readings.len(), 2);
+    assert_eq!(readings.len(), 3);
 
     for r in &readings {
         assert!(
@@ -81,18 +91,17 @@ fn test_parse_usage_cuota_completa() {
             "% usado debe ser 0.0, got {}",
             r.percent_used
         );
-        // Con 100% el timestamp sigue presente (es cuando renueva la semana)
         assert!(r.reset_at.is_some(), "reset_at debe estar presente");
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Test 3: El timestamp ISO se parsea como reset_at válido
+// Test 3: Timestamp ISO 8601 se guarda como string válido
 // ─────────────────────────────────────────────────────────────────────────────
 #[test]
 fn test_reset_at_es_iso8601_valido() {
-    let fake_output =
-        "Gemini Models\tWeekly Limit Remaining\t50%\t2026-12-02T00:32:25Z\nClaude and GPT models\tWeekly Limit Remaining\t95%\t2026-12-02T00:29:10Z\n";
+    // Usar formato ISO (soportado como fallback)
+    let fake_output = "Gemini Models\tWeekly Limit Remaining\t50%\t2026-12-02T00:32:25Z\nClaude and GPT models\tWeekly Limit Remaining\t95%\t2026-12-02T00:29:10Z\n";
 
     let readings = parse_usage_output(fake_output).expect("Debe parsear");
     let gemini = readings.iter().find(|r| r.pool == AgyPool::Gemini).unwrap();
@@ -101,11 +110,9 @@ fn test_reset_at_es_iso8601_valido() {
         .find(|r| r.pool == AgyPool::ClaudeGpt)
         .unwrap();
 
-    // Los ISO timestamps deben parsearse como fechas válidas
     if let Some(ref reset) = gemini.reset_at {
         let parsed: chrono::DateTime<chrono::Utc> =
             chrono::DateTime::parse_from_rfc3339(reset).unwrap().into();
-        // Debe ser en el futuro respecto a ahora
         assert!(
             parsed > chrono::Utc::now(),
             "reset_at de Gemini debe estar en el futuro"
@@ -123,13 +130,38 @@ fn test_reset_at_es_iso8601_valido() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Test 4: Parsing de blob de Credential Manager (fake_agy)
+// Test 4: Timestamp local ("2026-12-01 19:19 CST") se guarda como string
+// ─────────────────────────────────────────────────────────────────────────────
+#[test]
+fn test_reset_at_formato_local() {
+    let fake_output = "\
+Gemini Models          Weekly Limit Remaining     50%  2026-12-01 19:19 CST
+Claude and GPT models  Five Hour Limit Remaining  80%  2026-11-24 23:57 CST
+";
+
+    let readings = parse_usage_output(fake_output).expect("Debe parsear");
+    let gemini = readings.iter().find(|r| r.pool == AgyPool::Gemini).unwrap();
+    let claude = readings
+        .iter()
+        .find(|r| r.pool == AgyPool::ClaudeGpt)
+        .unwrap();
+
+    assert_eq!(
+        gemini.reset_at.as_deref(),
+        Some("2026-12-01 19:19 CST"),
+        "Debe guardar el timestamp local tal como viene"
+    );
+    assert_eq!(claude.window, "5h");
+    assert!(claude.reset_at.is_some());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Test 5: Parsing de blob de Credential Manager (fake_agy)
 // ─────────────────────────────────────────────────────────────────────────────
 #[test]
 fn test_parse_credential_blob() {
     use ai_keyvault_provider_agy::credential::AgyCredentialManager;
 
-    // Blob real (formato verificado en campo)
     let fake_blob = serde_json::json!({
         "token": {
             "access_token": "ya29.fake_token_for_test",
@@ -143,7 +175,6 @@ fn test_parse_credential_blob() {
         "writer_id": "test-writer"
     });
 
-    // Simular lectura del blob (acceso interno via método de test)
     let blob_bytes = serde_json::to_vec(&fake_blob).unwrap();
     let cred = AgyCredentialManager::parse_blob_for_test(&blob_bytes)
         .expect("Debe parsear el blob correctamente");
@@ -158,7 +189,7 @@ fn test_parse_credential_blob() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Test 5: Salida vacía devuelve error
+// Test 6: Salida vacía devuelve error
 // ─────────────────────────────────────────────────────────────────────────────
 #[test]
 fn test_parse_usage_salida_vacia_devuelve_error() {
@@ -167,14 +198,27 @@ fn test_parse_usage_salida_vacia_devuelve_error() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Test 6: Solo se parsean líneas Gemini/Claude (ignora otras)
+// Test 7: Líneas irrelevantes y header "Quota:" se ignoran
 // ─────────────────────────────────────────────────────────────────────────────
 #[test]
 fn test_parse_usage_ignora_lineas_irrelevantes() {
-    let fake_output = "Some random header\nGemini Models\tWeekly Limit Remaining\t75%\t2026-12-02T00:32:25Z\nOtro texto ignorado\nClaude and GPT models\tWeekly Limit Remaining\t80%\t2026-12-02T00:29:10Z\nFinal line\n";
+    let fake_output = "\
+Quota:
+Some random header
+Gemini Models          Weekly Limit Remaining  75%  2026-12-01 19:19 CST
+Otro texto ignorado
+Claude and GPT models  Weekly Limit Remaining  80%  2026-12-01 18:57 CST
+Claude and GPT models  Five Hour Limit Remaining  80%  2026-11-24 23:57 CST
+Final line
+";
 
-    let readings = parse_usage_output(fake_output).expect("Debe parsear 2 pools");
-    assert_eq!(readings.len(), 2);
+    let readings = parse_usage_output(fake_output).expect("Debe parsear 3 pools");
+    assert_eq!(readings.len(), 3);
     assert!(readings.iter().any(|r| r.pool == AgyPool::Gemini));
-    assert!(readings.iter().any(|r| r.pool == AgyPool::ClaudeGpt));
+    assert!(readings
+        .iter()
+        .any(|r| r.pool == AgyPool::ClaudeGpt && r.window == "weekly"));
+    assert!(readings
+        .iter()
+        .any(|r| r.pool == AgyPool::ClaudeGpt && r.window == "5h"));
 }

@@ -1,17 +1,19 @@
-//! Parser de la salida de `agy --print /usage` para leer cuota de los dos pools.
+//! Parser de la salida de `agy --print /usage` para leer cuota de los pools.
 //!
-//! La salida real verificada (2026-11-25) tiene este formato TSV:
+//! La salida real verificada (2026-11-25) tiene este formato:
 //!
 //! ```text
-//! Gemini Models   Weekly Limit Remaining  100%    2026-12-02T00:32:25Z
-//! Claude and GPT models   Weekly Limit Remaining  62%     2026-12-02T00:29:10Z
+//! Quota:
+//! Gemini Models          Weekly Limit Remaining     100%  2026-12-01 19:19 CST
+//! Claude and GPT models  Weekly Limit Remaining     49%   2026-12-01 18:57 CST
+//! Claude and GPT models  Five Hour Limit Remaining  49%   2026-11-24 23:57 CST
 //! ```
 //!
-//! Cada línea contiene (separado por tabuladores / espacios múltiples):
+//! Cada línea contiene (separado por espacios múltiples):
 //!   - Nombre del pool (`Gemini Models` o `Claude and GPT models`)
-//!   - Estado ("Weekly Limit Remaining" siempre)
-//!   - Porcentaje restante (`100%`, `62%`, etc.)
-//!   - ISO 8601 del próximo reinicio semanal
+//!   - Tipo de ventana (`Weekly Limit Remaining` o `Five Hour Limit Remaining`)
+//!   - Porcentaje restante (`100%`, `49%`, etc.)
+//!   - Timestamp del próximo reinicio (ISO 8601 o local `YYYY-MM-DD HH:MM TZ`)
 
 use crate::{AgyError, Result};
 use chrono::Utc;
@@ -41,11 +43,13 @@ impl AgyPool {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgyQuotaReading {
     pub pool: AgyPool,
+    /// Ventana de tiempo: `"weekly"` o `"5h"`.
+    pub window: String,
     /// Porcentaje RESTANTE (0.0 – 100.0). `100.0` = cuota disponible completa.
     pub percent_remaining: f64,
     /// Porcentaje CONSUMIDO (0.0 – 100.0). Derivado de `percent_remaining`.
     pub percent_used: f64,
-    /// ISO 8601 estimado del próximo reinicio. `None` si la cuota está al 100%.
+    /// Timestamp del próximo reinicio (ISO 8601 o string local). `None` si no se pudo parsear.
     pub reset_at: Option<String>,
     /// Timestamp en que se tomó esta lectura.
     pub read_at: String,
@@ -117,11 +121,14 @@ pub fn read_account_email() -> Option<String> {
 
 /// Parsea la salida de texto de `agy --print /usage` en lecturas estructuradas.
 ///
-/// Formato esperado (una línea por pool, campos separados por tabuladores/espacios):
+/// Formato soportado (una línea por pool, campos separados por espacios múltiples):
 /// ```text
-/// Gemini Models   Weekly Limit Remaining  100%    2026-12-02T00:32:25Z
-/// Claude and GPT models   Weekly Limit Remaining  62%     2026-12-02T00:29:10Z
+/// Quota:
+/// Gemini Models          Weekly Limit Remaining     100%  2026-12-01 19:19 CST
+/// Claude and GPT models  Weekly Limit Remaining     49%   2026-12-01 18:57 CST
+/// Claude and GPT models  Five Hour Limit Remaining  49%   2026-11-24 23:57 CST
 /// ```
+/// También soporta el formato ISO 8601 anterior.
 ///
 /// Esta función es pública para permitir tests unitarios con salida fake.
 pub fn parse_usage_output(text: &str) -> Result<Vec<AgyQuotaReading>> {
@@ -130,8 +137,11 @@ pub fn parse_usage_output(text: &str) -> Result<Vec<AgyQuotaReading>> {
 
     // Porcentaje: "100%", "62%", "97.48%"
     let pct_re = Regex::new(r"(\d{1,3}(?:\.\d+)?)%").unwrap();
-    // ISO 8601 timestamp al final de la línea: "2026-12-02T00:32:25Z"
-    let ts_re = Regex::new(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)").unwrap();
+    // Timestamp: ISO 8601 "2026-12-02T00:32:25Z" O local "2026-12-01 19:19 CST"
+    let ts_re = Regex::new(
+        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z|\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[A-Z]{2,4})",
+    )
+    .unwrap();
 
     let mut readings = Vec::new();
 
@@ -148,7 +158,14 @@ pub fn parse_usage_output(text: &str) -> Result<Vec<AgyQuotaReading>> {
         } else if lower.starts_with("claude") {
             AgyPool::ClaudeGpt
         } else {
-            continue; // línea no relevante
+            continue; // línea no relevante (ej. "Quota:", cabeceras)
+        };
+
+        // Detectar ventana de tiempo: "Five Hour" → "5h", cualquier otro → "weekly"
+        let window = if lower.contains("five hour") {
+            "5h".to_string()
+        } else {
+            "weekly".to_string()
         };
 
         let percent_remaining = pct_re
@@ -157,7 +174,7 @@ pub fn parse_usage_output(text: &str) -> Result<Vec<AgyQuotaReading>> {
             .and_then(|m| m.as_str().parse::<f64>().ok())
             .unwrap_or(100.0);
 
-        // El timestamp ISO al final es cuando se reinicia el límite semanal
+        // El timestamp al final indica cuando se reinicia el límite
         let reset_at = ts_re
             .captures(trimmed)
             .and_then(|c| c.get(1))
@@ -165,6 +182,7 @@ pub fn parse_usage_output(text: &str) -> Result<Vec<AgyQuotaReading>> {
 
         readings.push(AgyQuotaReading {
             pool,
+            window,
             percent_remaining,
             percent_used: 100.0 - percent_remaining,
             reset_at,

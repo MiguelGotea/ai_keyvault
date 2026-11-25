@@ -49,15 +49,17 @@ pub fn collect_agy(device_id: &str) -> Result<Vec<QuotaSnapshot>> {
     let snapshots = readings
         .into_iter()
         .map(|r| {
-            let pool = match r.pool {
+            // Nombre del pool = "{provider_base}-{window}", ej: "gemini-weekly", "claude-gpt-5h"
+            let provider_base = match r.pool {
                 AgyPool::Gemini => "gemini",
-                AgyPool::ClaudeGpt => "claude_gpt",
+                AgyPool::ClaudeGpt => "claude-gpt",
             };
+            let pool = format!("{}-{}", provider_base, r.window);
             let tokens_used = ((r.percent_used / 100.0) * AGY_ESTIMATED_LIMIT as f64) as i64;
             QuotaSnapshot {
                 account_id: account_id.clone(),
                 provider: "agy".to_string(),
-                pool: pool.to_string(),
+                pool,
                 tokens_used,
                 tokens_limit: AGY_ESTIMATED_LIMIT,
                 percent_used: r.percent_used,
