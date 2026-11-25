@@ -240,7 +240,7 @@ apt install -y fail2ban
 - [x] Lecturas subidas al VPS con `source` y `read_at` _(verificado: `TABLET-R5MH20CH` → `/api/quota/readings/batidospitayaclaude32@gmail.com`)_
 - [x] Lease funciona: solo un consultador activo por cuenta _(log: `🔒 Lease adquirido locked_until=...`)_
 - [x] Lecturas con fuente y antigüedad visibles _(curl devuelve `source`, `read_at`, `percent_used`)_
-- [~] agy cuota: fix en `agy --print /usage` (el arg `/usage` no es CLI directo — es slash command)
+- [x] agy cuota: parser reescrito para formato TSV real de `agy --print /usage` (2026-11-25)
 - [ ] Datos coherentes entre PCs _(requiere 2 PCs corriendo el poller — se valida en Fase 5+)_
 
 **Fix aplicado (2026-11-25):** `agy /usage` → `agy --print /usage`

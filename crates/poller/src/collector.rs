@@ -1,7 +1,7 @@
 //! Recolector de cuota — llama a providers agy y Codex.
 
 use crate::{models::QuotaSnapshot, PollerError, Result};
-use ai_keyvault_provider_agy::quota::{parse_usage_output, AgyPool};
+use ai_keyvault_provider_agy::quota::{parse_usage_output, read_account_email, AgyPool};
 use chrono::Utc;
 use tracing::{info, warn};
 
@@ -27,12 +27,8 @@ pub fn collect_agy(device_id: &str) -> Result<Vec<QuotaSnapshot>> {
     }
 
     let text = String::from_utf8_lossy(&output.stdout);
-    let readings = parse_usage_output(&text).map_err(|e| {
-        // Loguear los primeros 500 chars del output para diagnóstico
-        let preview: String = text.chars().take(500).collect();
-        tracing::debug!("Salida raw de agy --print /usage:\n{}", preview);
-        PollerError::AgyError(format!("Error al parsear agy /usage: {e}"))
-    })?;
+    let readings = parse_usage_output(&text)
+        .map_err(|e| PollerError::AgyError(format!("Error al parsear agy /usage: {e}")))?;
 
     if readings.is_empty() {
         warn!("agy /usage no devolvió lecturas de cuota");
@@ -40,10 +36,9 @@ pub fn collect_agy(device_id: &str) -> Result<Vec<QuotaSnapshot>> {
     }
 
     let now = Utc::now();
-    let account_id = readings
-        .first()
-        .and_then(|r| r.account_email.clone())
-        .unwrap_or_else(|| "agy-unknown".to_string());
+    // Enriquecer con email de la cuenta — parse_usage_output no lo incluye en el nuevo formato,
+    // lo obtenemos via read_account_email (agy --print /account) con fallback a "agy-unknown".
+    let account_id = read_account_email().unwrap_or_else(|| "agy-unknown".to_string());
 
     info!(
         account_id = %account_id,

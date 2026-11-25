@@ -1,4 +1,4 @@
-﻿# Operaciones â€” AI KeyVault
+# Operaciones â€” AI KeyVault
 
 **Fecha:** 2026-11-22  
 **Ãšltima actualizaciÃ³n:** 2026-11-24  
@@ -341,3 +341,34 @@ scp target/release/ai-keyvault-server root@198.211.97.243:/opt/ai-keyvault/bin/
 ssh root@198.211.97.243 "systemctl restart ai-keyvault"
 ```
 
+
+---
+
+## 10. Fix parser agy — 2026-11-25
+
+**Problema:** El parser de `providers/agy/src/quota.rs` esperaba el formato visual antiguo:
+```
+GEMINI MODELS
+  Weekly Limit Remaining
+    [████] 98.41%
+    Refreshes in 167h 55m
+```
+
+**Realidad verificada** con `agy --print "/usage"` (formato real desde 2026-11-25):
+```
+Gemini Models   Weekly Limit Remaining  100%    2026-12-02T00:32:25Z
+Claude and GPT models   Weekly Limit Remaining  62%     2026-12-02T00:29:10Z
+```
+
+**Fix aplicado:**
+- `parse_usage_output()` reescrito para parsear líneas TSV: detecta pool por inicio de línea (`Gemini`/`Claude`), extrae `%` con regex y timestamp ISO 8601 directo.
+- `read_account_email()` nueva función: llama a `agy --print /account` para obtener email de la cuenta activa.
+- `read_quota()` actualizado: usa `agy --print /usage` con verificación de `status.success()`, enriquece readings con email.
+- `collect_agy()` en `crates/poller/src/collector.rs`: importa `read_account_email` para `account_id`.
+- Tests de `providers/agy/tests/agy_provider_test.rs`: 6 tests reescritos para nuevo formato TSV.
+- Eliminado `tracing::debug!` temporal de diagnóstico de `collector.rs`.
+
+**Resultado esperado en logs del poller:**
+```
+INFO ✅ Cuota agy recolectada account_id=batidodpitayaclaude44@gmail.com pools=2
+```

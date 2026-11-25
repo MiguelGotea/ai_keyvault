@@ -1,32 +1,20 @@
-//! Parser de la salida de `agy /usage` para leer cuota de los dos pools.
+//! Parser de la salida de `agy --print /usage` para leer cuota de los dos pools.
 //!
-//! La salida real verificada (2026-11-22) tiene este formato de texto:
+//! La salida real verificada (2026-11-25) tiene este formato TSV:
 //!
 //! ```text
-//! /usage
-//! └ Models & Quota
-//!
-//!   Account: usuario@gmail.com
-//!
-//! GEMINI MODELS
-//!   Models within this group: Gemini 3.8 Flash
-//!
-//!   Weekly Limit Remaining
-//!     [████████████████████████░] 98.41%
-//!     Refreshes in 167h 55m
-//!
-//! CLAUDE AND GPT MODELS
-//!   Models within this group: Claude Sonnet 4.6, Claude Opus 4.6, GPT-OSS 120B
-//!
-//!   Weekly Limit Remaining
-//!     [██████████████████████████] 97.48%
-//!     Refreshes in 167h 59m
+//! Gemini Models   Weekly Limit Remaining  100%    2026-12-02T00:32:25Z
+//! Claude and GPT models   Weekly Limit Remaining  62%     2026-12-02T00:29:10Z
 //! ```
 //!
-//! Cuando la cuota está al 100%, la línea de refresh dice "Quota available" (sin tiempo).
+//! Cada línea contiene (separado por tabuladores / espacios múltiples):
+//!   - Nombre del pool (`Gemini Models` o `Claude and GPT models`)
+//!   - Estado ("Weekly Limit Remaining" siempre)
+//!   - Porcentaje restante (`100%`, `62%`, etc.)
+//!   - ISO 8601 del próximo reinicio semanal
 
 use crate::{AgyError, Result};
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
@@ -72,60 +60,93 @@ pub struct AgyQuotaReading {
 /// - Si la salida no tiene el formato esperado.
 pub fn read_quota() -> Result<Vec<AgyQuotaReading>> {
     let output = Command::new("agy")
-        .arg("/usage")
+        .args(["--print", "/usage"])
         .output()
         .map_err(|e| AgyError::CommandError(format!("No se pudo ejecutar 'agy': {}", e)))?;
 
-    // agy /usage escribe en stdout (paginado). Combinamos stdout + stderr.
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    let combined = format!("{}{}", stdout, stderr);
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(AgyError::CommandError(format!(
+            "agy /usage salió con error: {stderr}"
+        )));
+    }
 
-    parse_usage_output(&combined)
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let mut readings = parse_usage_output(&stdout)?;
+
+    // Enriquecer con email de la cuenta activa
+    let email = read_account_email();
+    for r in &mut readings {
+        r.account_email = email.clone();
+    }
+
+    Ok(readings)
 }
 
-/// Parsea la salida de texto de `agy /usage` en lecturas estructuradas.
+/// Intenta obtener el email de la cuenta agy activa ejecutando `agy --print /account`.
+/// Devuelve `None` si el comando falla o no hay email en la salida.
+pub fn read_account_email() -> Option<String> {
+    let output = Command::new("agy")
+        .args(["--print", "/account"])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let email_re = Regex::new(r"[\w.+%-]+@[\w-]+\.[\w.]+").unwrap();
+    email_re.find(&text).map(|m| m.as_str().to_string())
+}
+
+/// Parsea la salida de texto de `agy --print /usage` en lecturas estructuradas.
+///
+/// Formato esperado (una línea por pool, campos separados por tabuladores/espacios):
+/// ```text
+/// Gemini Models   Weekly Limit Remaining  100%    2026-12-02T00:32:25Z
+/// Claude and GPT models   Weekly Limit Remaining  62%     2026-12-02T00:29:10Z
+/// ```
+///
 /// Esta función es pública para permitir tests unitarios con salida fake.
 pub fn parse_usage_output(text: &str) -> Result<Vec<AgyQuotaReading>> {
     let now = Utc::now();
     let read_at = now.to_rfc3339();
 
-    // Extraer el email de la cuenta
-    let email_re = Regex::new(r"Account:\s*(\S+@\S+)").unwrap();
-    let account_email = email_re
-        .captures(text)
-        .and_then(|c| c.get(1))
-        .map(|m| m.as_str().to_string());
-
-    // Regex para detectar porcentaje: "98.41%" o "100.00%"
-    let pct_re = Regex::new(r"(\d{1,3}\.\d+)%").unwrap();
-    // Regex para "Refreshes in 167h 55m" o "Refreshes in 55m" o "Refreshes in 2h"
-    let refresh_re = Regex::new(r"Refreshes in\s+(?:(\d+)h\s*)?(?:(\d+)m)?").unwrap();
+    // Porcentaje: "100%", "62%", "97.48%"
+    let pct_re = Regex::new(r"(\d{1,3}(?:\.\d+)?)%").unwrap();
+    // ISO 8601 timestamp al final de la línea: "2026-12-02T00:32:25Z"
+    let ts_re = Regex::new(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)").unwrap();
 
     let mut readings = Vec::new();
 
-    // Dividir por sección (GEMINI / CLAUDE AND GPT)
-    for (pool, section_text) in extract_sections(text) {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Detectar pool por el inicio de la línea (case-insensitive)
+        let lower = trimmed.to_lowercase();
+        let pool = if lower.starts_with("gemini") {
+            AgyPool::Gemini
+        } else if lower.starts_with("claude") {
+            AgyPool::ClaudeGpt
+        } else {
+            continue; // línea no relevante
+        };
+
         let percent_remaining = pct_re
-            .captures(section_text)
+            .captures(trimmed)
             .and_then(|c| c.get(1))
             .and_then(|m| m.as_str().parse::<f64>().ok())
             .unwrap_or(100.0);
 
-        let reset_at = if section_text.contains("Quota available") {
-            None
-        } else {
-            refresh_re.captures(section_text).and_then(|c| {
-                let hours: i64 = c.get(1).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
-                let minutes: i64 = c.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0);
-                let total_minutes = hours * 60 + minutes;
-                if total_minutes == 0 {
-                    None
-                } else {
-                    Some((now + Duration::minutes(total_minutes)).to_rfc3339())
-                }
-            })
-        };
+        // El timestamp ISO al final es cuando se reinicia el límite semanal
+        let reset_at = ts_re
+            .captures(trimmed)
+            .and_then(|c| c.get(1))
+            .map(|m| m.as_str().to_string());
 
         readings.push(AgyQuotaReading {
             pool,
@@ -133,7 +154,7 @@ pub fn parse_usage_output(text: &str) -> Result<Vec<AgyQuotaReading>> {
             percent_used: 100.0 - percent_remaining,
             reset_at,
             read_at: read_at.clone(),
-            account_email: account_email.clone(),
+            account_email: None, // Se setea por el caller (read_quota / collect_agy)
         });
     }
 
@@ -144,26 +165,6 @@ pub fn parse_usage_output(text: &str) -> Result<Vec<AgyQuotaReading>> {
     }
 
     Ok(readings)
-}
-
-/// Extrae las secciones GEMINI y CLAUDE AND GPT del texto.
-fn extract_sections(text: &str) -> Vec<(AgyPool, &str)> {
-    let mut sections = Vec::new();
-
-    // Buscar posición de cada encabezado de sección
-    if let Some(gemini_start) = text.find("GEMINI MODELS") {
-        let gemini_end = text[gemini_start..]
-            .find("CLAUDE AND GPT MODELS")
-            .map(|p| gemini_start + p)
-            .unwrap_or(text.len());
-        sections.push((AgyPool::Gemini, &text[gemini_start..gemini_end]));
-    }
-
-    if let Some(claude_start) = text.find("CLAUDE AND GPT MODELS") {
-        sections.push((AgyPool::ClaudeGpt, &text[claude_start..]));
-    }
-
-    sections
 }
 
 /// Verifica que el token de agy es válido ejecutando `agy models`.
