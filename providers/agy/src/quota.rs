@@ -83,21 +83,36 @@ pub fn read_quota() -> Result<Vec<AgyQuotaReading>> {
     Ok(readings)
 }
 
-/// Intenta obtener el email de la cuenta agy activa ejecutando `agy --print /account`.
-/// Devuelve `None` si el comando falla o no hay email en la salida.
+/// Intenta obtener el email de la cuenta agy activa.
+///
+/// Estrategia (en orden):
+/// 1. Windows Credential Manager (`gemini:antigravity` → `id_token_email`)
+/// 2. `agy --print /account` como fallback subprocess
+///
+/// Devuelve `None` si ninguna estrategia funciona.
 pub fn read_account_email() -> Option<String> {
-    let output = Command::new("agy")
-        .args(["--print", "/account"])
-        .output()
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
+    // 1. Credential Manager — más confiable, no lanza subprocess
+    {
+        use crate::credential::AgyCredentialManager;
+        if let Ok(cred) = AgyCredentialManager::read() {
+            if let Some(email) = cred.email {
+                return Some(email);
+            }
+        }
     }
 
-    let text = String::from_utf8_lossy(&output.stdout);
-    let email_re = Regex::new(r"[\w.+%-]+@[\w-]+\.[\w.]+").unwrap();
-    email_re.find(&text).map(|m| m.as_str().to_string())
+    // 2. Fallback: `agy --print /account`
+    if let Ok(output) = Command::new("agy").args(["--print", "/account"]).output() {
+        if output.status.success() {
+            let text = String::from_utf8_lossy(&output.stdout);
+            let email_re = Regex::new(r"[\w.+%-]+@[\w-]+\.[\w.]+").unwrap();
+            if let Some(m) = email_re.find(&text) {
+                return Some(m.as_str().to_string());
+            }
+        }
+    }
+
+    None
 }
 
 /// Parsea la salida de texto de `agy --print /usage` en lecturas estructuradas.
