@@ -131,6 +131,17 @@
     "guardar": "Guardar cambios",
     "guardado_ok": "Configuración guardada"
   },
+  "vault": {
+    "clave_maestra": "Clave maestra",
+    "desbloquear": "Desbloquear",
+    "bloquear": "Bloquear bóveda",
+    "boveda_bloqueada": "Bóveda bloqueada",
+    "boveda_desbloqueada": "Bóveda abierta",
+    "clave_respaldo": "Clave de respaldo",
+    "crear_boveda": "Crear bóveda nueva",
+    "primer_uso": "Primer uso — crea tu bóveda",
+    "autobloqueo_en": "Autobloqueo en"
+  },
   "comun": {
     "cargando": "Cargando…",
     "error": "Error",

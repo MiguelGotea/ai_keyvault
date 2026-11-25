@@ -1,5 +1,9 @@
 /** types/api.ts — Tipos compartidos entre los comandos Rust y el frontend React.
- *  Deben mantenerse sincronizados con las structs en src-tauri/src/commands/*.rs
+ *  Deben mantenerse sincronizados con las structs en src-tauri/src/api_client.rs
+ *  y con las respuestas del backend en server/src/routes.rs
+ *
+ *  Convención: Tauri serializa snake_case de Rust → camelCase o snake_case en JS.
+ *  Usamos snake_case para coincidir directamente con las respuestas JSON del VPS.
  */
 
 // ── Health ──────────────────────────────────────────────────────────────────
@@ -10,7 +14,7 @@ export interface ServerHealth {
   server_url: string;
 }
 
-// ── Vault ────────────────────────────────────────────────────────────────────
+// ── Vault (local) ────────────────────────────────────────────────────────────
 
 export interface VaultStatus {
   initialized: boolean;
@@ -32,8 +36,6 @@ export interface QuotaReading {
   read_at: string;
 }
 
-// ── Stats ────────────────────────────────────────────────────────────────────
-
 export interface PoolSummary {
   account_id: string;
   provider: string;
@@ -46,6 +48,8 @@ export interface PoolSummary {
   last_read_at: string | null;
   source: string | null;
 }
+
+// ── Stats ────────────────────────────────────────────────────────────────────
 
 export interface HeatmapCell {
   weekday: number;   // 0=lunes … 6=domingo
@@ -117,4 +121,37 @@ export interface Device {
   public_key_hex: string;
   registered_at: string;
   last_seen_at: string | null;
+}
+
+// ── Poller IPC (Fase 13) ─────────────────────────────────────────────────────
+
+export type PollerState = "running" | "paused" | "stopped" | "error";
+
+export interface PollerStatus {
+  state: PollerState;
+  last_poll_at: string | null;
+  next_poll_at: string | null;
+  error: string | null;
+  pid: number | null;
+}
+
+// ── Vault sync (Fase 12) ─────────────────────────────────────────────────────
+
+export interface VaultSyncStatus {
+  last_sync_at: string | null;
+  pending_changes: boolean;
+}
+
+// ── Helpers de UI ────────────────────────────────────────────────────────────
+
+/** Proveedor de cuenta reconocido por la app */
+export type Provider = "agy" | "codex";
+
+/** Resumen de cuenta para mostrar en la lista del dashboard */
+export interface AccountSummary {
+  account_id: string;
+  provider: Provider;
+  pools: PoolSummary[];
+  alerts_count: number;
+  last_seen: string | null;
 }

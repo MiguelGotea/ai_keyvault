@@ -1,9 +1,13 @@
 //! Punto de entrada de la app de escritorio AI KeyVault (Tauri 2).
 //! La lógica de UI vive en React (src/). Este módulo solo inicializa Tauri
 //! y registra los comandos IPC que el frontend puede invocar.
+//!
+//! ARQUITECTURA: Todo HTTP al VPS va por comandos Rust (commands/api.rs).
+//! La CSP en tauri.conf.json bloquea fetch() externo desde React.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod api_client;
 mod commands;
 mod tray;
 
@@ -40,8 +44,30 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            // Health / conectividad
             commands::health::ping_server,
+            commands::api::check_server_health,
+            // Estado de la bóveda local
             commands::vault::get_vault_status,
+            // Cuota y estadísticas (VPS)
+            commands::api::get_quota,
+            commands::api::get_stats_summary,
+            commands::api::get_stats_heatmap,
+            commands::api::get_stats_compare,
+            commands::api::get_stats_weekly,
+            // Chats (VPS)
+            commands::api::get_chats,
+            // Alertas (VPS)
+            commands::api::get_alerts,
+            // Switch de cuenta (VPS)
+            commands::api::get_switch_history,
+            commands::api::post_switch,
+            // Pings (VPS)
+            commands::api::get_pings_needs,
+            commands::api::get_pings,
+            commands::api::post_ping,
+            // Dispositivos (VPS)
+            commands::api::register_device,
         ])
         .run(tauri::generate_context!())
         .expect("Error al arrancar la aplicación AI KeyVault");

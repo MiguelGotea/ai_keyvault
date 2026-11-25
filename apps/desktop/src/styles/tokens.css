@@ -41,6 +41,12 @@
   --color-quota-warn:    #D6A84F;  /* dorado — ≥ 80% usado */
   --color-quota-crit:    #EF4444;  /* rojo   — ≥ 95% usado */
 
+  /* ── Estados semánticos ── */
+  --color-success:  #10B981;  /* verde — operación exitosa */
+  --color-warning:  #D6A84F;  /* dorado — advertencia */
+  --color-danger:   #EF4444;  /* rojo — error / crítico */
+  --color-info:     #3B82F6;  /* azul — información */
+
   /* ── Neutros (tema claro) ── */
   --color-bg:            #FFFFFF;
   --color-bg-secondary:  #F9FAFB;
