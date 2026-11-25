@@ -420,6 +420,7 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 | 2026-11-25 | 14 | Autobloqueo 0 = desactivado. Default cambiado de 15 a 0 (opt-in real). | UX / Seguridad | `autolockMinutes: 0` en DEFAULT_SETTINGS. `?? "0"` en lectores. |
 | 2026-11-25 | 15 | `SettingsPage.tsx` usaba `console.log` como persistencia (TODO antiguo). | Crítico UX | Implementado `localStorage.setItem("akv_settings", ...)` + `invoke("start_autolock_timer")`. |
 | 2026-11-25 | 14-15 | `security.rs` tenía bloque muerto `pub mod vault_path_reexport`. | Compilación | Eliminado. `mod.rs` y `main.rs` actualizados para registrar los 5 comandos. |
+| 2026-11-25 | 16 | `pnpm tauri build` desde `apps/desktop/` resolvía el triple GNU porque `rust-toolchain.toml` solo estaba en `src-tauri/`. | Build falla buscando sidecar `-gnu.exe` | Copiado `rust-toolchain.toml` también a `apps/desktop/` para forzar MSVC desde el cwd de Tauri CLI. |
 
 ---
 

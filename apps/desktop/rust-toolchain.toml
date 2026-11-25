@@ -1,0 +1,6 @@
+[toolchain]
+# Fuerza el toolchain MSVC desde la raíz de apps/desktop/ para que
+# `pnpm tauri build` y `pnpm tauri dev` resuelvan el target triple
+# `x86_64-pc-windows-msvc` (y no el default GNU del sistema).
+channel = "stable-x86_64-pc-windows-msvc"
+targets = ["x86_64-pc-windows-msvc"]
