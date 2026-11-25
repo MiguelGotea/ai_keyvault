@@ -46,9 +46,28 @@
 | F | 📄 | Codex token renewal: documentado como procedimiento manual |
 | 9 | ⏸ | **Segunda etapa** — proveedores adicionales (Claude, Gemini, Grok) |
 
-### Segunda etapa: App de escritorio (⏳ Pendiente)
+### Segunda etapa: App de escritorio ✅ v0.2.0
 
-Ver sección **App de Escritorio** más abajo.
+| Fase | Estado | Descripción |
+|------|--------|-------------|
+| 10 | ✅ | Scaffold Tauri 2 completo — íconos, CI, scripts, toolchain MSVC |
+| 11 | ✅ | Capa comunicación Rust↔VPS↔React — comandos API, hooks useCommand |
+| 12 | ✅ | Bóveda local real — Argon2id, desbloqueo, creación, recuperación |
+| 13 | ✅ | Dashboard — QuotaCard, AppLayout, switch cuentas, poller IPC |
+| 14 | ✅ | Autobloqueo IPC — timer Rust + evento Tauri → lock_vault |
+| 15 | ✅ | Configuración, vault sync VPS, alertas, pings, chats, stats |
+| 16 | ✅ | Build verificado, CI en verde, v0.2.0 instalada en Windows |
+
+**Instalación (Windows):**
+
+> Windows puede mostrar una advertencia de SmartScreen porque el instalador no está firmado con un certificado de código. Haz clic en **"Más información" → "Ejecutar de todas formas"**.
+
+```
+1. Compilar: pnpm tauri build  (desde apps/desktop/)
+2. Instalar: src-tauri/target/release/bundle/nsis/AI KeyVault_0.2.0_x64-setup.exe
+3. La app abre en /unlock — crea tu bóveda con una clave maestra (mín. 12 caracteres)
+4. El poller arranca automáticamente y se ve en la bandeja del sistema
+```
 
 ---
 
@@ -84,18 +103,27 @@ ai-keyvault-poller (bg)       →    API Rust/axum + SQLite    ←   Actions CI/
 
 ---
 
-## 🖥️ App de Escritorio — Segunda Etapa
+## 🖥️ App de Escritorio — v0.2.0 ✅
 
-> Ver [`docs/desktop-app-insumos.md`](docs/desktop-app-insumos.md) para el spec completo.
+La app de escritorio **Tauri 2** (Rust + React/TypeScript) está operativa. Consume el backend VPS ya existente. Toda la comunicación HTTP al VPS va por comandos Rust — nunca `fetch()` desde React.
 
-La segunda etapa consiste en crear la **UI de escritorio (Tauri 2)** que consume el backend ya operativo. Todo el backend está listo — la app es una capa de presentación + integración local.
+**Pantallas disponibles:**
+- 🔐 `/unlock` — desbloqueo con clave maestra (Argon2id), flujo de creación de bóveda y recuperación con clave de respaldo
+- 📊 `/dashboard` — tarjetas de cuota por cuenta y pool, switch de cuenta, historial
+- 🔔 `/alerts` — log de alertas del VPS
+- 🏓 `/ping` — cuentas que necesitan ping + ejecución manual
+- 💬 `/chats` — chats activos por cuenta y dispositivo
+- 📈 `/stats` — comparativa de burn rate + heatmap semanal
+- ⚙️ `/settings` — URL VPS, autobloqueo (opt-in), DPAPI (opt-in), sync manual de bóveda
 
-**Decisiones ya tomadas (no reabrir):**
-- **Framework:** Tauri 2 (Rust + TypeScript/React) — ver `docs/adr/ADR-001-stack.md`
-- **Idioma UI:** 100% español, textos en `apps/desktop/src/i18n/es.json`
-- **Tema:** Claro y oscuro intercambiables
-- **Colores:** `#064E3B` (primario) + `#D6A84F` (secundario)
-- **Sin telemetría** hacia terceros
+**Arquitectura de seguridad:**
+- Autobloqueo (opt-in): timer Rust → evento `autolock` → `lock_vault` + `zeroize`. El poller **sigue corriendo**.
+- DPAPI: desactivado por defecto. Con advertencia explícita.
+- Vault sync: la bóveda local se sube al VPS cifrada (conocimiento cero — el servidor no puede descifrarla).
+
+**Pendiente (segunda vuelta):**
+- Instalar `cmake` → habilitar `providers/agy` y `providers/codex` → switch real de credenciales desde la UI
+- Firma de código para eliminar SmartScreen warning
 
 ---
 

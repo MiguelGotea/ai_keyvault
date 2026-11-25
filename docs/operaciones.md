@@ -1,8 +1,8 @@
 # Operaciones â€” AI KeyVault
 
 **Fecha:** 2026-11-22  
-**Ãšltima actualizaciÃ³n:** 2026-11-24  
-**VersiÃ³n:** 1.2
+**Ultima actualizacion:** 2026-11-25  
+**Version:** 1.3
 
 > Este documento describe cÃ³mo administrar el VPS, hacer deploys, gestionar respaldos y restaurar datos.
 > TambiÃ©n registra todos los cambios manuales que se han hecho directamente en el VPS (fuera del repositorio),
@@ -1001,3 +1001,168 @@ el poller lo marca como inválido (`percent_used = 100%`). Para renovarlo:
 La renovación automática requiere llamar al endpoint OAuth de OpenAI con el `refresh_token`,
 lo que implicaría manejar credenciales OAuth en el poller — riesgo de seguridad no justificado
 para esta etapa. Se pospone a la Segunda Etapa si se requiere.
+
+
+---
+
+## §18 — Segunda Etapa: App de Escritorio v0.2.0 (2026-11-25)
+
+### Resumen del estado al cierre de la segunda etapa
+
+| Fase | Estado | Fecha | Descripcion |
+|------|--------|-------|-------------|
+| 10 — Scaffold Tauri 2 | OK | 2026-11-25 | Proyecto Tauri 2 + React/TS, iconos, CI, scripts, toolchain MSVC |
+| 11 — Capa comunicacion Rust<->VPS | OK | 2026-11-25 | Comandos Tauri IPC, hooks useCommand, tipos PoolSummary |
+| 12 — Boveda local | OK | 2026-11-25 | Argon2id, desbloqueo, creacion, recuperacion con clave de respaldo |
+| 13 — Dashboard | OK | 2026-11-25 | QuotaCard, AppLayout, switch cuentas, poller IPC |
+| 14 — Autobloqueo IPC | OK | 2026-11-25 | Timer Rust, evento Tauri autolock, lock_vault con zeroize |
+| 15 — Settings + Vault Sync | OK | 2026-11-25 | Configuracion persistida, sincronizacion boveda VPS |
+| 16 — Build + CI verde | OK | 2026-11-25 | .exe instalado en Windows, CI en verde, v0.2.0 |
+
+### Hallazgos criticos durante el desarrollo
+
+| Error/Hallazgo | Causa | Solucion |
+|----------------|-------|----------|
+| `resource path binaries\ai-keyvault-poller-x86_64-pc-windows-gnu.exe doesn't exist` | `rust-toolchain.toml` solo en `src-tauri/`, no en `apps/desktop/` | Crear `apps/desktop/rust-toolchain.toml` (mismo contenido) |
+| `ERR_PNPM_IGNORED_BUILDS` en CI | esbuild necesita aprobacion; lockfile no la tenia | `pnpm approve-builds --all` + `.npmrc` con `onlyBuiltDependencies[]=esbuild` |
+| `No test files found, exiting with code 1` (Vitest) | No habia archivos `*.test.ts` | Crear `apps/desktop/src/types/api.test.ts` con tests iniciales |
+| `Error HTTP: error decoding response body` en dashboard | Campos de `PoolSummary` no coincidian con VPS | Sincronizar `current_percent` -> `current_percent_used`, etc. |
+| PS parse errors en `copy-sidecar.ps1` | Emojis UTF-8 leidos como Windows-1252 en PS 5.1 | Reemplazar emojis con prefijos ASCII (`[INFO]`, `[OK]`, `[ERROR]`) |
+| `rustup target add x86_64-pc-windows-msvc` requerido | Target MSVC no instalado por defecto | Correr antes del primer `cargo build --target x86_64-pc-windows-msvc` |
+| `cmake` no instalado | providers/agy y providers/codex usan rusqlite bundled | Excluir esos providers del `Cargo.toml` del desktop hasta instalar cmake |
+
+### Struct PoolSummary — campos reales del VPS
+
+```rust
+// server/src/stats.rs (VPS)
+pub struct PoolSummary {
+    pub account_id: String,
+    pub provider: String,
+    pub pool: String,
+    pub current_percent_used: f64,    // era: current_percent
+    pub tokens_used: i64,             // nuevo campo
+    pub tokens_limit: i64,            // nuevo campo
+    pub burn_rate_pct_per_hour: f64,  // era: burn_rate_per_hour
+    pub last_read_at: String,         // era: Option<String>
+    // ...otros campos de proyeccion
+}
+```
+
+> [!NOTE]
+> Si se agrega un campo nuevo a `PoolSummary` en el servidor, debe actualizarse en:
+> - `apps/desktop/src-tauri/src/api_client.rs` (struct Rust)
+> - `apps/desktop/src/types/api.ts` (tipo TypeScript)
+> - Cualquier componente que use el campo
+
+---
+
+## §19 — Autobloqueo IPC (Fase 14)
+
+### Como funciona
+
+```
+UI (inactiva) --> timer Rust caduca --> evento Tauri "autolock"
+              --> App.tsx listener --> lock_vault() --> zeroize
+              --> navigate("/unlock")
+              [Poller sigue corriendo independientemente]
+```
+
+**Configuracion en Settings:**
+- `autolockMinutes = 0` = deshabilitado (valor por defecto — opt-in)
+- Rango configurado por el usuario (ej. 15 min)
+- Se guarda en `localStorage` y se pasa a `start_autolock_timer` en Rust al guardar
+
+**Comandos Tauri involucrados:**
+
+| Comando | Descripcion |
+|---------|-------------|
+| `start_autolock_timer(minutes)` | Inicia el timer Rust; `minutes=0` cancela |
+| `reset_autolock_timer()` | Reinicia el timer desde 0 (en mousemove/keydown, throttled 30s) |
+| `cancel_autolock_timer()` | Cancela el timer sin bloquearse |
+| `lock_vault()` | Zeroiza la clave maestra en memoria |
+
+**Evento Tauri:**
+```rust
+// En src-tauri/src/commands/security.rs
+app_handle.emit("autolock", ()).ok();
+```
+
+```typescript
+// En App.tsx
+listen("autolock", async () => {
+    await invoke("lock_vault");
+    navigate("/unlock");
+});
+```
+
+> [!IMPORTANT]
+> El autobloqueo bloquea **solo la UI** (zeroiza la clave en memoria, navega a /unlock).
+> El poller sidecar sigue corriendo y enviando lecturas al VPS.
+> Las credenciales del poller vienen del Credential Manager de Windows, no de la boveda.
+
+---
+
+## §20 — Vault Sync VPS (Fase 15)
+
+### Como funciona
+
+La boveda local (cifrada con la clave maestra del usuario) se puede sincronizar al VPS.
+Es conocimiento cero: el VPS solo almacena el blob cifrado, nunca la clave.
+
+**Endpoints:**
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| `POST /api/vault/sync` | Sube snapshot cifrado | Body: `{device_id, ciphertext_b64, nonce_b64, kdf_params}` |
+| `GET /api/vault/sync` | Descarga ultimo snapshot | Retorna el blob mas reciente por `device_id` |
+
+**Comandos Tauri:**
+
+| Comando | Descripcion |
+|---------|-------------|
+| `upload_vault_sync()` | Cifra la boveda local y la sube al VPS |
+| `download_vault_sync()` | Descarga el snapshot mas reciente y lo fusiona localmente |
+
+**Flujo de desbloqueo con sync:**
+1. Usuario introduce clave maestra -> `unlock_vault()` OK
+2. App llama `start_autolock_timer` (si > 0 min configurado)
+3. App llama `download_vault_sync()` silenciosamente (en background)
+4. Si hay datos nuevos en VPS, se fusionan en la boveda local
+
+**Acceso manual:**
+- En `/settings` hay botones "Subir boveda" y "Descargar boveda"
+- Util para transferir credenciales entre PCs
+
+> [!CAUTION]
+> La sincronizacion de boveda no reemplaza la clave maestra: cada dispositivo debe
+> tener la misma clave maestra para descifrar el blob descargado.
+> Si se pierde la clave, la boveda (local y en VPS) es irrecuperable.
+
+---
+
+## §21 — Flujo de Cuentas en Dashboard (aclaracion)
+
+Las cuentas visibles en el dashboard NO provienen de la boveda local.
+Provienen de las **lecturas del poller** guardadas en el VPS.
+
+**Flujo real:**
+```
+Credential Manager / auth.json (Windows)
+        |
+        v
+ai-keyvault-poller (sidecar Tauri)
+        |
+        v (POST /api/quota/readings)
+VPS: tabla quota_readings
+        |
+        v (GET /api/stats/compare o /api/quota/readings/:id)
+Dashboard React (via invoke("get_pool_summary"))
+```
+
+La boveda local es para guardar credenciales cifradas (por ejemplo, para hacer switch
+de cuenta desde la UI). El poller lee del Credential Manager directamente, no de la boveda.
+
+> [!NOTE]
+> Si el dashboard muestra cuentas que no se ingresaron manualmente, es porque el
+> poller las leyo automaticamente del Credential Manager de Windows (cuenta activa de agy)
+> o del archivo `~/.codex/auth.json` (cuenta de Codex) y las envio al VPS.

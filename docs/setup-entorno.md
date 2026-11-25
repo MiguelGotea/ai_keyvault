@@ -1,6 +1,6 @@
 # Entorno de Desarrollo y Herramientas — AI KeyVault (Windows)
 
-**Fecha:** 2026-11-25 (actualizado al inicio de segunda etapa — Fase 10)
+**Fecha:** 2026-11-25 (actualizado tras completar segunda etapa — v0.2.0)
 **Propósito:** Especificar de forma exhaustiva las herramientas, versiones, paquetes y variables de entorno necesarias para configurar y continuar el desarrollo de AI KeyVault en cualquier máquina Windows sin entrar en contradicciones ni romper dependencias.
 
 > [!NOTE]
@@ -197,11 +197,16 @@ Este proyecto usa **dos toolchains Rust simultáneamente**:
 | Backend / Poller (Linux cross-compile) | `stable-x86_64-pc-windows-gnu` (**default**) | `x86_64-pc-windows-gnu` | Raíz del repo, `crates/`, `providers/`, `server/` |
 | App de escritorio Tauri | `stable-x86_64-pc-windows-msvc` | `x86_64-pc-windows-msvc` | `apps/desktop/src-tauri/` |
 
-La selección automática funciona así: `apps/desktop/src-tauri/rust-toolchain.toml` declara `channel = "stable-x86_64-pc-windows-msvc"`. Cuando `cargo tauri build` se ejecuta desde `apps/desktop/`, Cargo lee ese archivo y usa MSVC automáticamente. El resto del repo sigue con GNU.
+La selección automática funciona así: **ambos** `apps/desktop/rust-toolchain.toml` **y** `apps/desktop/src-tauri/rust-toolchain.toml` declaran `channel = "stable-x86_64-pc-windows-msvc"`. Cuando `cargo tauri build` se ejecuta desde `apps/desktop/`, Cargo lee el archivo raíz del directorio de trabajo y usa MSVC automáticamente. El resto del repo sigue con GNU.
+
+> [!IMPORTANT]
+> El `rust-toolchain.toml` debe existir en **DOS** ubicaciones: `apps/desktop/` y `apps/desktop/src-tauri/`. Si solo está en `src-tauri/`, `pnpm tauri build` ejecutado desde `apps/desktop/` usará el toolchain GNU del repo raíz y buscará el sidecar con sufijo `-gnu.exe` → error `resource path doesn't exist`. Verificado en producción.
 
 ```powershell
 # Instalar el toolchain MSVC adicional (conservando GNU como default)
 rustup toolchain install stable-x86_64-pc-windows-msvc
+# Agregar el target explícitamente (requerido antes del primer build)
+rustup target add x86_64-pc-windows-msvc
 rustup target add x86_64-pc-windows-msvc --toolchain stable-x86_64-pc-windows-msvc
 
 # Verificar que GNU sigue siendo el default
@@ -234,10 +239,20 @@ Tauri agrega automáticamente `-x86_64-pc-windows-msvc` al buscar el binario.
 
 Script para compilar y copiar el sidecar:
 ```powershell
-# Desde la raíz del repositorio
-cargo +stable-x86_64-pc-windows-msvc build --release --package ai-keyvault-poller --target x86_64-pc-windows-msvc
+# Desde la raiz del repositorio
+
+# Paso previo (una vez por maquina): agregar el target MSVC si no esta instalado
+rustup target add x86_64-pc-windows-msvc
+
+# Compilar el sidecar con MSVC
+cargo build --release --package ai-keyvault-poller --target x86_64-pc-windows-msvc
 .\.scripts\copy-sidecar.ps1
 ```
+
+> [!IMPORTANT]
+> `rustup target add x86_64-pc-windows-msvc` debe ejecutarse **antes** del primer
+> `cargo build --target x86_64-pc-windows-msvc`. Sin este paso se obtiene
+> `error[E0463]: can't find crate for 'std'`. Solo se necesita una vez por maquina.
 
 ### 9.4 Workspace Cargo aislado
 
@@ -254,14 +269,21 @@ En la primera instalación de pnpm en el proyecto, puede aparecer:
 ERR_PNPM_IGNORED_BUILDS: esbuild@0.21.5 y esbuild@0.25.12 requieren aprobación
 ```
 
-Solución (una vez, desde `apps/desktop/`):
+Solucion (una vez, desde `apps/desktop/`):
 ```powershell
 cd apps\desktop
-pnpm approve-builds
+# En CI o entornos no interactivos, usar --all (evita prompt)
+pnpm approve-builds --all
 pnpm install
 ```
 
-### 9.6 Generar íconos desde branding
+> [!IMPORTANT]
+> En CI (GitHub Actions) usar **`pnpm approve-builds --all`** (sin interactividad).
+> La version sin flag (`pnpm approve-builds`) abre un prompt que bloquea el pipeline.
+> Tras ejecutarlo, `pnpm-lock.yaml` se actualiza y `--frozen-lockfile` pasara en CI.
+> El archivo `apps/desktop/.npmrc` con `onlyBuiltDependencies[]=esbuild` esta
+> incluido en el repo para que futuros `pnpm install` no requieran re-aprobar.
+
 
 Los íconos de Tauri se generan con un script PowerShell desde las imágenes de branding:
 ```powershell
@@ -290,7 +312,7 @@ pnpm typecheck     # Verificar TypeScript
 
 # 2. Compilar sidecar poller para MSVC
 cd ..\..
-cargo +stable-x86_64-pc-windows-msvc build --release --package ai-keyvault-poller --target x86_64-pc-windows-msvc
+cargo build --release --package ai-keyvault-poller --target x86_64-pc-windows-msvc
 .\.scripts\copy-sidecar.ps1
 
 # 3. Build Tauri (desde apps/desktop/)
@@ -300,3 +322,31 @@ pnpm tauri build   # Genera .msi en src-tauri/target/release/bundle/msi/
 # 4. Dev mode (sin sidecar — para probar solo la UI)
 pnpm tauri dev
 ```
+
+### 9.8 Archivo .npmrc preconfigurado
+
+`apps/desktop/.npmrc` esta incluido en el repo con:
+```
+onlyBuiltDependencies[]=esbuild
+```
+
+Esto evita que `pnpm install` falle por scripts no aprobados de `esbuild` en
+instalaciones limpias. No es necesario correr `pnpm approve-builds` nuevamente
+si el `.npmrc` y el `pnpm-lock.yaml` actualizado ya estan en el repo.
+
+### 9.9 Estrategia de versionado
+
+Al subir de version, actualizar **tres archivos juntos**:
+
+| Archivo | Campo | Ejemplo |
+|---------|-------|---------|
+| `apps/desktop/src-tauri/Cargo.toml` | `version = "..."` | `0.2.0` |
+| `apps/desktop/src-tauri/tauri.conf.json` | `"version": "..."` | `"0.2.0"` |
+| `apps/desktop/package.json` | `"version": "..."` | `"0.2.0"` |
+
+Convencion:
+- **Patch** (`0.2.x`): correcciones de bugs, ajustes menores
+- **Minor** (`0.x.0`): ronda completa de funcionalidades nuevas
+- **Major** (`x.0.0`): cambio de arquitectura o ruptura de compatibilidad
+
+Commit de release: `chore(release): bump a vX.Y.Z`
