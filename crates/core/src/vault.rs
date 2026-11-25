@@ -224,4 +224,24 @@ impl Vault {
             Ok(None)
         }
     }
+
+    /// Descifra el JSON de tokens de una cuenta (el blob completo del Credential Manager).
+    /// Devuelve None si la cuenta no tiene tokens guardados.
+    pub fn decrypt_account_tokens(&self, account_id: Uuid) -> Result<Option<String>> {
+        let vk = self.unlocked_key.as_ref().ok_or(VaultError::VaultLocked)?;
+        let acc = self
+            .state
+            .accounts
+            .iter()
+            .find(|a| a.id == account_id)
+            .ok_or(VaultError::DecryptionFailed)?;
+
+        if let Some(enc_t) = &acc.encrypted_tokens {
+            let bytes = vk.decrypt_field(enc_t)?;
+            let s = String::from_utf8(bytes).map_err(|_| VaultError::DecryptionFailed)?;
+            Ok(Some(s))
+        } else {
+            Ok(None)
+        }
+    }
 }

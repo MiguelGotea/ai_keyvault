@@ -101,17 +101,7 @@ pub struct AlertRecord {
     pub detected_at: String, // nombre real del VPS (no alerted_at)
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct SwitchRecord {
-    pub id: i64,
-    pub account_id: String,
-    pub provider: String,
-    pub device_id: String,
-    pub success: bool,
-    pub reverted: bool,
-    pub error_message: Option<String>,
-    pub switched_at: String,
-}
+// SwitchRecord movido a PostSwitchPayload — el historial se devuelve como serde_json::Value desde el VPS.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PingRecord {
@@ -150,7 +140,7 @@ pub struct PingNeedItem {
     pub reset_time: Option<String>,
 }
 
-/// Payloads de peticiones POST
+/// Payloads de peticiones POST — deben coincidir con los structs en server/src/routes.rs
 #[derive(Debug, Serialize)]
 pub struct PostPingPayload {
     pub account_id: String,
@@ -162,12 +152,27 @@ pub struct PostPingPayload {
     pub is_manual: bool,
 }
 
+/// El VPS espera `to_account_id`, `reason` — NO `account_id`/`reverted`/`error_message`.
 #[derive(Debug, Serialize)]
 pub struct PostSwitchPayload {
-    pub account_id: String,
+    pub to_account_id: String,
+    pub from_account_id: Option<String>,
     pub provider: String,
     pub device_id: String,
     pub success: bool,
-    pub reverted: bool,
-    pub error_message: Option<String>,
+    pub reason: Option<String>,
+}
+
+/// El VPS devuelve `to_account_id`, `from_account_id`, `reason`, `switched_at`.
+/// NO tiene `account_id`, `reverted`, ni `error_message`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SwitchRecord {
+    pub id: i64,
+    pub to_account_id: String,
+    pub from_account_id: Option<String>,
+    pub provider: String,
+    pub device_id: String,
+    pub success: bool,
+    pub reason: Option<String>,
+    pub switched_at: String,
 }

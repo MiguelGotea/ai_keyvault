@@ -64,6 +64,8 @@ fn main() {
             commands::vault::add_vault_account,
             commands::vault::delete_vault_account,
             commands::vault::get_account_email,
+            commands::vault::decrypt_account_tokens,
+            commands::vault::import_current_agy_credential,
             // Cuota y estadísticas (VPS)
             commands::api::get_quota,
             commands::api::get_stats_summary,

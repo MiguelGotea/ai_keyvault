@@ -114,15 +114,25 @@ export interface AlertRecord {
 
 // ── Switch ───────────────────────────────────────────────────────────────────
 
+/** Coincide con el struct SwitchRecord real del VPS (server/src/routes.rs). */
 export interface SwitchRecord {
   id: number;
-  account_id: string;
+  to_account_id: string;
+  from_account_id: string | null;
   provider: string;
   device_id: string;
   success: boolean;
-  reverted: boolean;
-  error_message: string | null;
+  reason: string | null;
   switched_at: string;
+}
+
+/** Resultado del comando switch_account de Tauri (src-tauri/src/commands/switch_cmd.rs). */
+export interface SwitchResult {
+  success: boolean;
+  error: string | null;
+  account_id: string;
+  provider: string;
+  restart_notice: string | null;
 }
 
 // ── Pings ────────────────────────────────────────────────────────────────────

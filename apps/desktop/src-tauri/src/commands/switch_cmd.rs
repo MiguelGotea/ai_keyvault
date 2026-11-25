@@ -95,6 +95,21 @@ mod credman {
     }
 }
 
+/// Lee la credencial agy activa del Credential Manager y la devuelve como JSON String.
+/// Función pública para que vault.rs pueda usarla en import_current_agy_credential.
+pub fn read_agy_credential() -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        credman::read_credential_raw("gemini:antigravity")
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .filter(|s| serde_json::from_str::<serde_json::Value>(s).is_ok())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        None
+    }
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn codex_auth_path() -> std::path::PathBuf {
@@ -175,17 +190,8 @@ pub async fn switch_account(
                             .map_err(|e| format!("Error descifrando email: {e}"))?;
                         let pass = vault.decrypt_account_password(uid)
                             .unwrap_or(None);
-                        // tokens: leer del campo encrypted_tokens si existe
-                        let tokens = {
-                            let acc = accounts.iter().find(|a| a.id == uid).unwrap();
-                            if acc.encrypted_tokens.is_some() {
-                                // Usar crypto directa del vault key
-                                // Por ahora devolvemos None — se expande en siguiente iteración
-                                None::<String>
-                            } else {
-                                None
-                            }
-                        };
+                        // tokens: descifrar el blob completo del Credential Manager
+                        let tokens = vault.decrypt_account_tokens(uid).unwrap_or(None);
                         (email, pass, tokens)
                     }
                     None => {
@@ -209,7 +215,7 @@ pub async fn switch_account(
 
     // Realizar switch según proveedor
     let result = match provider.as_str() {
-        "agy" => switch_agy(&account_id, &email, password.as_deref()).await,
+        "agy" => switch_agy(&account_id, &email, tokens.as_deref()).await,
         "codex" => switch_codex(&account_id, tokens.as_deref(), password.as_deref()).await,
         _ => Err(format!("Proveedor '{}' no soportado aún", provider)),
     };
@@ -219,16 +225,16 @@ pub async fn switch_account(
         Err(e) => { warn!("Switch fallido: {e}"); (false, Some(e)) }
     };
 
-    // Registrar en VPS (best-effort)
+    // Registrar en VPS (best-effort) — usando los campos reales del VPS
     let _ = http_client()
         .post(&format!("{SERVER_URL}/api/switch"))
         .json(&PostSwitchPayload {
-            account_id: account_id.clone(),
+            to_account_id: account_id.clone(),
+            from_account_id: None,
             provider: provider.clone(),
             device_id,
             success,
-            reverted: false,
-            error_message: error_msg.clone(),
+            reason: error_msg.clone(),
         })
         .send()
         .await;
@@ -256,22 +262,24 @@ pub async fn switch_account(
 
 // ── Implementaciones por proveedor ───────────────────────────────────────────
 
-async fn switch_agy(account_id: &str, email: &str, _credential_json: Option<&str>) -> Result<(), String> {
+async fn switch_agy(account_id: &str, email: &str, credential_json: Option<&str>) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
-        // Para agy: el Credential Manager almacena un JSON con id_token_email y otros campos.
-        // Construimos un JSON mínimo con el email de la cuenta nueva.
-        // En una versión completa, leeríamos el token real del campo encrypted_tokens.
         let backup = credman::read_credential_raw("gemini:antigravity");
 
-        // Construir blob JSON con el email de la nueva cuenta
-        let blob_json = serde_json::json!({
-            "id_token_email": email,
-            "account_id": account_id,
-            "_akv_switch": true,
-            "_note": "Credencial escrita por AI KeyVault. El token completo se requiere para operacion normal."
-        });
-        let blob_bytes = blob_json.to_string().into_bytes();
+        // Si tenemos el blob real de la bóveda, lo usamos. Si no, error claro.
+        let blob_bytes = match credential_json {
+            Some(json) => json.as_bytes().to_vec(),
+            None => {
+                // Sin blob guardado — no podemos hacer un switch real que funcione en agy.
+                // Escribimos un marcador para que el usuario sepa que debe reimportar la cuenta.
+                return Err(format!(
+                    "La cuenta '{}' no tiene credenciales completas guardadas en la bóveda. \
+                     Ve a Mis Cuentas y agrega la cuenta de nuevo para capturar el blob completo.",
+                    account_id
+                ));
+            }
+        };
 
         credman::write_credential_raw("gemini:antigravity", email, &blob_bytes)
             .map_err(|e| {
@@ -286,7 +294,10 @@ async fn switch_agy(account_id: &str, email: &str, _credential_json: Option<&str
         Ok(())
     }
     #[cfg(not(target_os = "windows"))]
-    Err("Switch de agy solo disponible en Windows".into())
+    {
+        let _ = (account_id, email, credential_json);
+        Err("Switch de agy solo disponible en Windows".into())
+    }
 }
 
 async fn switch_codex(account_id: &str, tokens_json: Option<&str>, _password: Option<&str>) -> Result<(), String> {

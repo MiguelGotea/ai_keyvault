@@ -370,3 +370,89 @@ pub async fn list_vault_accounts(
         None => Err("No hay bóveda cargada".into()),
     }
 }
+
+/// Descifra y devuelve el JSON de tokens de una cuenta (para hacer switch real).
+/// SOLO para uso interno del switch — nunca exponer en la UI directamente.
+#[command]
+pub async fn decrypt_account_tokens(
+    vault_state: State<'_, VaultState>,
+    account_uuid: String,
+) -> Result<Option<String>, String> {
+    use uuid::Uuid;
+    let uid = Uuid::parse_str(&account_uuid).map_err(|_| "UUID inválido".to_string())?;
+    let guard = vault_state.vault.lock().unwrap();
+    match &*guard {
+        Some(vault) if vault.is_unlocked() => {
+            vault.decrypt_account_tokens(uid).map_err(|e| e.to_string())
+        }
+        _ => Err("Bóveda bloqueada o no cargada".into()),
+    }
+}
+
+/// Importa la cuenta agy actualmente activa en el Credential Manager de Windows
+/// y la guarda en la bóveda como una nueva cuenta. Alias es el nombre amigable.
+/// La credencial se lee de "gemini:antigravity" — que es donde agy guarda su sesión.
+#[command]
+pub async fn import_current_agy_credential(
+    app: AppHandle,
+    vault_state: State<'_, VaultState>,
+    alias: String,
+) -> Result<AddAccountResult, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use crate::commands::switch_cmd::read_agy_credential;
+
+        let cred_json = match read_agy_credential() {
+            Some(json) => json,
+            None => return Ok(AddAccountResult {
+                success: false,
+                id: None,
+                error: Some("No hay ninguna cuenta agy activa en el Credential Manager. Inicia sesión en Antigravity primero.".into()),
+            }),
+        };
+
+        // Extraer email del blob JSON
+        let email = {
+            let val: serde_json::Value = serde_json::from_str(&cred_json)
+                .map_err(|e| format!("El blob de credencial no es JSON válido: {e}"))?;
+            val.get("id_token_email")
+                .or_else(|| val.get("email"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("unknown@agy")
+                .to_string()
+        };
+
+        // Usar alias como el email si no se proporcionó uno
+        let alias_final = if alias.trim().is_empty() { email.clone() } else { alias.trim().to_string() };
+
+        let mut guard = vault_state.vault.lock().unwrap();
+        match &mut *guard {
+            Some(vault) if vault.is_unlocked() => {
+                // Verificar que no existe ya una cuenta con el mismo alias o email
+                let already_exists = vault.state().accounts.iter().any(|a| a.alias == alias_final);
+                if already_exists {
+                    return Ok(AddAccountResult {
+                        success: false,
+                        id: None,
+                        error: Some(format!("Ya existe una cuenta con el alias '{alias_final}' en la bóveda.")),
+                    });
+                }
+
+                match vault.add_account("agy", &alias_final, &email, None, Some(&cred_json), None) {
+                    Ok(uuid) => {
+                        save_vault_state(&app, vault.state())?;
+                        Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
+                    }
+                    Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
+                }
+            }
+            Some(_) => Err("La bóveda está bloqueada".into()),
+            None => Err("No hay bóveda cargada".into()),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, vault_state, alias);
+        Err("Importar credencial agy solo disponible en Windows".into())
+    }
+}

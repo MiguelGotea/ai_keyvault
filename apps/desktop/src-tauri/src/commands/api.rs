@@ -175,6 +175,7 @@ pub async fn get_alerts(account_id: Option<String>) -> Result<Vec<AlertRecord>, 
 
 /// Obtiene el historial de switches de cuenta.
 /// Mapea: GET /api/switch/history?limit=N
+/// El VPS devuelve {id, to_account_id, from_account_id, provider, device_id, success, reason, switched_at}
 #[command]
 pub async fn get_switch_history(limit: u32) -> Result<Vec<SwitchRecord>, String> {
     let url = format!("{SERVER_URL}/api/switch/history?limit={limit}");
@@ -191,22 +192,23 @@ pub async fn get_switch_history(limit: u32) -> Result<Vec<SwitchRecord>, String>
 
 /// Registra un switch de cuenta en el log del servidor.
 /// Mapea: POST /api/switch
+/// El VPS espera `to_account_id`, `reason` — NO `account_id`/`reverted`.
 #[command]
 pub async fn post_switch(
-    account_id: String,
+    to_account_id: String,
+    from_account_id: Option<String>,
     provider: String,
     device_id: String,
     success: bool,
-    reverted: bool,
-    error_message: Option<String>,
+    reason: Option<String>,
 ) -> Result<(), String> {
     let payload = PostSwitchPayload {
-        account_id,
+        to_account_id,
+        from_account_id,
         provider,
         device_id,
         success,
-        reverted,
-        error_message,
+        reason,
     };
     http_client()
         .post(&format!("{SERVER_URL}/api/switch"))
