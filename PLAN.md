@@ -224,13 +224,26 @@ apt install -y fail2ban
 > **Nota:** Los tests de integración real corren localmente con `-- --include-ignored`.
 > El switch completo entre cuentas se validará cuando haya 2 cuentas disponibles (Fase 5+).
 
-### Fase 4 — Cuota y planes ← ACTUAL
+### Fase 4 — Cuota y planes ✅ COMPLETADA
 **Contenido implementado:**
 - Crate `crates/poller/`: consulta periódica de cuota con lease anti-duplicado.
-  - `collector.rs`: llama a `agy /usage` y lee `~/.codex/auth.json`, genera `QuotaSnapshot`s.
+  - `collector.rs`: llama a `agy --print /usage` y lee `~/.codex/auth.json`, genera `QuotaSnapshot`s.
   - `lease.rs`: adquiere/verifica lease en `/api/quota/lease` antes de consultar.
   - `uploader.rs`: POST individual a `/api/quota/readings` por cada snapshot.
   - `scheduler.rs`: loop tokio cada 10 min (configurable), agrupa por `account_id`.
+  - `models.rs`: `PollerConfig`, `QuotaSnapshot`, `LeaseResponse`.
+  - `main.rs`: binario ejecutable con configuración por variables de entorno.
+- **6 tests unitarios** en verde. **1 test de integración** `#[ignore]`.
+- Script `crates/poller/scripts/test_poller_manual.ps1`.
+
+**Criterios de aceptación:**
+- [x] Lecturas subidas al VPS con `source` y `read_at` _(verificado: `TABLET-R5MH20CH` → `/api/quota/readings/batidospitayaclaude32@gmail.com`)_
+- [x] Lease funciona: solo un consultador activo por cuenta _(log: `🔒 Lease adquirido locked_until=...`)_
+- [x] Lecturas con fuente y antigüedad visibles _(curl devuelve `source`, `read_at`, `percent_used`)_
+- [~] agy cuota: fix en `agy --print /usage` (el arg `/usage` no es CLI directo — es slash command)
+- [ ] Datos coherentes entre PCs _(requiere 2 PCs corriendo el poller — se valida en Fase 5+)_
+
+**Fix aplicado (2026-11-25):** `agy /usage` → `agy --print /usage`
   - `models.rs`: `PollerConfig`, `QuotaSnapshot`, `LeaseResponse`.
   - `main.rs`: binario ejecutable con configuración por variables de entorno (`AKYV_SERVER_URL`, `AKYV_DEVICE_ID`, `AKYV_POLL_INTERVAL`).
 - **6 tests unitarios** (sin red, sin providers reales).

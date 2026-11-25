@@ -15,7 +15,7 @@ const AGY_ESTIMATED_LIMIT: i64 = 1_000_000;
 /// Si falla (agy no instalado, no autenticado, etc.), devuelve error.
 pub fn collect_agy(device_id: &str) -> Result<Vec<QuotaSnapshot>> {
     let output = std::process::Command::new("agy")
-        .args(["/usage"])
+        .args(["--print", "/usage"])
         .output()
         .map_err(|e| PollerError::AgyError(format!("No se pudo ejecutar agy: {e}")))?;
 
