@@ -618,9 +618,7 @@ pub async fn post_ping(
     let duration_ms = body.duration_ms.unwrap_or(0);
     let message_sent = body.message_sent.unwrap_or_else(|| "k".to_string());
     let is_manual = body.is_manual.unwrap_or(true);
-    let pinged_at = body
-        .pinged_at
-        .unwrap_or_else(|| Utc::now().to_rfc3339());
+    let pinged_at = body.pinged_at.unwrap_or_else(|| Utc::now().to_rfc3339());
 
     sqlx::query(
         r#"
@@ -656,10 +654,7 @@ pub async fn get_pings(
     Path(account_id): Path<String>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<PingEntry>>> {
-    let limit: i64 = q
-        .get("limit")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(20);
+    let limit: i64 = q.get("limit").and_then(|v| v.parse().ok()).unwrap_or(20);
 
     let rows = sqlx::query(
         r#"
@@ -704,10 +699,7 @@ pub async fn get_pings_needs(
     State(state): State<Arc<AppState>>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> Result<Json<Vec<serde_json::Value>>> {
-    let max_pct: f64 = q
-        .get("max_pct")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(5.0);
+    let max_pct: f64 = q.get("max_pct").and_then(|v| v.parse().ok()).unwrap_or(5.0);
 
     // Última lectura por (account_id, provider, pool) con percent_used < umbral
     let rows = sqlx::query(
