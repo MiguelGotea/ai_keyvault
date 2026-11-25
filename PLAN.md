@@ -485,6 +485,41 @@ crates/alerter/
 
 El backend está 100% operativo. La segunda etapa (app de escritorio Tauri 2) comienza en un chat nuevo usando `docs/desktop-app-insumos.md` como spec de entrada.
 
+### Pendientes identificados del prompt original (§ del AI-KeyVault-prompt-claude-code.md)
+
+Los siguientes ítems estaban en el spec original y **no se implementaron** en la primera etapa. Todos son responsabilidad de la app de escritorio o de fases avanzadas:
+
+| Item del prompt | Sección | Estado |
+|----------------|---------|--------|
+| App de escritorio Tauri 2 con UI | §4, §9 | ⏳ Segunda etapa — Fase 10+ |
+| Pantalla de desbloqueo con clave maestra / clave de respaldo | §9.1, §5.1 | ⏳ Segunda etapa |
+| Panel con tarjetas de cuentas y barras de cuota | §9.2 | ⏳ Segunda etapa |
+| Detalle de cuenta con pestañas (Resumen, Cuota, Stats, Chats, Credenciales, Historial) | §9.3 | ⏳ Segunda etapa |
+| Paleta de comandos `Ctrl+K` para cambiar cuenta, copiar contraseña | §9 | ⏳ Segunda etapa |
+| Portapapeles con limpieza automática (30 s) | §5.3 | ⏳ Segunda etapa |
+| Autobloqueo configurable (15 min por defecto) | §2, §5.3 | ⏳ Segunda etapa — crate core listo |
+| Caché local cifrada + DPAPI para desbloqueo rápido | §5.3 | ⏳ Segunda etapa |
+| Pantalla "Mis dispositivos" (revocar acceso) | §7.17 | ⏳ Segunda etapa |
+| Pantalla "Ajustes" (tema, autobloqueo, frecuencias, ntfy, backups) | §9.10 | ⏳ Segunda etapa |
+| Tema claro/oscuro intercambiable | §2 | ⏳ Segunda etapa |
+| Español 100% con archivos i18n | §2 | ⏳ Segunda etapa |
+| Alertas con **sugerencia de cuenta alternativa** ("cambia a esta") | §8.1 | ⏳ Segunda etapa — detección implementada, UI falta |
+| Silenciar alerta por X horas | §8.1 | ⏳ Segunda etapa |
+| Alertas de **fin de suscripción** (7 días / 1 día antes) | §8.1 | ⏳ Segunda etapa |
+| Alertas de **login vencido o rechazado** | §8.1 | ⏳ Segunda etapa |
+| Ping desde la UI con lista "cuentas que necesitan ping" | §8.2 | ⏳ Segunda etapa — backend listo |
+| Botón "Deshacer" en cambio de cuenta desde la UI | §8.3 | ⏳ Segunda etapa — revert implementado en Rust |
+| Login guiado por primera vez (capturar token del login oficial) | §8.3 | ⏳ Segunda etapa |
+| "Sin agente en esta PC" en vista de chats | §10 | ⏳ Segunda etapa |
+| Tokens detallados por JSONL (`token_usage_record`) | §6.3 | 📄 Investigado, pendiente de implementar |
+| Verificación de respaldo en `ai_keyvault_data` | §3, Fase 2 | 📄 Workflow existe, nunca se probó restauración real |
+| Consulta de cuota desde el VPS 24/7 (delegación explícita) | §5.2 | ⏸ Pospuesto — riesgo documentado en ADR-003 |
+| Pestaña "Chat de consumo" (chat web vs agente) | §6.5 | ⏸ Pospuesto — sin API pública de ChatGPT/Gemini.com |
+| Proveedores adicionales: Claude, Gemini, OpenCode, Grok | §9, Fase 9 | ⏸ Pospuesto — Segunda Etapa |
+| Instalador Windows firmado (SmartScreen) | §13 | ⏳ Fase final de segunda etapa |
+| Versión portable (sin instalador) | §13 | ⏳ Fase final de segunda etapa |
+| `docs/operaciones.md` §rotación de claves | §13 | 📄 Procedimiento manual documentado |
+
 ### Próximos pasos para segunda etapa
 
 1. Leer `docs/desktop-app-insumos.md` — spec completo del frontend Tauri 2
