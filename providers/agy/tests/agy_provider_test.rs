@@ -110,13 +110,13 @@ fn test_reset_at_es_iso8601_valido() {
             parsed > chrono::Utc::now(),
             "reset_at de Gemini debe estar en el futuro"
         );
-        assert_eq!(reset, "2026-12-02T00:32:25+00:00");
+        assert_eq!(reset, "2026-12-02T00:32:25Z");
     } else {
         panic!("Gemini debe tener reset_at");
     }
 
     if let Some(ref reset) = claude.reset_at {
-        assert_eq!(reset, "2026-12-02T00:29:10+00:00");
+        assert_eq!(reset, "2026-12-02T00:29:10Z");
     } else {
         panic!("Claude debe tener reset_at");
     }
