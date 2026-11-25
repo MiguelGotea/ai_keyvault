@@ -91,11 +91,14 @@ async fn run_cycle(
 
     // 4. Agrupar por account_id
     let mut by_account: HashMap<String, Vec<_>> = HashMap::new();
-    for s in snapshots {
-        by_account.entry(s.account_id.clone()).or_default().push(s);
+    for s in &snapshots {
+        by_account
+            .entry(s.account_id.clone())
+            .or_default()
+            .push(s.clone());
     }
 
-    // 5. Para cada cuenta: adquirir lease, subir cuota y sincronizar chats
+    // 5. Para cada cuenta: adquirir lease y subir cuota
     for (account_id, account_snapshots) in &by_account {
         match lease::acquire(client, config, account_id).await {
             Ok(true) => {
@@ -104,9 +107,6 @@ async fn run_cycle(
                 {
                     error!(account_id = %account_id, error = %e, "❌ Error al subir lecturas");
                 }
-
-                // Sincronizar metadatos de chats agy
-                chat_collector::collect_and_upload(client, config, account_id).await;
             }
             Ok(false) => {
                 // Otro dispositivo tiene el lease — omitir
@@ -115,6 +115,17 @@ async fn run_cycle(
                 error!(account_id = %account_id, error = %e, "❌ Error al adquirir lease");
             }
         }
+    }
+
+    // 6. Sincronizar metadatos de chats agy (una vez por ciclo, siempre)
+    //    No depende del lease — el servidor hace upsert idempotente.
+    //    Usa el account_id del snapshot agy, no del codex.
+    if let Some(agy_account) = snapshots
+        .iter()
+        .find(|s| s.provider == "agy")
+        .map(|s| s.account_id.clone())
+    {
+        chat_collector::collect_and_upload(client, config, &agy_account).await;
     }
 
     info!("✅ Ciclo completado");
