@@ -1,0 +1,88 @@
+/**
+ * tokens.css — Sistema de colores y variables de diseño de AI KeyVault.
+ *
+ * Colores de marca:
+ *   Primario: #064E3B (seguridad, confianza — verde oscuro)
+ *   Secundario: #D6A84F (valor, exclusividad — dorado)
+ *
+ * IMPORTANTE: El dorado (#D6A84F) NO se usa como texto sobre fondo claro.
+ * Falla WCAG AA. Solo se usa para acentos, bordes, iconos y estados destacados.
+ */
+
+:root {
+  /* ── Escala de color primario (verde) ── */
+  --color-primary-50:  #ECFDF5;
+  --color-primary-100: #D1FAE5;
+  --color-primary-200: #A7F3D0;
+  --color-primary-300: #6EE7B7;
+  --color-primary-400: #34D399;
+  --color-primary-500: #10B981;
+  --color-primary-600: #059669;
+  --color-primary-700: #047857;
+  --color-primary-800: #065F46;
+  --color-primary-900: #064E3B;  /* ← color principal de marca */
+  --color-primary:     #064E3B;
+
+  /* ── Escala de color secundario (dorado) ── */
+  --color-secondary-50:  #FFFBEB;
+  --color-secondary-100: #FEF3C7;
+  --color-secondary-200: #FDE68A;
+  --color-secondary-300: #FCD34D;
+  --color-secondary-400: #FBBF24;
+  --color-secondary-500: #F59E0B;
+  --color-secondary-600: #D97706;
+  --color-secondary-700: #B45309;
+  --color-secondary-800: #92400E;
+  --color-secondary-900: #D6A84F;  /* ← color secundario de marca */
+  --color-secondary:     #D6A84F;
+
+  /* ── Estados de cuota ── */
+  --color-quota-ok:      #10B981;  /* verde — < 80% usado */
+  --color-quota-warn:    #D6A84F;  /* dorado — ≥ 80% usado */
+  --color-quota-crit:    #EF4444;  /* rojo   — ≥ 95% usado */
+
+  /* ── Neutros (tema claro) ── */
+  --color-bg:            #FFFFFF;
+  --color-bg-secondary:  #F9FAFB;
+  --color-bg-tertiary:   #F3F4F6;
+  --color-border:        #E5E7EB;
+  --color-border-subtle: #F3F4F6;
+  --color-text:          #111827;
+  --color-text-secondary:#6B7280;
+  --color-text-disabled: #9CA3AF;
+
+  /* ── Tipografía ── */
+  --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+
+  /* ── Espaciado ── */
+  --radius-sm:  4px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-2xl: 24px;
+
+  /* ── Sombras ── */
+  --shadow-sm:  0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md:  0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg:  0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+
+  /* ── Transiciones ── */
+  --transition-fast:   150ms ease;
+  --transition-normal: 250ms ease;
+}
+
+/* ── Tema oscuro ── */
+[data-theme="dark"] {
+  --color-bg:            #0F172A;
+  --color-bg-secondary:  #1E293B;
+  --color-bg-tertiary:   #334155;
+  --color-border:        #334155;
+  --color-border-subtle: #1E293B;
+  --color-text:          #F1F5F9;
+  --color-text-secondary:#94A3B8;
+  --color-text-disabled: #64748B;
+
+  /* En oscuro el primario se aclara ligeramente para contraste */
+  --color-primary: #10B981;
+}

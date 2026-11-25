@@ -1,6 +1,6 @@
 # Entorno de Desarrollo y Herramientas — AI KeyVault (Windows)
 
-**Fecha:** 2026-11-25 (actualizado al cierre de primera etapa)
+**Fecha:** 2026-11-25 (actualizado al inicio de segunda etapa — Fase 10)
 **Propósito:** Especificar de forma exhaustiva las herramientas, versiones, paquetes y variables de entorno necesarias para configurar y continuar el desarrollo de AI KeyVault en cualquier máquina Windows sin entrar en contradicciones ni romper dependencias.
 
 > [!NOTE]
@@ -159,15 +159,144 @@ curl.exe http://198.211.97.243:3010/health
 
 ## 9. Herramientas adicionales para Segunda Etapa (Tauri 2)
 
-> Instalar solo cuando se inicie la Fase 10 (app de escritorio).
+> Instalar cuando se inicie la Fase 10 (app de escritorio).
+> **Versiones verificadas en la PC de desarrollo:** pnpm 12.23.0, Tauri CLI 2.12.6, Node.js 24.18.0
+
+### 9.1 Dependencias base para Tauri
+
+| Herramienta | Versión mínima | Notas |
+|-------------|---------------|-------|
+| **Visual Studio Build Tools 2022** | 14.44+ | Cargar "Desarrollo de escritorio con C++". Incluye `cl.exe`, linker MSVC, CRT headers |
+| **WebView2 Runtime** | Incluido en Windows 11 / 10 20H2+ | Si no está: Tauri lo descarga automáticamente en instalador (`downloadBootstrapper`) |
+| **Node.js** | v20 LTS+ | Para el frontend React/Vite |
+| **pnpm** | 12+ | Gestor de paquetes — más rápido que npm para monorepos |
+| **Tauri CLI v2** | 2.x | Orquesta la compilación de Rust + Vite |
 
 ```powershell
-# Tauri CLI
+# Instalar Visual Studio Build Tools (si no está)
+# Descargar desde: https://visualstudio.microsoft.com/visual-cpp-build-tools/
+# Cargar: "Desarrollo de escritorio con C++"
+
+# Instalar Tauri CLI v2
 cargo install tauri-cli --version "^2"
 
-# Node packages para el frontend
+# Instalar pnpm
 npm install -g pnpm
 
-# Verificar Tauri
-cargo tauri --version
+# Verificar
+cargo tauri --version  # → tauri-cli 2.x.x
+pnpm --version         # → 12.x.x
+```
+
+### 9.2 Dual Toolchain Rust: GNU (backend) + MSVC (desktop)
+
+Este proyecto usa **dos toolchains Rust simultáneamente**:
+
+| Contexto | Toolchain | Target | Dónde se usa |
+|----------|-----------|--------|-------------|
+| Backend / Poller (Linux cross-compile) | `stable-x86_64-pc-windows-gnu` (**default**) | `x86_64-pc-windows-gnu` | Raíz del repo, `crates/`, `providers/`, `server/` |
+| App de escritorio Tauri | `stable-x86_64-pc-windows-msvc` | `x86_64-pc-windows-msvc` | `apps/desktop/src-tauri/` |
+
+La selección automática funciona así: `apps/desktop/src-tauri/rust-toolchain.toml` declara `channel = "stable-x86_64-pc-windows-msvc"`. Cuando `cargo tauri build` se ejecuta desde `apps/desktop/`, Cargo lee ese archivo y usa MSVC automáticamente. El resto del repo sigue con GNU.
+
+```powershell
+# Instalar el toolchain MSVC adicional (conservando GNU como default)
+rustup toolchain install stable-x86_64-pc-windows-msvc
+rustup target add x86_64-pc-windows-msvc --toolchain stable-x86_64-pc-windows-msvc
+
+# Verificar que GNU sigue siendo el default
+rustup show
+# "active toolchain: stable-x86_64-pc-windows-gnu"
+
+# Verificar que MSVC está instalado
+rustup toolchain list
+# stable-x86_64-pc-windows-gnu (active, default)
+# stable-x86_64-pc-windows-msvc
+```
+
+> [!IMPORTANT]
+> **NUNCA** cambiar el toolchain por defecto a MSVC. El backend usa la libc GNU para cross-compilar a Linux. Si se cambia el default, el CI de deploy-server fallará.
+
+### 9.3 Naming convention del sidecar
+
+Tauri exige que el sidecar esté en `src-tauri/binaries/` con el triple de target exacto como sufijo:
+
+```
+apps/desktop/src-tauri/binaries/ai-keyvault-poller-x86_64-pc-windows-msvc.exe
+```
+
+En `tauri.conf.json` se referencia SIN el sufijo:
+```json
+"externalBin": ["binaries/ai-keyvault-poller"]
+```
+
+Tauri agrega automáticamente `-x86_64-pc-windows-msvc` al buscar el binario.
+
+Script para compilar y copiar el sidecar:
+```powershell
+# Desde la raíz del repositorio
+cargo +stable-x86_64-pc-windows-msvc build --release --package ai-keyvault-poller --target x86_64-pc-windows-msvc
+.\.scripts\copy-sidecar.ps1
+```
+
+### 9.4 Workspace Cargo aislado
+
+`apps/desktop/src-tauri/Cargo.toml` declara su propio `[workspace]`. Esto significa:
+- Tiene su propio `Cargo.lock` independiente del workspace raíz
+- Tiene su propio `target/` (puede llegar a ser varios GB — normal)
+- Compilar desde la raíz con `cargo build` **no** compila la app de escritorio
+- Siempre compilar desde `apps/desktop/` con `pnpm tauri dev` o `pnpm tauri build`
+
+### 9.5 pnpm approve-builds (primera vez)
+
+En la primera instalación de pnpm en el proyecto, puede aparecer:
+```
+ERR_PNPM_IGNORED_BUILDS: esbuild@0.21.5 y esbuild@0.25.12 requieren aprobación
+```
+
+Solución (una vez, desde `apps/desktop/`):
+```powershell
+cd apps\desktop
+pnpm approve-builds
+pnpm install
+```
+
+### 9.6 Generar íconos desde branding
+
+Los íconos de Tauri se generan con un script PowerShell desde las imágenes de branding:
+```powershell
+# Desde la raíz del repositorio
+.\.scripts\gen-icons.ps1
+```
+
+Genera en `apps/desktop/src-tauri/icons/`:
+- `32x32.png`, `128x128.png`, `128x128@2x.png` — íconos de la app
+- `icon.ico` — ícono multi-tamaño para Windows
+- `tray-icon.png` — ícono monocromo para la bandeja del sistema
+
+### 9.7 Proceso completo de build de la app de escritorio
+
+```powershell
+# Desde la raíz del repositorio
+# Script guía completo:
+.\.scripts\build-fase10.ps1
+
+# O paso a paso:
+
+# 1. Frontend
+cd apps\desktop
+pnpm install
+pnpm typecheck     # Verificar TypeScript
+
+# 2. Compilar sidecar poller para MSVC
+cd ..\..
+cargo +stable-x86_64-pc-windows-msvc build --release --package ai-keyvault-poller --target x86_64-pc-windows-msvc
+.\.scripts\copy-sidecar.ps1
+
+# 3. Build Tauri (desde apps/desktop/)
+cd apps\desktop
+pnpm tauri build   # Genera .msi en src-tauri/target/release/bundle/msi/
+
+# 4. Dev mode (sin sidecar — para probar solo la UI)
+pnpm tauri dev
 ```

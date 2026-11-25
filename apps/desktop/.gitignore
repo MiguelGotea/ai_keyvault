@@ -1,0 +1,16 @@
+# Dependencias Node
+node_modules/
+
+# Build Vite
+dist/
+
+# Binario sidecar compilado — se genera localmente, no va al repo
+src-tauri/binaries/*.exe
+
+# Cargo build de este sub-workspace
+src-tauri/target/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

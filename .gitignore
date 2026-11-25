@@ -45,6 +45,10 @@ build/
 apps/desktop/src-tauri/target/
 apps/desktop/dist/
 apps/desktop/build/
+# Binario sidecar compilado — se genera localmente con .scripts/copy-sidecar.ps1
+# En CI se genera en el job tauri-build antes de empaquetar
+apps/desktop/src-tauri/binaries/*.exe
+apps/desktop/node_modules/
 
 # ─── Python ───
 __pycache__/

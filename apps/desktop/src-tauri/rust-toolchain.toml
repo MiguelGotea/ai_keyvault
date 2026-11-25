@@ -1,0 +1,6 @@
+[toolchain]
+# Fuerza el toolchain MSVC para compilar la app de escritorio Tauri.
+# IMPORTANTE: el backend (crates/ y providers/) usa GNU para cross-compile a Linux.
+# Este archivo solo aplica cuando cargo se invoca desde apps/desktop/src-tauri/.
+channel = "stable-x86_64-pc-windows-msvc"
+targets = ["x86_64-pc-windows-msvc"]

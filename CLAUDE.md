@@ -138,7 +138,7 @@ ai_keyvault_data/               ← repo secundario (solo snapshots cifrados)
 | **E** | ✅ | Switch log en servidor (`/api/switch`) |
 | **F** | 📄 | Codex token renewal: procedimiento manual |
 | **9** | ⏸ | Segunda etapa — proveedores adicionales |
-| **Desktop** | ⏳ | Segunda etapa — app Tauri 2 |
+| **Desktop** | 🔄 | Segunda etapa — Fase 10 scaffold completo, pendiente de primer build |
 
 **Regla:** cada fase termina con tests pasando, CI en verde y escaneo de secretos limpio.
 **Regla:** `PLAN.md` se actualiza al terminar cada fase.
@@ -171,6 +171,20 @@ ai_keyvault_data/               ← repo secundario (solo snapshots cifrados)
 3. `cargo test`
 4. `gitleaks detect` — falla el pipeline si encuentra secretos
 5. `cross build --target x86_64-unknown-linux-gnu` → deploy al VPS
+6. `tauri-build` (Windows) — compila la app de escritorio y sube el `.msi` como artifact
+
+---
+
+## 10. Reglas específicas de la app de escritorio (Fase 10+)
+
+- **`apps/desktop` usa su propio workspace Cargo** — compilar con `pnpm tauri dev` o `pnpm tauri build` desde `apps/desktop/`, **nunca** con `cargo build` desde la raíz.
+- **`apps/desktop/src-tauri/rust-toolchain.toml`** fuerza `stable-x86_64-pc-windows-msvc`. El toolchain GNU sigue siendo el default del sistema. **No cambiar el default a MSVC**.
+- **Todo HTTP al VPS va por comandos Rust** (`#[tauri::command]` con `reqwest`). **Sin `fetch()` externo en React**. La CSP en `tauri.conf.json` lo bloquea activamente.
+- **El sidecar** (`ai-keyvault-poller`) se empaqueta en el instalador. Nombre en disco: `ai-keyvault-poller-x86_64-pc-windows-msvc.exe`. En `tauri.conf.json` sin sufijo.
+- **El autobloqueo** solo bloquea la UI (hace `zeroize` del `VaultKey`). El poller sigue corriendo — lee credenciales del SO, no de la bóveda.
+- **IPC poller ↔ UI**: solo expone `poller_status`, `poller_pause`, `poller_resume`. Nunca credenciales descifradas.
+- **DPAPI** = opt-in, desactivado por defecto, con advertencia explícita.
+- **cmake** no está instalado en la PC de desarrollo. `rusqlite bundled` (en `providers/codex`) requiere cmake — NO incluir como dependencia directa del desktop hasta que cmake esté instalado. El desktop se comunica con el backend VPS via HTTP.
 
 ---
 

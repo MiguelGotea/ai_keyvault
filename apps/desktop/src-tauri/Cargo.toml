@@ -1,0 +1,50 @@
+[workspace]
+# workspace vacío — apps/desktop/src-tauri es su propio workspace Cargo.
+# Tiene su propio Cargo.lock y target/ independientes del workspace raíz.
+# Usa crates/core como path dependency cross-workspace.
+# IMPORTANTE: compilar siempre con `cargo tauri dev/build` desde apps/desktop/,
+# nunca con `cargo build` desde la raíz del repositorio.
+
+[package]
+name = "ai-keyvault-desktop"
+version = "0.1.0"
+description = "AI KeyVault — Bóveda y tablero para cuentas de agentes de IA"
+authors = ["MiguelGotea"]
+edition = "2021"
+rust-version = "1.80"
+
+# Tauri requiere este bloque
+[[bin]]
+name = "ai-keyvault-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-ico", "image-png"] }
+tauri-plugin-shell = "2"
+tauri-plugin-process = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "1"
+
+# NOTA: Las dependencias de crates/core, providers/agy y providers/codex
+# se añadirán en Fase 11-12 cuando se implementen los comandos de bóveda y switch.
+# Por ahora el desktop se comunica con el backend VPS via HTTP (Rust/reqwest),
+# sin necesitar SQLite (rusqlite bundled requiere cmake, que no está instalado).
+# Para el primer build de prueba (Fase 10) solo necesitamos Tauri + reqwest.
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
