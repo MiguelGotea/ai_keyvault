@@ -735,3 +735,219 @@ pub async fn get_pings_needs(
 
     Ok(Json(result))
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. Account Switcher — agy (Fase E)
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTA: El switcher de agy opera en la PC local donde está el Credential Manager.
+// El servidor solo registra el historial de switches (quién cambió de cuenta y cuándo).
+// La ejecución real de `AgyCredentialManager::write()` ocurre en el poller/CLI local,
+// no en el VPS.
+
+/// Registro de un cambio de cuenta (guardado en el servidor para historial).
+#[derive(Debug, Deserialize)]
+pub struct PostSwitchBody {
+    /// Email de la cuenta a la que se cambió.
+    pub to_account_id: String,
+    /// Email de la cuenta anterior (antes del switch).
+    pub from_account_id: Option<String>,
+    pub provider: Option<String>,
+    pub device_id: String,
+    /// Si el switch fue exitoso.
+    pub success: bool,
+    /// Razón de fallo si `success = false`.
+    pub reason: Option<String>,
+    pub switched_at: Option<String>,
+}
+
+/// `POST /api/switch` — registra un cambio de cuenta en el historial del servidor.
+pub async fn post_switch(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<PostSwitchBody>,
+) -> Result<Json<serde_json::Value>> {
+    let provider = body.provider.unwrap_or_else(|| "agy".to_string());
+    let switched_at = body
+        .switched_at
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+
+    sqlx::query(
+        r#"
+        INSERT INTO switch_log
+            (to_account_id, from_account_id, provider, device_id, success, reason, switched_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(&body.to_account_id)
+    .bind(&body.from_account_id)
+    .bind(&provider)
+    .bind(&body.device_id)
+    .bind(body.success as i64)
+    .bind(&body.reason)
+    .bind(&switched_at)
+    .execute(&state.db)
+    .await
+    .map_err(|e| ServerError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "to_account_id": body.to_account_id,
+        "switched_at": switched_at
+    })))
+}
+
+/// `GET /api/switch/history?limit=20` — historial de switches de cuenta.
+pub async fn get_switch_history(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    let limit: i64 = q.get("limit").and_then(|v| v.parse().ok()).unwrap_or(20);
+
+    let rows = sqlx::query(
+        r#"
+        SELECT id, to_account_id, from_account_id, provider, device_id,
+               success, reason, switched_at
+        FROM switch_log
+        ORDER BY switched_at DESC
+        LIMIT ?
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| ServerError::Internal(e.to_string()))?;
+
+    let result: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id":              r.get::<i64, _>("id"),
+                "to_account_id":   r.get::<String, _>("to_account_id"),
+                "from_account_id": r.get::<Option<String>, _>("from_account_id"),
+                "provider":        r.get::<String, _>("provider"),
+                "device_id":       r.get::<String, _>("device_id"),
+                "success":         r.get::<i64, _>("success") != 0,
+                "reason":          r.get::<Option<String>, _>("reason"),
+                "switched_at":     r.get::<String, _>("switched_at"),
+            })
+        })
+        .collect();
+
+    Ok(Json(result))
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. Alert Log — historial de alertas disparadas (Fase D)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `GET /api/alerts?account_id=...&limit=20` — historial de alertas del alerter.
+pub async fn get_alert_log(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    let limit: i64 = q.get("limit").and_then(|v| v.parse().ok()).unwrap_or(20);
+    let account_filter = q.get("account_id").cloned();
+
+    let rows = if let Some(ref account_id) = account_filter {
+        sqlx::query(
+            r#"
+            SELECT id, account_id, provider, pool, level, percent_used, reset_time,
+                   notified_toast, notified_ntfy, detected_at
+            FROM alert_log
+            WHERE account_id = ?
+            ORDER BY detected_at DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(account_id)
+        .bind(limit)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| ServerError::Internal(e.to_string()))?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT id, account_id, provider, pool, level, percent_used, reset_time,
+                   notified_toast, notified_ntfy, detected_at
+            FROM alert_log
+            ORDER BY detected_at DESC
+            LIMIT ?
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| ServerError::Internal(e.to_string()))?
+    };
+
+    let result: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id":             r.get::<i64, _>("id"),
+                "account_id":     r.get::<String, _>("account_id"),
+                "provider":       r.get::<String, _>("provider"),
+                "pool":           r.get::<String, _>("pool"),
+                "level":          r.get::<String, _>("level"),
+                "percent_used":   r.get::<f64, _>("percent_used"),
+                "reset_time":     r.get::<Option<String>, _>("reset_time"),
+                "notified_toast": r.get::<i64, _>("notified_toast") != 0,
+                "notified_ntfy":  r.get::<i64, _>("notified_ntfy") != 0,
+                "detected_at":    r.get::<String, _>("detected_at"),
+            })
+        })
+        .collect();
+
+    Ok(Json(result))
+}
+
+/// `POST /api/alerts` — el poller registra una alerta disparada.
+#[derive(Debug, Deserialize)]
+pub struct PostAlertBody {
+    pub account_id: String,
+    pub provider: Option<String>,
+    pub pool: String,
+    pub level: String,
+    pub percent_used: f64,
+    pub reset_time: Option<String>,
+    pub notified_toast: Option<bool>,
+    pub notified_ntfy: Option<bool>,
+    pub detected_at: Option<String>,
+}
+
+pub async fn post_alert(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<PostAlertBody>,
+) -> Result<Json<serde_json::Value>> {
+    let provider = body.provider.unwrap_or_else(|| "agy".to_string());
+    let detected_at = body
+        .detected_at
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+
+    sqlx::query(
+        r#"
+        INSERT INTO alert_log
+            (account_id, provider, pool, level, percent_used, reset_time,
+             notified_toast, notified_ntfy, detected_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(&body.account_id)
+    .bind(&provider)
+    .bind(&body.pool)
+    .bind(&body.level)
+    .bind(body.percent_used)
+    .bind(&body.reset_time)
+    .bind(body.notified_toast.unwrap_or(false) as i64)
+    .bind(body.notified_ntfy.unwrap_or(false) as i64)
+    .bind(&detected_at)
+    .execute(&state.db)
+    .await
+    .map_err(|e| ServerError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "account_id": body.account_id,
+        "level": body.level,
+        "detected_at": detected_at
+    })))
+}

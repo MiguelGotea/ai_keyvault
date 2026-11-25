@@ -67,7 +67,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 5. Tabla de sesiones de chat de agy (Fase 6)
+    // 5. Tabla de sesiones de chat (agy Fase 6, Codex Fase A)
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -87,7 +87,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    // 6. Tabla de pings (Fase 8) — historial de pings manuales y automáticos
+    // 6. Tabla de pings (Fase 8)
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS ping_log (
@@ -101,6 +101,44 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             message_sent TEXT NOT NULL DEFAULT 'k',
             is_manual    INTEGER NOT NULL DEFAULT 1,
             pinged_at    TEXT NOT NULL
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // 7. Tabla de historial de switches de cuenta (Fase E)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS switch_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            to_account_id   TEXT NOT NULL,
+            from_account_id TEXT,
+            provider        TEXT NOT NULL DEFAULT 'agy',
+            device_id       TEXT NOT NULL,
+            success         INTEGER NOT NULL DEFAULT 1,
+            reason          TEXT,
+            switched_at     TEXT NOT NULL
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // 8. Tabla de historial de alertas disparadas (Fase D)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS alert_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id      TEXT NOT NULL,
+            provider        TEXT NOT NULL DEFAULT 'agy',
+            pool            TEXT NOT NULL,
+            level           TEXT NOT NULL,
+            percent_used    REAL NOT NULL,
+            reset_time      TEXT,
+            notified_toast  INTEGER NOT NULL DEFAULT 0,
+            notified_ntfy   INTEGER NOT NULL DEFAULT 0,
+            detected_at     TEXT NOT NULL
         );
         "#,
     )

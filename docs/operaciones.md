@@ -903,3 +903,101 @@ curl.exe -X POST "http://198.211.97.243:3010/api/pings" `
   -H "Content-Type: application/json" `
   -d '{\"account_id\":\"batidospitayaclaude49@gmail.com\",\"device_id\":\"TABLET-R5MH20CH\",\"success\":true,\"duration_ms\":1200,\"is_manual\":true}'
 ```
+
+---
+
+## §17 — Fases A, C, D, E (2026-11-25)
+
+### C — Cooldown Experiment: H1 Confirmada
+
+Análisis con datos reales del VPS (quota_readings):
+
+| Cuenta | Pool | % usado | reset_time (UTC) | Interpretación |
+|--------|------|---------|-----------------|----------------|
+| claude49 | claude-gpt-weekly | 41% | 2026-12-02T04:40:42Z | H1: reloj arrancó con primer uso |
+| claude49 | gemini-weekly | 6% | 2026-12-02T04:54:05Z | H1: pool Gemini arrancó 13min después |
+| claude45 | claude_gpt | 47% | 2026-11-25T05:57:08Z | Ventana 5h activa |
+| claude45 | claude_gpt | 47% | 2026-12-02T00:57:08Z | Ventana semanal |
+
+**Conclusión:** H1 confirmada. El `reset_time` aparece solo cuando hay consumo y es
+independiente por pool. El ping automático tiene sentido para arrancar ventanas inactivas.
+
+Documento actualizado: `docs/research/04-experimento-cooldown.md`
+
+---
+
+### A — Codex chats
+
+**Archivos nuevos:**
+- `providers/codex/src/chats.rs` — `scan_codex_chats()` lee `~/.codex/state_5.sqlite`
+  tabla `threads`, extrae primer mensaje del usuario del JSON de messages, trunca a 120 chars.
+  5 unit tests. Si la BD no existe o Codex no está instalado → `Ok(vec![])` sin error.
+
+**Archivos modificados:**
+- `providers/codex/src/lib.rs` — `pub mod chats` + re-export `scan_codex_chats, CodexChat`
+- `providers/codex/Cargo.toml` — agrega `rusqlite = { version = "0.32", features = ["bundled"] }`
+- `crates/poller/src/chat_collector.rs` — agrega `collect_and_upload_codex()`, ambas funciones
+  comparten el helper `upload_chats()` privado
+
+**Integración en scheduler:**
+- Paso 6b en `run_cycle()`: busca snapshot de Codex, usa su `account_id` para subir chats
+
+---
+
+### D — Alert Log en servidor
+
+**Archivos nuevos en servidor:**
+- Tabla `alert_log` en `server/src/db.rs` (Fase D)
+- Endpoints `POST /api/alerts` y `GET /api/alerts?account_id=&limit=20` en `routes.rs`
+- Rutas en `main.rs`
+
+**Integración en scheduler:**
+- Función `upload_alerts_to_server()` al final de `run_cycle()`: evalúa umbral y sube las
+  alertas que superan WARN/CRIT como registro histórico al servidor.
+
+```powershell
+# Ver alertas registradas
+curl.exe "http://198.211.97.243:3010/api/alerts?limit=10"
+curl.exe "http://198.211.97.243:3010/api/alerts?account_id=batidospitayaclaude49%40gmail.com"
+```
+
+---
+
+### E/B — Account Switcher
+
+**Archivos nuevos en servidor:**
+- Tabla `switch_log` en `server/src/db.rs`
+- Endpoints `POST /api/switch` y `GET /api/switch/history?limit=20` en `routes.rs`
+- Rutas en `main.rs`
+
+**Flujo del switch (ocurre en el PC local, no en el VPS):**
+1. Usuario guarda credenciales de cuenta nueva en la bóveda (cifradas)
+2. Con un click: `AccountSwitcher::switch(&new_credential)` → escribe en Credential Manager
+3. Si falla: revierte a la credencial anterior automáticamente
+4. El resultado se sube al servidor vía `POST /api/switch` como historial
+
+```powershell
+# Ver historial de switches
+curl.exe "http://198.211.97.243:3010/api/switch/history"
+```
+
+> [!IMPORTANT]
+> El VPS **nunca** maneja credenciales — solo registra el historial de switches.
+> La ejecución de `AccountSwitcher::switch()` ocurre en el PC local del usuario.
+
+---
+
+### F — Codex token renewal
+
+**Estado: Documentado como procedimiento manual.**
+
+Cuando el token de Codex expira (`auth.json → tokens.expiry_time` vencido),
+el poller lo marca como inválido (`percent_used = 100%`). Para renovarlo:
+
+1. Abrir Codex en la terminal: `codex` (inicia sesión automática si hay sesión activa)
+2. O bien: `codex login` para forzar re-autenticación OAuth
+3. El nuevo `auth.json` se escribe automáticamente y el poller lo detecta en el siguiente ciclo
+
+La renovación automática requiere llamar al endpoint OAuth de OpenAI con el `refresh_token`,
+lo que implicaría manejar credenciales OAuth en el poller — riesgo de seguridad no justificado
+para esta etapa. Se pospone a la Segunda Etapa si se requiere.

@@ -7,9 +7,11 @@
 //! - Revertir un cambio de cuenta si la verificación falla.
 
 pub mod auth;
+pub mod chats;
 pub mod switcher;
 
 pub use auth::{CodexAuth, CodexAuthManager};
+pub use chats::{scan_codex_chats, CodexChat};
 pub use switcher::{CodexSwitchResult, CodexSwitcher};
 
 use thiserror::Error;

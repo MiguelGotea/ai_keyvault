@@ -128,8 +128,60 @@ async fn run_cycle(
         chat_collector::collect_and_upload(client, config, &agy_account).await;
     }
 
-    // 7. Ping automático (Fase 8) — solo si AKYV_PING_ENABLED=true y es la hora configurada
+    // 6b. Sincronizar metadatos de chats Codex (Fase A)
+    if let Some(codex_account) = snapshots
+        .iter()
+        .find(|s| s.provider == "codex")
+        .map(|s| s.account_id.clone())
+    {
+        chat_collector::collect_and_upload_codex(client, config, &codex_account).await;
+    }
+
+    // 7. Upload de alertas disparadas al servidor (Fase D)
+    //    Re-evalúa las readings para saber cuáles superaron el umbral
+    //    y las sube como registro histórico.
+    upload_alerts_to_server(client, config, &alert_readings).await;
+
+    // 8. Ping automático (Fase 8) — solo si AKYV_PING_ENABLED=true y es la hora configurada
     pinger::maybe_ping_auto(client, config, &snapshots).await;
 
     info!("✅ Ciclo completado");
+}
+
+/// Sube al servidor las alertas que superaron el umbral en este ciclo.
+/// Solo registra las que tienen nivel WARN o CRIT (percent_used >= warn_threshold).
+async fn upload_alerts_to_server(
+    client: &reqwest::Client,
+    config: &PollerConfig,
+    readings: &[ai_keyvault_alerter::AlertReading],
+) {
+    use ai_keyvault_alerter::AlertConfig;
+
+    let alert_cfg = AlertConfig::from_env();
+
+    for r in readings {
+        let level = if r.percent_used >= alert_cfg.crit_threshold {
+            "critical"
+        } else if r.percent_used >= alert_cfg.warn_threshold {
+            "warn"
+        } else {
+            continue;
+        };
+
+        let url = format!("{}/api/alerts", config.server_url);
+        let body = serde_json::json!({
+            "account_id":  r.account_id,
+            "provider":    r.provider,
+            "pool":        r.pool,
+            "level":       level,
+            "percent_used": r.percent_used,
+            "reset_time":  r.reset_time,
+            "notified_toast": false,
+            "notified_ntfy":  false,
+        });
+
+        if let Err(e) = client.post(&url).json(&body).send().await {
+            warn!(error = %e, "⚠️ Error al registrar alerta en servidor");
+        }
+    }
 }

@@ -382,12 +382,18 @@ crates/alerter/
 **Tiempo estimado:** 2 días
 
 ### Fase 9 — Proveedores adicionales
-**Contenido:**
-- Adaptadores: Claude, Gemini, OpenCode, Grok
+**Estado:** ⏸ Pospuesta — Segunda Etapa del proyecto
+
+**Contenido (segunda etapa):**
+- Adaptadores: Claude (Anthropic), Gemini (Google AI Studio), OpenCode, Grok
 - Pestaña de chat de consumo (chat normal vs agente)
 - Un adaptador nuevo sin cambios en el núcleo
 
-**Tiempo estimado:** 5-7 días
+> **Nota:** Los chats de ChatGPT.com y Gemini.com viven 100% en la nube de cada
+> proveedor y no tienen API pública de historial. Lo que sí se trackea son las
+> sesiones de los agentes de código (agy local y Codex local), no los chats web.
+
+**Tiempo estimado (segunda etapa):** 5-7 días
 
 ---
 

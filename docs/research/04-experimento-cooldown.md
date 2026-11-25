@@ -157,3 +157,24 @@ Basado en los resultados, el módulo de alertas tendrá una configuración por p
 ```
 
 Este objeto de configuración se puede cambiar **sin recompilar** la aplicación.
+
+
+---
+
+## Resultados Reales (2026-11-25) — H1 Confirmada
+
+| Proveedor | Pool | % usado | reset_time (UTC) | Interpretacion |
+|-----------|------|---------|----------------|----------------|
+| agy | claude-gpt-weekly | 41% | 2026-12-02T04:40:42Z | H1: reloj inicio con primer uso |
+| agy | gemini-weekly | 6% | 2026-12-02T04:54:05Z | H1: pool Gemini inicio 13min despues |
+| agy | claude-gpt (5h) | 47% | 2026-11-25T05:57:08Z | Ventana 5h activa independiente |
+| Codex | default | 0% | null | No expone reset_time |
+
+**Conclusion:** H1 confirmada con datos reales del VPS. El `reset_time` aparece solo
+cuando hay consumo y es independiente por pool. El ping automatico tiene sentido para
+arrancar ventanas inactivas (percent_used < 5%).
+
+**Config activa:**
+- `cooldown_hypothesis = "H1"`
+- `AKYV_PING_ENABLED = false` (default) — activar con `true` en .env del poller
+- `AKYV_PING_MAX_PCT = 5.0` — solo pingea cuentas con menos del 5% de uso
