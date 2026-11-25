@@ -5,7 +5,9 @@
 //! 2. **ntfy.sh** — HTTP POST al tópico configurado (opcional).
 
 use crate::models::AlertEvent;
-use tracing::{debug, warn};
+use tracing::debug;
+#[cfg(windows)]
+use tracing::warn;
 
 pub struct Notifier {
     ntfy_topic: Option<String>,
