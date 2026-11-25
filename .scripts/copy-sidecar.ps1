@@ -1,4 +1,4 @@
-﻿# Script para copiar el sidecar del poller al directorio correcto de Tauri.
+# Script para copiar el sidecar del poller al directorio correcto de Tauri.
 # Ejecutar desde la raíz del repositorio después de compilar el poller para MSVC.
 #
 # Uso:
