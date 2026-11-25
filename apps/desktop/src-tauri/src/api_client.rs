@@ -93,11 +93,12 @@ pub struct AlertRecord {
     pub account_id: String,
     pub provider: String,
     pub pool: String,
-    pub level: String, // "Warn" | "Crit"
+    pub level: String,       // "warn" | "crit" (minúscula en el VPS)
     pub percent_used: f64,
-    pub message: Option<String>,
-    pub device_id: String,
-    pub alerted_at: String,
+    pub reset_time: Option<String>,
+    pub notified_toast: bool,
+    pub notified_ntfy: bool,
+    pub detected_at: String, // nombre real del VPS (no alerted_at)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -136,9 +137,17 @@ pub struct DeviceRegistration {
     pub public_key_hex: String,
 }
 
+/// El VPS devuelve un array de objetos con todos los campos del ping.
+/// NO envuelve en { accounts_needing_ping: [...] }.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PingNeedsResponse {
-    pub accounts_needing_ping: Vec<String>,
+pub struct PingNeedItem {
+    pub account_id: String,
+    pub provider: String,
+    pub pool: String,
+    pub percent_used: f64,
+    pub needs_ping: bool,
+    pub last_read_at: String,
+    pub reset_time: Option<String>,
 }
 
 /// Payloads de peticiones POST

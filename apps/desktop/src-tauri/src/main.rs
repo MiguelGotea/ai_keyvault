@@ -60,6 +60,10 @@ fn main() {
             commands::vault::lock_vault,
             commands::vault::recover_vault,
             commands::vault::list_vault_accounts,
+            // Gestión de cuentas en la bóveda (Fase 13b)
+            commands::vault::add_vault_account,
+            commands::vault::delete_vault_account,
+            commands::vault::get_account_email,
             // Cuota y estadísticas (VPS)
             commands::api::get_quota,
             commands::api::get_stats_summary,

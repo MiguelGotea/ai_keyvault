@@ -87,6 +87,11 @@ impl Vault {
         &self.state
     }
 
+    /// Retorna una referencia mutable al estado cifrado (para modificaciones internas)
+    pub fn state_mut(&mut self) -> &mut EncryptedVaultState {
+        &mut self.state
+    }
+
     /// Indica si la bóveda está desbloqueada en memoria
     pub fn is_unlocked(&self) -> bool {
         self.unlocked_key.is_some()

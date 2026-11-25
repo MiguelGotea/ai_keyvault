@@ -1,35 +1,66 @@
-/** ChatsPage — Fase 15: Lista de chats activos del VPS. */
-import { useState } from "react";
+/** ChatsPage — Fase 15: Lista de chats activos del VPS por cuenta real. */
+import { useState, useMemo } from "react";
 import { useCommand } from "../hooks/useCommand";
-import type { ChatSession } from "../types/api";
+import type { ChatSession, PoolSummary } from "../types/api";
 import es from "../i18n/es.json";
 
-const ACCOUNTS = ["agy:test@agy", "codex:test@codex"]; // placeholder — Fase 15 usa vault
-
 export default function ChatsPage() {
-  const [selectedAccount, setSelectedAccount] = useState(ACCOUNTS[0]);
-  const [provider, accountId] = selectedAccount.split(":");
+  // Obtenemos la lista de cuentas únicas desde el endpoint de estadísticas
+  const stats = useCommand<PoolSummary[]>("get_stats_compare", { days: 7 });
 
-  const chats = useCommand<ChatSession[]>("get_chats", { accountId }, { enabled: !!accountId });
+  // Derivar lista única de cuentas (account_id + provider)
+  const accounts = useMemo(() => {
+    const seen = new Set<string>();
+    return (stats.data ?? []).filter(p => {
+      const key = `${p.provider}:${p.account_id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [stats.data]);
+
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const selected = accounts[selectedIdx];
+
+  const chats = useCommand<ChatSession[]>(
+    "get_chats",
+    { accountId: selected?.account_id ?? "" },
+    { enabled: !!selected?.account_id }
+  );
 
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <h2 style={styles.title}>{es.chats.titulo}</h2>
-        <select
-          style={styles.select}
-          value={selectedAccount}
-          onChange={e => setSelectedAccount(e.target.value)}
-        >
-          {ACCOUNTS.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
+        {accounts.length > 0 && (
+          <select
+            style={styles.select}
+            value={selectedIdx}
+            onChange={e => setSelectedIdx(Number(e.target.value))}
+          >
+            {accounts.map((a, i) => (
+              <option key={`${a.provider}:${a.account_id}`} value={i}>
+                {a.provider === "agy" ? "Antigravity" : "Codex"}: {a.account_id}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
       <p style={styles.subtitle}>{es.chats.subtitulo}</p>
+
+      {stats.loading && <div style={styles.hint}>Cargando cuentas…</div>}
+
+      {!stats.loading && accounts.length === 0 && (
+        <div style={styles.empty}>
+          <span style={{ fontSize: 36 }}>💬</span>
+          <p>No hay cuentas con datos aún. El poller recopila datos automáticamente.</p>
+        </div>
+      )}
 
       {chats.loading && <div style={styles.hint}>Cargando chats…</div>}
       {chats.error && <div style={styles.error}>{chats.error}</div>}
 
-      {chats.data?.length === 0 && (
+      {selected && chats.data?.length === 0 && (
         <div style={styles.empty}>
           <span style={{ fontSize: 36 }}>💬</span>
           <p>{es.chats.sin_chats}</p>
@@ -44,7 +75,7 @@ export default function ChatsPage() {
                 <div style={styles.chatTitle}>{chat.title ?? "(Sin título)"}</div>
                 <div style={styles.chatMeta}>
                   {es.chats.ultima_actividad}: {new Date(chat.updated_at).toLocaleString("es-MX")}
-                  {" · "}{provider}
+                  {" · "}{selected?.provider ?? chat.provider}
                   {chat.archived && <span style={styles.archived}> · Archivado</span>}
                 </div>
               </div>

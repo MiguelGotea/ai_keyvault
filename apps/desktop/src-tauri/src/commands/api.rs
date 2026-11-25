@@ -4,7 +4,7 @@
 //! Este módulo hace la petición HTTP desde Rust y devuelve JSON serializado.
 
 use crate::api_client::{
-    http_client, AlertRecord, ChatSession, DeviceRegistration, HeatmapCell, PingNeedsResponse,
+    http_client, AlertRecord, ChatSession, DeviceRegistration, HeatmapCell, PingNeedItem,
     PingRecord, PoolSummary, PostPingPayload, PostSwitchPayload, QuotaReading, SwitchRecord,
     SERVER_URL,
 };
@@ -219,20 +219,21 @@ pub async fn post_switch(
 
 // ── Pings ────────────────────────────────────────────────────────────────────
 
-/// Obtiene las cuentas que necesitan ping (cuota alta).
+/// Obtiene las cuentas que necesitan ping (cuota baja o sin uso).
 /// Mapea: GET /api/pings/needs?max_pct=N
+/// El VPS devuelve un array de objetos {account_id, provider, pool, percent_used, needs_ping, ...}
 #[command]
-pub async fn get_pings_needs(max_pct: f64) -> Result<Vec<String>, String> {
+pub async fn get_pings_needs(max_pct: f64) -> Result<Vec<PingNeedItem>, String> {
     let url = format!("{SERVER_URL}/api/pings/needs?max_pct={max_pct}");
-    let resp = http_client()
+    let items = http_client()
         .get(&url)
         .send()
         .await
         .map_err(req_err)?
-        .json::<PingNeedsResponse>()
+        .json::<Vec<PingNeedItem>>()
         .await
         .map_err(req_err)?;
-    Ok(resp.accounts_needing_ping)
+    Ok(items)
 }
 
 /// Obtiene el historial de pings de una cuenta.

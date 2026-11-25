@@ -9,6 +9,7 @@ import PingPage from "./pages/PingPage";
 import ChatsPage from "./pages/ChatsPage";
 import StatsPage from "./pages/StatsPage";
 import SettingsPage from "./pages/SettingsPage";
+import AccountsPage from "./pages/AccountsPage";
 import AppLayout from "./components/AppLayout";
 
 /**
@@ -53,6 +54,7 @@ function App() {
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/ping" element={<PingPage />} />
         <Route path="/chats" element={<ChatsPage />} />
+        <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/stats" element={<StatsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

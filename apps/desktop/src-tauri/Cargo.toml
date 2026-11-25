@@ -7,7 +7,7 @@
 
 [package]
 name = "ai-keyvault-desktop"
-version = "0.2.0"
+version = "0.2.1"
 description = "AI KeyVault — Bóveda y tablero para cuentas de agentes de IA"
 authors = ["MiguelGotea"]
 edition = "2021"
@@ -37,9 +37,25 @@ thiserror = "1"
 # Bóveda local — crate puro (sin sqlite, sin cmake requerido)
 ai-keyvault-core = { path = "../../../crates/core" }
 
+# Fase 13b: switch de cuenta — lectura de home dir para ~/.codex/auth.json
+dirs-next = "2"
+
+# UUID para delete_vault_account / comandos de bóveda
+uuid = { version = "1", features = ["v4"] }
+
+# chrono — fechas para state_mut().updated_at en vault commands
+chrono = { version = "0.4", features = ["serde"] }
+
 # NOTA FASE 12: providers/agy y providers/codex usan rusqlite bundled (requiere cmake).
 # Se agregarán en Fase 13 (switch de cuenta) solo si se instala cmake, o bien
 # se implementará una interfaz alternativa que lea las credenciales sin el provider crate.
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Windows Credential Manager — para switch real de credenciales agy (Fase 13b)
+windows-sys = { version = "0.52", features = [
+  "Win32_Security_Credentials",
+  "Win32_Foundation",
+] }
 
 [profile.dev]
 incremental = true
@@ -49,3 +65,4 @@ opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+

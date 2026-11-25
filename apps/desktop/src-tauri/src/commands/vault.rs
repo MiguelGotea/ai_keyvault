@@ -10,6 +10,7 @@
 //! - La contraseña maestra NUNCA se guarda — se deriva con Argon2id en cada desbloqueo.
 
 use ai_keyvault_core::vault::{EncryptedVaultState, Vault};
+use chrono;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -243,6 +244,93 @@ pub async fn recover_vault(
             error: Some(format!("Recuperación fallida: {e}")),
             accounts_count: 0,
         }),
+    }
+}
+
+// ── Nuevos comandos: agregar / eliminar / leer cuentas de la bóveda ─────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AddAccountResult {
+    pub success: bool,
+    pub id: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Agrega una cuenta a la bóveda local cifrada.
+#[command]
+pub async fn add_vault_account(
+    app: AppHandle,
+    vault_state: State<'_, VaultState>,
+    provider: String,
+    alias: String,
+    email: String,
+    password: Option<String>,
+    tokens_json: Option<String>,
+    notes: Option<String>,
+) -> Result<AddAccountResult, String> {
+    let mut guard = vault_state.vault.lock().unwrap();
+    match &mut *guard {
+        Some(vault) if vault.is_unlocked() => {
+            match vault.add_account(
+                &provider,
+                &alias,
+                &email,
+                password.as_deref(),
+                tokens_json.as_deref(),
+                notes.as_deref(),
+            ) {
+                Ok(uuid) => {
+                    save_vault_state(&app, vault.state())?;
+                    Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
+                }
+                Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
+            }
+        }
+        Some(_) => Err("La bóveda está bloqueada".into()),
+        None => Err("No hay bóveda cargada".into()),
+    }
+}
+
+/// Elimina una cuenta de la bóveda por su UUID.
+#[command]
+pub async fn delete_vault_account(
+    app: AppHandle,
+    vault_state: State<'_, VaultState>,
+    account_uuid: String,
+) -> Result<bool, String> {
+    use uuid::Uuid;
+    let uid = Uuid::parse_str(&account_uuid).map_err(|_| "UUID inválido".to_string())?;
+    let mut guard = vault_state.vault.lock().unwrap();
+    match &mut *guard {
+        Some(vault) if vault.is_unlocked() => {
+            let before = vault.state().accounts.len();
+            vault.state_mut().accounts.retain(|a| a.id != uid);
+            vault.state_mut().updated_at = chrono::Utc::now();
+            let removed = vault.state().accounts.len() < before;
+            if removed {
+                save_vault_state(&app, vault.state())?;
+            }
+            Ok(removed)
+        }
+        Some(_) => Err("La bóveda está bloqueada".into()),
+        None => Err("No hay bóveda cargada".into()),
+    }
+}
+
+/// Descifra y devuelve el email de una cuenta (para mostrar en UI).
+#[command]
+pub async fn get_account_email(
+    vault_state: State<'_, VaultState>,
+    account_uuid: String,
+) -> Result<String, String> {
+    use uuid::Uuid;
+    let uid = Uuid::parse_str(&account_uuid).map_err(|_| "UUID inválido".to_string())?;
+    let guard = vault_state.vault.lock().unwrap();
+    match &*guard {
+        Some(vault) if vault.is_unlocked() => vault
+            .decrypt_account_email(uid)
+            .map_err(|e| e.to_string()),
+        _ => Err("Bóveda bloqueada o no cargada".into()),
     }
 }
 

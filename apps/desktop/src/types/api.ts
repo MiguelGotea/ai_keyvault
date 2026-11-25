@@ -97,7 +97,7 @@ export interface ChatSession {
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
 
-export type AlertLevel = "Warn" | "Crit";
+export type AlertLevel = "warn" | "crit";  // minúscula en el VPS
 
 export interface AlertRecord {
   id: number;
@@ -106,9 +106,10 @@ export interface AlertRecord {
   pool: string;
   level: AlertLevel;
   percent_used: number;
-  message: string | null;
-  device_id: string;
-  alerted_at: string;
+  reset_time: string | null;
+  notified_toast: boolean;
+  notified_ntfy: boolean;
+  detected_at: string;  // campo real del VPS (no alerted_at)
 }
 
 // ── Switch ───────────────────────────────────────────────────────────────────
@@ -125,6 +126,16 @@ export interface SwitchRecord {
 }
 
 // ── Pings ────────────────────────────────────────────────────────────────────
+
+export interface PingNeedItem {
+  account_id: string;
+  provider: string;
+  pool: string;
+  percent_used: number;
+  needs_ping: boolean;
+  last_read_at: string;
+  reset_time: string | null;
+}
 
 export interface PingRecord {
   id: number;

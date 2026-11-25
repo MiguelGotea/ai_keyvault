@@ -14,7 +14,7 @@ use crate::api_client::{http_client, SERVER_URL};
 use crate::commands::vault::VaultState;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{command, AppHandle, Emitter, Manager, State};
+use tauri::{command, AppHandle, Emitter, State};
 use tokio::time::{sleep, Duration};
 use tracing::info;
 

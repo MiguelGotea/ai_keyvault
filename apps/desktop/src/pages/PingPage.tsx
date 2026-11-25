@@ -2,29 +2,32 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useState } from "react";
 import { useCommand } from "../hooks/useCommand";
+import type { PingNeedItem } from "../types/api";
 import es from "../i18n/es.json";
 
 export default function PingPage() {
   const [pinging, setPinging] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, string>>({});
 
-  const needs = useCommand<string[]>("get_pings_needs", { maxPct: 80 });
+  // El comando get_pings_needs retorna Vec<PingNeedItem> (array de objetos completos)
+  const needs = useCommand<PingNeedItem[]>("get_pings_needs", { maxPct: 80 });
 
-  async function doPing(accountId: string) {
-    setPinging(accountId);
+  async function doPing(item: PingNeedItem) {
+    const key = `${item.provider}:${item.account_id}:${item.pool}`;
+    setPinging(key);
     try {
       await invoke("post_ping", {
-        accountId,
-        provider: "agy",
+        accountId: item.account_id,
+        provider: item.provider,
         deviceId: "desktop-dev",
         success: true,
         error: null,
         durationMs: null,
         isManual: true,
       });
-      setResults(r => ({ ...r, [accountId]: "✅ Ping enviado" }));
+      setResults(r => ({ ...r, [key]: "✅ Ping enviado" }));
     } catch (e) {
-      setResults(r => ({ ...r, [accountId]: `❌ ${String(e)}` }));
+      setResults(r => ({ ...r, [key]: `❌ ${String(e)}` }));
     } finally {
       setPinging(null);
     }
@@ -37,8 +40,9 @@ export default function PingPage() {
       <div style={styles.warningBox}>⚠️ {es.ping.advertencia}</div>
 
       {needs.loading && <div style={styles.hint}>Verificando cuentas…</div>}
+      {needs.error && <div style={styles.error}>{needs.error}</div>}
 
-      {needs.data?.length === 0 && (
+      {!needs.loading && needs.data?.length === 0 && (
         <div style={styles.empty}>
           <span style={{ fontSize: 36 }}>✅</span>
           <p>{es.ping.sin_cuentas}</p>
@@ -47,25 +51,38 @@ export default function PingPage() {
 
       {needs.data && needs.data.length > 0 && (
         <div style={styles.list}>
-          {needs.data.map(accountId => (
-            <div key={accountId} style={styles.row}>
-              <span style={styles.accountId}>{accountId}</span>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                {results[accountId] && (
-                  <span style={{ fontSize: 12, color: results[accountId].startsWith("✅") ? "var(--color-success)" : "var(--color-danger)" }}>
-                    {results[accountId]}
+          {needs.data.map(item => {
+            const key = `${item.provider}:${item.account_id}:${item.pool}`;
+            return (
+              <div key={key} style={styles.row}>
+                <div style={styles.info}>
+                  <span style={styles.accountId}>{item.account_id}</span>
+                  <span style={styles.meta}>
+                    {item.provider} · {item.pool} · {item.percent_used.toFixed(1)}% usado
                   </span>
-                )}
-                <button
-                  style={styles.pingBtn}
-                  onClick={() => doPing(accountId)}
-                  disabled={pinging === accountId}
-                >
-                  {pinging === accountId ? "Enviando…" : es.ping.boton_ping}
-                </button>
+                  {item.reset_time && (
+                    <span style={styles.meta}>
+                      Reinicia: {new Date(item.reset_time).toLocaleString("es-MX")}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  {results[key] && (
+                    <span style={{ fontSize: 12, color: results[key].startsWith("✅") ? "var(--color-success)" : "var(--color-danger)" }}>
+                      {results[key]}
+                    </span>
+                  )}
+                  <button
+                    style={styles.pingBtn}
+                    onClick={() => doPing(item)}
+                    disabled={pinging === key}
+                  >
+                    {pinging === key ? "Enviando…" : es.ping.boton_ping}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -78,9 +95,12 @@ const styles: Record<string, React.CSSProperties> = {
   subtitle: { fontSize: 13, color: "var(--color-text-secondary)", margin: 0 },
   warningBox: { padding: "10px 14px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "var(--radius-md)", fontSize: 12, color: "#92400E" },
   hint: { color: "var(--color-text-secondary)", fontSize: 13 },
+  error: { padding: "10px 14px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", fontSize: 12, color: "#991B1B" },
   empty: { display: "flex", flexDirection: "column", alignItems: "center", gap: 12, padding: 48, color: "var(--color-text-secondary)", textAlign: "center" },
   list: { display: "flex", flexDirection: "column", gap: 8 },
-  row: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)" },
-  accountId: { fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text)" },
+  row: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", gap: 12, flexWrap: "wrap" as const },
+  info: { display: "flex", flexDirection: "column" as const, gap: 3 },
+  accountId: { fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text)", fontWeight: 600 },
+  meta: { fontSize: 11, color: "var(--color-text-disabled)" },
   pingBtn: { padding: "7px 14px", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600 },
 };

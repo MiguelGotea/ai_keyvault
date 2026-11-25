@@ -32,25 +32,29 @@ export default function AlertsPage() {
               key={alert.id}
               style={{
                 ...styles.alertCard,
-                borderLeft: `4px solid ${alert.level === "Crit" ? "var(--color-danger)" : "var(--color-warning)"}`,
+                borderLeft: `4px solid ${alert.level === "crit" ? "var(--color-danger)" : "var(--color-warning)"}`,
               }}
             >
               <div style={styles.alertTop}>
                 <span style={{
                   ...styles.levelBadge,
-                  background: alert.level === "Crit" ? "var(--color-danger)" : "var(--color-warning)",
+                  background: alert.level === "crit" ? "var(--color-danger)" : "var(--color-warning)",
                 }}>
-                  {alert.level === "Crit" ? es.alertas.nivel_crit : es.alertas.nivel_warn}
+                  {alert.level === "crit" ? es.alertas.nivel_crit : es.alertas.nivel_warn}
                 </span>
                 <span style={styles.alertProvider}>{alert.provider} / {alert.pool}</span>
                 <span style={styles.alertTime}>
-                  {new Date(alert.alerted_at).toLocaleString("es-MX")}
+                  {new Date(alert.detected_at).toLocaleString("es-MX")}
                 </span>
               </div>
               <div style={styles.alertBody}>
                 <strong>{alert.account_id}</strong>
                 {" — "}{alert.percent_used.toFixed(1)}% usado
-                {alert.message && <span style={styles.alertMsg}> · {alert.message}</span>}
+                {alert.reset_time && (
+                  <span style={styles.alertMsg}> · Reinicia: {new Date(alert.reset_time).toLocaleString("es-MX")}</span>
+                )}
+                {alert.notified_toast && <span style={styles.notifBadge}>🔔 Toast</span>}
+                {alert.notified_ntfy && <span style={styles.notifBadge}>📲 Ntfy</span>}
               </div>
             </div>
           ))}
@@ -74,6 +78,7 @@ const styles: Record<string, React.CSSProperties> = {
   levelBadge: { fontSize: 10, fontWeight: 700, color: "#fff", padding: "2px 7px", borderRadius: 999 },
   alertProvider: { fontSize: 12, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" },
   alertTime: { fontSize: 11, color: "var(--color-text-disabled)", marginLeft: "auto" },
-  alertBody: { fontSize: 13, color: "var(--color-text)" },
+  alertBody: { fontSize: 13, color: "var(--color-text)", display: "flex", flexWrap: "wrap" as const, gap: 6, alignItems: "center" },
   alertMsg: { color: "var(--color-text-secondary)", fontSize: 12 },
+  notifBadge: { fontSize: 10, padding: "1px 6px", background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: 999 },
 };
