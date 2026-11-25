@@ -70,6 +70,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/api/chats", post(routes::post_chat_sessions))
         .route("/api/chats/:account_id", get(routes::get_chat_sessions))
+        .route("/api/pings", post(routes::post_ping))
+        .route("/api/pings/needs", get(routes::get_pings_needs))
+        .route("/api/pings/:account_id", get(routes::get_pings))
         .route("/api/stats/compare", get(routes::get_stats_compare))
         .route(
             "/api/stats/summary/:account_id",

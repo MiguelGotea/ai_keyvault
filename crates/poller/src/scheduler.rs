@@ -7,7 +7,7 @@
 //! 4. Si adquiere el lease, sube las lecturas.
 //! 5. Evalúa umbrales y dispara alertas (toast + ntfy.sh) si corresponde.
 
-use crate::{chat_collector, collector, lease, uploader, PollerConfig};
+use crate::{chat_collector, collector, lease, pinger, uploader, PollerConfig};
 use ai_keyvault_alerter::{AlertConfig, AlertManager, AlertReading};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -127,6 +127,9 @@ async fn run_cycle(
     {
         chat_collector::collect_and_upload(client, config, &agy_account).await;
     }
+
+    // 7. Ping automático (Fase 8) — solo si AKYV_PING_ENABLED=true y es la hora configurada
+    pinger::maybe_ping_auto(client, config, &snapshots).await;
 
     info!("✅ Ciclo completado");
 }

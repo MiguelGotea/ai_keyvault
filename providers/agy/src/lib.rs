@@ -11,12 +11,14 @@
 
 pub mod chats;
 pub mod credential;
+pub mod ping;
 pub mod quota;
 pub mod switcher;
 
 // Re-exportaciones públicas
 pub use chats::{brain_dir, scan_chats, AgyChat};
 pub use credential::{AgyCredential, AgyCredentialManager};
+pub use ping::{execute_ping, needs_ping, PingConfig, PingResult};
 pub use quota::{parse_usage_output, AgyPool, AgyQuotaReading};
 pub use switcher::{AccountSwitcher, SwitchResult};
 

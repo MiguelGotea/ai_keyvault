@@ -575,3 +575,171 @@ pub async fn get_stats_export(
         _ => Ok(Json(samples).into_response()),
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 8. Ping (Fase 8)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Cuerpo de `POST /api/pings` — registro de ping enviado por el poller o manualmente.
+#[derive(Debug, Deserialize)]
+pub struct PostPingBody {
+    pub account_id: String,
+    pub provider: Option<String>,
+    pub device_id: String,
+    pub success: bool,
+    pub error: Option<String>,
+    pub duration_ms: Option<i64>,
+    pub message_sent: Option<String>,
+    pub is_manual: Option<bool>,
+    pub pinged_at: Option<String>,
+}
+
+/// Registro de ping devuelto por el servidor.
+#[derive(Debug, Serialize)]
+pub struct PingEntry {
+    pub id: i64,
+    pub account_id: String,
+    pub provider: String,
+    pub device_id: String,
+    pub success: bool,
+    pub error: Option<String>,
+    pub duration_ms: i64,
+    pub message_sent: String,
+    pub is_manual: bool,
+    pub pinged_at: String,
+}
+
+/// `POST /api/pings` — registra un ping (manual o automático).
+pub async fn post_ping(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<PostPingBody>,
+) -> Result<Json<serde_json::Value>> {
+    let provider = body.provider.unwrap_or_else(|| "agy".to_string());
+    let duration_ms = body.duration_ms.unwrap_or(0);
+    let message_sent = body.message_sent.unwrap_or_else(|| "k".to_string());
+    let is_manual = body.is_manual.unwrap_or(true);
+    let pinged_at = body
+        .pinged_at
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+
+    sqlx::query(
+        r#"
+        INSERT INTO ping_log
+            (account_id, provider, device_id, success, error, duration_ms,
+             message_sent, is_manual, pinged_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(&body.account_id)
+    .bind(&provider)
+    .bind(&body.device_id)
+    .bind(body.success as i64)
+    .bind(&body.error)
+    .bind(duration_ms)
+    .bind(&message_sent)
+    .bind(is_manual as i64)
+    .bind(&pinged_at)
+    .execute(&state.db)
+    .await
+    .map_err(|e| ServerError::Internal(e.to_string()))?;
+
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "account_id": body.account_id,
+        "pinged_at": pinged_at
+    })))
+}
+
+/// `GET /api/pings/:account_id?limit=20` — historial de pings de una cuenta.
+pub async fn get_pings(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<String>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Vec<PingEntry>>> {
+    let limit: i64 = q
+        .get("limit")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20);
+
+    let rows = sqlx::query(
+        r#"
+        SELECT id, account_id, provider, device_id, success, error,
+               duration_ms, message_sent, is_manual, pinged_at
+        FROM ping_log
+        WHERE account_id = ?
+        ORDER BY pinged_at DESC
+        LIMIT ?
+        "#,
+    )
+    .bind(&account_id)
+    .bind(limit)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| ServerError::Internal(e.to_string()))?;
+
+    let entries: Vec<PingEntry> = rows
+        .iter()
+        .map(|r| PingEntry {
+            id: r.get::<i64, _>("id"),
+            account_id: r.get::<String, _>("account_id"),
+            provider: r.get::<String, _>("provider"),
+            device_id: r.get::<String, _>("device_id"),
+            success: r.get::<i64, _>("success") != 0,
+            error: r.get::<Option<String>, _>("error"),
+            duration_ms: r.get::<i64, _>("duration_ms"),
+            message_sent: r.get::<String, _>("message_sent"),
+            is_manual: r.get::<i64, _>("is_manual") != 0,
+            pinged_at: r.get::<String, _>("pinged_at"),
+        })
+        .collect();
+
+    Ok(Json(entries))
+}
+
+/// `GET /api/pings/needs` — cuentas que necesitan ping (percent_used < umbral).
+///
+/// Devuelve la última lectura por cuenta/pool donde el uso está por debajo
+/// del umbral configurable (default 5%). Query param: `?max_pct=5`.
+pub async fn get_pings_needs(
+    State(state): State<Arc<AppState>>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<Vec<serde_json::Value>>> {
+    let max_pct: f64 = q
+        .get("max_pct")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5.0);
+
+    // Última lectura por (account_id, provider, pool) con percent_used < umbral
+    let rows = sqlx::query(
+        r#"
+        SELECT account_id, provider, pool,
+               percent_used, reset_time, MAX(read_at) AS last_read_at
+        FROM quota_readings
+        WHERE account_id NOT LIKE 'agy-unknown%'
+          AND percent_used < ?
+        GROUP BY account_id, provider, pool
+        ORDER BY account_id, pool
+        "#,
+    )
+    .bind(max_pct)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| ServerError::Internal(e.to_string()))?;
+
+    let result: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "account_id":   r.get::<String, _>("account_id"),
+                "provider":     r.get::<String, _>("provider"),
+                "pool":         r.get::<String, _>("pool"),
+                "percent_used": r.get::<f64, _>("percent_used"),
+                "reset_time":   r.get::<Option<String>, _>("reset_time"),
+                "last_read_at": r.get::<String, _>("last_read_at"),
+                "needs_ping":   true
+            })
+        })
+        .collect();
+
+    Ok(Json(result))
+}

@@ -362,11 +362,22 @@ crates/alerter/
 **Tiempo estimado:** 3 días
 
 ### Fase 8 — Ping mínimo
-**Contenido:**
-- Pantalla "Cuentas que necesitan ping"
-- Ping manual con botón por cuenta
-- Ping automático opcional (con guardas)
-- Configuración adaptada a hipótesis confirmada
+**Estado:** ✅ Completada (2026-11-25)
+
+**Implementado:**
+- `providers/agy/src/ping.rs` — `execute_ping()`, `needs_ping()`, `PingConfig` (5 unit tests)
+- `crates/poller/src/pinger.rs` — `maybe_ping_auto()` integrado en el scheduler
+- `server/src/db.rs` — tabla `ping_log` (id, account_id, provider, device_id, success, error, duration_ms, message_sent, is_manual, pinged_at)
+- `server/src/routes.rs` — 3 endpoints REST:
+  - `POST /api/pings` — registra ping (manual o automático)
+  - `GET  /api/pings/:account_id?limit=20` — historial de pings
+  - `GET  /api/pings/needs?max_pct=5` — cuentas que necesitan ping
+- `server/src/main.rs` — 3 rutas nuevas
+
+**Hipótesis de cooldown:**
+- Se opera bajo H1 (reloj empieza con el primer uso) — preliminarmente confirmada
+- Ping automático habilitado con `AKYV_PING_ENABLED=true`
+- Guardas: horario configurable (`AKYV_PING_HOUR=8`), límite diario (`AKYV_PING_MAX_DAILY=2`), umbral de uso (`AKYV_PING_MAX_PCT=5`)
 
 **Tiempo estimado:** 2 días
 

@@ -585,3 +585,321 @@ curl "http://198.211.97.243:3010/api/stats/compare"
 curl "http://198.211.97.243:3010/api/stats/summary/batidospitayaclaude49%40gmail.com"
 curl "http://198.211.97.243:3010/api/stats/export/batidospitayaclaude49%40gmail.com?format=csv"
 ```
+
+---
+
+## §15 — Resumen completo de cambios: Fases 4–7 (2026-11-22 → 2026-11-25)
+
+### Estado del proyecto al 2026-11-25
+
+| Fase | Estado | Fecha | Descripción |
+|------|--------|-------|-------------|
+| 0 — Investigación | ✅ | 2026-11-22 | Exploración local, ADRs, PLAN.md |
+| 1 — Core seguro | ✅ | 2026-11-22 | Argon2id, XChaCha20-Poly1305, Vault |
+| 2 — Servidor VPS | ✅ | 2026-11-22 | axum, SQLite, systemd, CI/CD |
+| 3 — Providers | ✅ | 2026-11-22 | agy Credential Manager + Codex auth.json |
+| 4 — Poller de cuota | ✅ | 2026-11-25 | Ciclo periódico, lease anti-dup, parser agy |
+| 5 — Alerter | ✅ | 2026-11-25 | Detector umbrales, cooldown, toast, ntfy.sh |
+| 6 — Chat sessions agy | ✅ | 2026-11-25 | Scanner brain/, upsert REST, chat_collector |
+| 7 — Estadísticas | ✅ | 2026-11-25 | Burn rate, heatmap, informe semanal, CSV |
+| 8 — Ping mínimo | 🔜 | — | Próxima fase |
+
+---
+
+### VPS `198.211.97.243` — Cambios manuales aplicados
+
+#### Estructura de archivos en producción
+```
+/opt/ai-keyvault/
+  bin/
+    ai-keyvault-server      ← binario compilado por CI (cross-rs linux/x86_64)
+  config/
+    .env                    ← DATABASE_URL, PORT, SERVER_MASTER_KEY, LOG_LEVEL
+  data/
+    keyvault.db             ← SQLite (tablas: devices, vault_snapshots, quota_readings,
+                                       quota_leases, chat_sessions)
+  logs/                     ← logs de systemd (via journald)
+  backups/                  ← backups manuales del DB (si aplica)
+```
+
+#### Tablas SQLite en producción (al 2026-11-25)
+
+| Tabla | Creada en | Propósito |
+|-------|-----------|-----------|
+| `devices` | Fase 2 | Dispositivos registrados |
+| `vault_snapshots` | Fase 2 | Blobs cifrados de bóveda (conocimiento cero) |
+| `quota_readings` | Fase 3 | Serie temporal de lecturas de cuota |
+| `quota_leases` | Fase 4 | Leases anti-duplicado por cuenta |
+| `chat_sessions` | Fase 6 | Metadatos de chats agy |
+
+> [!NOTE]
+> Las tablas se crean automáticamente al arrancar el servidor (`db::init_db`). No se requieren migraciones manuales.
+
+#### Servicio systemd
+```ini
+# /etc/systemd/system/ai-keyvault.service
+[Unit]
+Description=AI KeyVault Server
+After=network.target
+
+[Service]
+User=ai-keyvault-deploy
+WorkingDirectory=/opt/ai-keyvault
+EnvironmentFile=/opt/ai-keyvault/config/.env
+ExecStart=/opt/ai-keyvault/bin/ai-keyvault-server
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Comandos de gestión:
+```bash
+systemctl status ai-keyvault
+systemctl restart ai-keyvault
+journalctl -u ai-keyvault -f
+```
+
+#### Puerto y red
+- Puerto: **3010** (acceso directo IP, sin Caddy/proxy)
+- IP: `198.211.97.243`
+- Caddy instalado pero **no configurado** (sin subdominio asignado aún)
+- CORS: `allow_origin(Any)` — para desarrollo
+
+#### Deploy CI/CD
+- GitHub Actions: `.github/workflows/deploy.yml`
+- Trigger: push a `main`
+- Pipeline: `cargo fmt --check` → `cargo test` → `cargo clippy` → `cross build --release --target x86_64-unknown-linux-gnu` → `scp` al VPS → `systemctl restart ai-keyvault`
+
+---
+
+### Cambios en código (Fases 4–7)
+
+#### Fase 4 — Poller de cuota
+
+**Nuevos archivos:**
+- `crates/poller/src/lib.rs` — PollerConfig, QuotaSnapshot, módulos
+- `crates/poller/src/collector.rs` — llama a agy y codex providers
+- `crates/poller/src/scheduler.rs` — ciclo tokio con ticker
+- `crates/poller/src/uploader.rs` — POST `/api/quota/readings`
+- `crates/poller/src/lease.rs` — adquiere lease antes de subir
+- `crates/poller/src/models.rs` — QuotaSnapshot, PollerConfig
+- `crates/poller/src/main.rs` — binario `ai-keyvault-poller`
+
+**Modificados:**
+- `providers/agy/src/quota.rs` — parser reescrito para formato real de `agy --print "/usage"`:
+  ```
+  Gemini Models          Weekly Limit Remaining     100%  2026-12-01 19:19 CST
+  Claude and GPT models  Weekly Limit Remaining      49%  2026-12-01 18:57 CST
+  Claude and GPT models  Five Hour Limit Remaining   49%  2026-11-24 23:57 CST
+  ```
+  Pool names: `gemini-weekly`, `claude-gpt-weekly`, `claude-gpt-5h`
+
+**Lecciones aprendidas (Fase 4):**
+- `agy --print "/usage"` (no `agy /usage`)
+- `AgyCredentialManager::read()` es función asociada, no método de instancia
+- Pool `claude-gpt-5h` aparece solo cuando hay límite de 5h activo
+- `@` en URLs de curl requiere `%40` en Windows
+
+---
+
+#### Fase 5 — Alerter
+
+**Nuevos archivos:**
+- `crates/alerter/src/lib.rs` — `AlertManager::check_and_notify(&[AlertReading])`
+- `crates/alerter/src/models.rs` — `AlertConfig`, `AlertLevel`, `AlertEvent`, `AlertReading`
+- `crates/alerter/src/detector.rs` — `detect_alerts` con 4 unit tests
+- `crates/alerter/src/cooldown.rs` — `CooldownStore` (JSON en `~/.ai-keyvault/alert-state.json`)
+- `crates/alerter/src/notifier.rs` — Toast via PowerShell `NotifyIcon` + ntfy.sh HTTP POST
+- `crates/alerter/tests/alerter_test.rs` — 9 integration tests (con `Mutex` para env vars)
+
+**Dependencia circular resuelta:**
+```
+❌ alerter → ai_keyvault_poller → alerter
+✅ alerter define AlertReading propio
+   poller convierte QuotaSnapshot → AlertReading antes de llamar al alerter
+```
+
+**Variables de entorno del alerter:**
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `AKYV_WARN_THRESHOLD` | `80` | % para alerta WARN |
+| `AKYV_CRIT_THRESHOLD` | `95` | % para alerta CRIT |
+| `AKYV_COOLDOWN_MINUTES` | `60` | Minutos entre alertas repetidas |
+| `AKYV_TOAST_ENABLED` | `true` | `"false"` desactiva toast Windows |
+| `AKYV_NTFY_TOPIC` | _(vacío)_ | **Nunca loguear ni commitear** |
+| `AKYV_NTFY_URL` | `https://ntfy.sh` | URL base ntfy |
+| `AKYV_ALERT_STATE_PATH` | `~/.ai-keyvault/alert-state.json` | Estado de cooldown |
+
+**Nota sobre `winrt-notification`:**
+Se descartó `winrt-notification = "0.5"` — causa `STATUS_ACCESS_VIOLATION` al inicializar COM en entornos de test. Se reemplazó por PowerShell `System.Windows.Forms.NotifyIcon`.
+
+---
+
+#### Fase 6 — Chat sessions agy
+
+**Nuevos archivos:**
+- `providers/agy/src/chats.rs` — `scan_chats(brain_path) → Vec<AgyChat>` con 5 unit tests
+- `crates/poller/src/chat_collector.rs` — `collect_and_upload(client, config, account_id)`
+
+**Modificados:**
+- `providers/agy/Cargo.toml` — agrega `dirs-next = "2.0"`, `tempfile = "3"` (dev)
+- `providers/agy/src/lib.rs` — expone `pub mod chats`
+- `server/src/db.rs` — tabla `chat_sessions` (PK compuesta `id + account_id`)
+- `server/src/routes.rs` — `POST /api/chats` + `GET /api/chats/:account_id`
+- `server/src/main.rs` — registra las rutas de chats
+- `crates/poller/src/lib.rs` — expone `pub mod chat_collector`
+- `crates/poller/src/scheduler.rs` — llama al `chat_collector` **fuera del loop de leases** con el `account_id` del snapshot agy
+
+**Formato de transcript.jsonl:**
+```jsonl
+{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","created_at":"2026-11-22T20:43:04Z","content":"<USER_REQUEST>\nMensaje del usuario\n</USER_REQUEST>..."}
+```
+- `title` = contenido dentro de `<USER_REQUEST>...</USER_REQUEST>`, truncado a 120 chars
+- `created_at` = timestamp del step_index 0
+- `updated_at` = timestamp del último step
+
+**Bugs corregidos en Fase 6:**
+1. `extract_title` extraía texto de TODOS los tags XML (incluyendo `<METADATA>datos</METADATA>`). Fix: extraer solo `<USER_REQUEST>`.
+2. `chat_collector` estaba dentro del loop de leases → se ejecutaba con el account_id equivocado (codex). Fix: moverlo fuera del loop.
+3. `for s in snapshots` tomaba ownership → `Vec<_>` incompatible con `uploader`. Fix: `for s in &snapshots` con `.clone()` al armar el mapa.
+
+---
+
+#### Fase 7 — Estadísticas
+
+**Nuevos archivos:**
+- `server/src/stats.rs` — módulo puro sin dependencias de red:
+  - `compute_burn_rate` — `%/h` ignorando caídas por reset de cuota
+  - `summarize_pools` — agrupa por `(account_id, provider, pool)`, proyección y burn rate
+  - `build_heatmap` — mapa de calor `(weekday, hour_utc)` con deltas positivos
+  - `build_weekly_report` — agrupado por `(fecha, pool)` con min/max/delta
+  - `to_csv` — exportación con escape estándar para comas y comillas
+
+**Modificados:**
+- `server/src/main.rs` — `mod stats;` + 5 rutas nuevas
+- `server/src/routes.rs` — 5 handlers + helper `fetch_readings(db, account_id, days)`
+- `server/Cargo.toml` — eliminado `subtle = "2.6"` (no se usaba → warning de clippy)
+
+**Endpoints de estadísticas:**
+
+| Ruta | Query params | Respuesta |
+|------|-------------|-----------|
+| `GET /api/stats/summary/:account_id` | `?days=7` | `Vec<PoolSummary>` con burn rate y proyección |
+| `GET /api/stats/heatmap/:account_id` | `?days=30` | `Vec<HeatmapCell>` por `(weekday, hour)` |
+| `GET /api/stats/compare` | `?days=7` | `Vec<PoolSummary>` de todas las cuentas |
+| `GET /api/stats/weekly/:account_id` | — | `WeeklyReport` (últimos 7 días) |
+| `GET /api/stats/export/:account_id` | `?format=csv\|json&days=30` | CSV descargable o JSON |
+
+---
+
+### Estado del poller local (TABLET-R5MH20CH)
+
+**Variables de entorno para correr el poller:**
+```powershell
+$env:PATH = "C:\msys64\mingw64\bin;$env:USERPROFILE\.cargo\bin;$env:PATH"
+$env:AKYV_POLL_INTERVAL  = "600"   # 10 min en producción
+$env:RUST_LOG            = "ai_keyvault_poller=info"
+cargo run --package ai-keyvault-poller
+```
+
+**Cuenta activa agy al 2026-11-25:** `batidospitayaclaude49@gmail.com`
+- Leída automáticamente del Credential Manager de Windows (`gemini:antigravity` → campo `id_token_email` del blob JSON)
+- La cuenta rota frecuentemente; el poller la detecta en cada ciclo
+
+**Verificación completa de endpoints en VPS:**
+```powershell
+# Cuota
+curl.exe "http://198.211.97.243:3010/api/quota/readings/batidospitayaclaude49%40gmail.com"
+
+# Chats
+curl.exe "http://198.211.97.243:3010/api/chats/batidospitayaclaude49%40gmail.com"
+
+# Estadísticas
+curl.exe "http://198.211.97.243:3010/api/stats/compare"
+curl.exe "http://198.211.97.243:3010/api/stats/summary/batidospitayaclaude49%40gmail.com"
+curl.exe "http://198.211.97.243:3010/api/stats/weekly/batidospitayaclaude49%40gmail.com"
+curl.exe "http://198.211.97.243:3010/api/stats/heatmap/batidospitayaclaude49%40gmail.com"
+curl.exe "http://198.211.97.243:3010/api/stats/export/batidospitayaclaude49%40gmail.com?format=csv"
+```
+
+---
+
+### Commits del período (2026-11-22 → 2026-11-25)
+
+```
+chore(server): eliminar dependencia subtle no utilizada
+feat(fase-7): endpoints de estadisticas, burn rate, heatmap y exportacion CSV/JSON
+fix(fase-6): chat_collector fuera del loop de leases, usa account_id de agy
+fix(alerter): quitar import warn no usado en notifier.rs
+feat(fase-6): chat collector agy con endpoint REST y tabla chat_sessions
+feat(fase-5): alerter con detector de umbrales, cooldown y notificador toast+ntfy
+fix(fmt): corregir formato de quota.rs y agy_provider_test.rs para CI
+feat(fase-4): poller de cuota agy+codex con lease anti-duplicado y parser real
+```
+
+---
+
+## §16 — Fase 8: Ping mínimo (2026-11-25)
+
+### Objetivo
+Implementar el sistema de ping para agy: detectar cuentas con 0 % de uso
+(que nunca arrancaron su ventana de 7 días) y enviarles el mensaje más corto
+posible (`k`) para iniciar el contador de reinicio de créditos (hipótesis H1).
+
+### Archivos nuevos
+- `providers/agy/src/ping.rs` — lógica de ping + `PingConfig` + 5 unit tests
+- `crates/poller/src/pinger.rs` — integración automática en el scheduler
+- `server/src/db.rs` — tabla `ping_log` (Fase 8)
+- `server/src/routes.rs` — 3 handlers de ping
+- `server/src/main.rs` — 3 rutas nuevas
+
+### Archivos modificados
+- `providers/agy/src/lib.rs` — `pub mod ping;` + re-exportaciones
+- `crates/poller/src/lib.rs` — `pub mod pinger;`
+- `crates/poller/src/scheduler.rs` — llama `pinger::maybe_ping_auto()` al final del ciclo
+
+### Endpoints nuevos
+
+| Ruta | Método | Descripción |
+|------|--------|-------------|
+| `POST /api/pings` | POST | Registra un ping (manual o automático desde el poller) |
+| `GET /api/pings/:account_id?limit=20` | GET | Historial de pings de una cuenta |
+| `GET /api/pings/needs?max_pct=5` | GET | Cuentas con percent_used < umbral (necesitan ping) |
+
+### Variables de entorno del pinger
+
+| Variable | Default | Descripción |
+|----------|---------|-------------|
+| `AKYV_PING_ENABLED` | `false` | Habilita ping automático global |
+| `AKYV_PING_HOUR` | `8` | Hora local (0-23) para disparar el ping automático |
+| `AKYV_PING_MAX_DAILY` | `2` | Máximo pings automáticos por cuenta por día |
+| `AKYV_PING_MAX_PCT` | `5.0` | % máximo de uso para considerar que necesita ping |
+| `AKYV_PING_MESSAGE` | `k` | Mensaje mínimo a enviar |
+
+> [!IMPORTANT]
+> El ping automático está **deshabilitado por defecto** (`AKYV_PING_ENABLED=false`).
+> Se activa agregando `AKYV_PING_ENABLED=true` al `.env` del poller local.
+> El VPS **nunca** hace pings — solo los registra.
+
+### Hipótesis de cooldown activa
+H1 — El contador de 7 días empieza con el **primer uso** de la ventana.
+Una cuenta con 0 % de uso no tiene ventana activa; el ping la activa para
+que el reinicio ocurra lo antes posible dentro de la semana.
+
+### Verificación de endpoints
+
+```powershell
+# Ver cuentas que necesitan ping (percent_used < 5%)
+curl.exe "http://198.211.97.243:3010/api/pings/needs"
+
+# Historial de pings de una cuenta
+curl.exe "http://198.211.97.243:3010/api/pings/batidospitayaclaude49%40gmail.com"
+
+# Registrar ping manual (simulado)
+curl.exe -X POST "http://198.211.97.243:3010/api/pings" `
+  -H "Content-Type: application/json" `
+  -d '{\"account_id\":\"batidospitayaclaude49@gmail.com\",\"device_id\":\"TABLET-R5MH20CH\",\"success\":true,\"duration_ms\":1200,\"is_manual\":true}'
+```

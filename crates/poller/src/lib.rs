@@ -16,6 +16,7 @@ pub mod chat_collector;
 pub mod collector;
 pub mod lease;
 pub mod models;
+pub mod pinger;
 pub mod scheduler;
 pub mod uploader;
 

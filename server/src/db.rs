@@ -87,5 +87,25 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // 6. Tabla de pings (Fase 8) — historial de pings manuales y automáticos
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS ping_log (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id   TEXT NOT NULL,
+            provider     TEXT NOT NULL DEFAULT 'agy',
+            device_id    TEXT NOT NULL,
+            success      INTEGER NOT NULL DEFAULT 0,
+            error        TEXT,
+            duration_ms  INTEGER NOT NULL DEFAULT 0,
+            message_sent TEXT NOT NULL DEFAULT 'k',
+            is_manual    INTEGER NOT NULL DEFAULT 1,
+            pinged_at    TEXT NOT NULL
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }
