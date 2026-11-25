@@ -5,4 +5,6 @@
 
 pub mod api;
 pub mod health;
+pub mod poller;
+pub mod switch_cmd;
 pub mod vault;

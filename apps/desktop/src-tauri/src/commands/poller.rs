@@ -1,0 +1,144 @@
+//! Comandos Tauri para el sidecar del poller (Fase 13).
+//! El poller es un proceso hijo que corre mientras la app está abierta.
+//! Se lanza al desbloquear la bóveda y se detiene al salir.
+//!
+//! SEGURIDAD:
+//! - Estos comandos NUNCA exponen credenciales ni el contenido de la bóveda.
+//! - Solo exponen estado operativo del proceso: running/paused/stopped.
+//! - El poller lee credenciales directamente del SO (Credential Manager / auth.json).
+
+use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+use tauri::{command, AppHandle, State};
+use tauri_plugin_shell::ShellExt;
+use tracing::{info, warn};
+
+// ── Estado global del poller ─────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum PollerState {
+    Running,
+    Paused,
+    Stopped,
+    Error,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PollerStatus {
+    pub state: PollerState,
+    pub pid: Option<u32>,
+    pub last_poll_at: Option<String>,
+    pub error: Option<String>,
+}
+
+pub struct PollerManager {
+    pub status: Mutex<PollerStatus>,
+}
+
+impl Default for PollerManager {
+    fn default() -> Self {
+        Self {
+            status: Mutex::new(PollerStatus {
+                state: PollerState::Stopped,
+                pid: None,
+                last_poll_at: None,
+                error: None,
+            }),
+        }
+    }
+}
+
+// ── Comandos Tauri ────────────────────────────────────────────────────────────
+
+/// Devuelve el estado actual del poller (running / paused / stopped / error).
+/// Solo expone estado operativo — NUNCA credenciales.
+#[command]
+pub async fn get_poller_status(
+    poller: State<'_, PollerManager>,
+) -> Result<PollerStatus, String> {
+    let guard = poller.status.lock().unwrap();
+    Ok(guard.clone())
+}
+
+/// Lanza el sidecar del poller como proceso hijo.
+/// Se llama desde el frontend después del desbloqueo de la bóveda.
+/// El poller NO necesita la bóveda — lee del SO directamente.
+#[command]
+pub async fn start_poller(
+    app: AppHandle,
+    poller: State<'_, PollerManager>,
+) -> Result<(), String> {
+    {
+        let guard = poller.status.lock().unwrap();
+        if guard.state == PollerState::Running {
+            info!("El poller ya está en ejecución (PID {:?})", guard.pid);
+            return Ok(());
+        }
+    }
+
+    info!("🚀 Lanzando sidecar del poller...");
+
+    // Lanzar el sidecar via tauri-plugin-shell
+    // El binario se llama "ai-keyvault-poller" sin sufijo (Tauri agrega el triple)
+    let result = app.shell()
+        .sidecar("ai-keyvault-poller")
+        .map_err(|e| format!("No se encontró el sidecar: {e}"))?
+        .spawn();
+
+    match result {
+        Ok((_rx, child)) => {
+            let pid = child.pid();
+            info!("✅ Poller iniciado con PID {pid}");
+            let mut guard = poller.status.lock().unwrap();
+            guard.state = PollerState::Running;
+            guard.pid = Some(pid);
+            guard.error = None;
+            Ok(())
+        }
+        Err(e) => {
+            warn!("❌ Error al iniciar el poller: {e}");
+            let mut guard = poller.status.lock().unwrap();
+            guard.state = PollerState::Error;
+            guard.error = Some(format!("{e}"));
+            Err(format!("No se pudo iniciar el poller: {e}"))
+        }
+    }
+}
+
+/// Pausa el poller (el proceso sigue corriendo pero no hace polling).
+/// El autobloqueo de la UI llama este comando si el usuario lo configuró.
+/// REGLA: el poller NUNCA se detiene por autobloqueo — solo se puede pausar.
+#[command]
+pub async fn pause_poller(poller: State<'_, PollerManager>) -> Result<(), String> {
+    let mut guard = poller.status.lock().unwrap();
+    if guard.state == PollerState::Running {
+        // En la implementación completa, enviaría una señal al proceso via stdin/IPC.
+        // Por ahora actualizamos el estado local — el poller detectará el flag en el VPS.
+        guard.state = PollerState::Paused;
+        info!("⏸ Poller pausado");
+    }
+    Ok(())
+}
+
+/// Reanuda el poller pausado.
+#[command]
+pub async fn resume_poller(poller: State<'_, PollerManager>) -> Result<(), String> {
+    let mut guard = poller.status.lock().unwrap();
+    if guard.state == PollerState::Paused {
+        guard.state = PollerState::Running;
+        info!("▶️ Poller reanudado");
+    }
+    Ok(())
+}
+
+/// Detiene el poller completamente (al Salir desde el tray).
+/// Después de esto la app cierra el proceso hijo.
+#[command]
+pub async fn stop_poller(poller: State<'_, PollerManager>) -> Result<(), String> {
+    let mut guard = poller.status.lock().unwrap();
+    guard.state = PollerState::Stopped;
+    guard.pid = None;
+    info!("⏹ Poller detenido");
+    Ok(())
+}

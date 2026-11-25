@@ -11,6 +11,7 @@ mod api_client;
 mod commands;
 mod tray;
 
+use commands::poller::PollerManager;
 use commands::vault::VaultState;
 use tauri::Manager;
 use tracing::info;
@@ -32,6 +33,8 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         // Estado global de la bóveda (Mutex<Option<Vault>>)
         .manage(VaultState::default())
+        // Estado global del poller (Mutex<PollerStatus>)
+        .manage(PollerManager::default())
         .setup(|app| {
             // Configurar el icono de la bandeja del sistema
             tray::setup_tray(app)?;
@@ -76,6 +79,15 @@ fn main() {
             commands::api::post_ping,
             // Dispositivos (VPS)
             commands::api::register_device,
+            // Poller IPC (Fase 13)
+            commands::poller::get_poller_status,
+            commands::poller::start_poller,
+            commands::poller::pause_poller,
+            commands::poller::resume_poller,
+            commands::poller::stop_poller,
+            // Switch de cuenta (Fase 13)
+            commands::switch_cmd::switch_account,
+            commands::switch_cmd::get_active_account,
         ])
         .run(tauri::generate_context!())
         .expect("Error al arrancar la aplicación AI KeyVault");
