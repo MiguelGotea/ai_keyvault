@@ -9,11 +9,13 @@
 //! **Nota de seguridad:** este módulo nunca escribe tokens en disco ni en logs.
 //! Las claves se mantienen en memoria y se pasan como referencias de corta duración.
 
+pub mod chats;
 pub mod credential;
 pub mod quota;
 pub mod switcher;
 
 // Re-exportaciones públicas
+pub use chats::{brain_dir, scan_chats, AgyChat};
 pub use credential::{AgyCredential, AgyCredentialManager};
 pub use quota::{parse_usage_output, AgyPool, AgyQuotaReading};
 pub use switcher::{AccountSwitcher, SwitchResult};

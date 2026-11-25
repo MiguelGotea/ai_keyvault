@@ -12,6 +12,7 @@
 //!   → (el lease expira automáticamente en 10 min si no se renueva)
 //! ```
 
+pub mod chat_collector;
 pub mod collector;
 pub mod lease;
 pub mod models;

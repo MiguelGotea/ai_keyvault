@@ -67,5 +67,25 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // 5. Tabla de sesiones de chat de agy (Fase 6)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS chat_sessions (
+            id          TEXT NOT NULL,
+            account_id  TEXT NOT NULL,
+            provider    TEXT NOT NULL DEFAULT 'agy',
+            title       TEXT,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL,
+            device_id   TEXT NOT NULL,
+            archived    INTEGER NOT NULL DEFAULT 0,
+            synced_at   TEXT NOT NULL,
+            PRIMARY KEY (id, account_id)
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

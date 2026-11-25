@@ -7,7 +7,7 @@
 //! 4. Si adquiere el lease, sube las lecturas.
 //! 5. Evalúa umbrales y dispara alertas (toast + ntfy.sh) si corresponde.
 
-use crate::{collector, lease, uploader, PollerConfig};
+use crate::{chat_collector, collector, lease, uploader, PollerConfig};
 use ai_keyvault_alerter::{AlertConfig, AlertManager, AlertReading};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -95,15 +95,18 @@ async fn run_cycle(
         by_account.entry(s.account_id.clone()).or_default().push(s);
     }
 
-    // 5. Para cada cuenta: adquirir lease y subir
+    // 5. Para cada cuenta: adquirir lease, subir cuota y sincronizar chats
     for (account_id, account_snapshots) in &by_account {
         match lease::acquire(client, config, account_id).await {
             Ok(true) => {
-                // Tenemos el lease — subir lecturas
+                // Tenemos el lease — subir lecturas de cuota
                 if let Err(e) = uploader::upload_snapshots(client, config, account_snapshots).await
                 {
                     error!(account_id = %account_id, error = %e, "❌ Error al subir lecturas");
                 }
+
+                // Sincronizar metadatos de chats agy
+                chat_collector::collect_and_upload(client, config, account_id).await;
             }
             Ok(false) => {
                 // Otro dispositivo tiene el lease — omitir

@@ -494,3 +494,62 @@ Formato:
 ```
 
 Para forzar re-alerta: eliminar el archivo o la clave correspondiente.
+
+---
+
+## §13 — Fase 6: Chat Sessions de agy (2026-11-25)
+
+### Qué hace
+
+El poller recolecta metadatos de chats de agy tras cada ciclo de cuota y los sube al servidor. Solo se suben metadatos — el contenido de los mensajes **nunca sale del equipo**.
+
+### Datos que se sincronizan
+
+| Campo | Fuente | Descripción |
+|-------|--------|-------------|
+| `id` | Nombre de dir UUID en `brain/` | Identificador único del chat |
+| `title` | Primer `USER_INPUT` del transcript | Truncado a 120 chars, sin tags XML |
+| `created_at` | `created_at` del step_index 0 | ISO 8601 UTC |
+| `updated_at` | `created_at` del último step | ISO 8601 UTC |
+| `archived` | Siempre `false` en Fase 6 | agy no expone archivado en FS local |
+
+### Ruta del brain/ de agy
+
+```
+Windows: %USERPROFILE%\.gemini\antigravity\brain\<uuid>\.system_generated\logs\transcript.jsonl
+Linux:   ~/.gemini/antigravity/brain/<uuid>/.system_generated/logs/transcript.jsonl
+```
+
+### Endpoints nuevos
+
+```http
+POST /api/chats
+Body: { account_id, device_id, chats: [{id, provider, title, created_at, updated_at, archived}] }
+→ Upsert batch de chats
+
+GET /api/chats/:account_id
+→ Chats no archivados más recientes (máx 50), ordenados por updated_at DESC
+```
+
+### Verificar en VPS
+
+```bash
+curl "http://198.211.97.243:3010/api/chats/batidospitayaclaude46%40gmail.com"
+```
+
+### Tabla nueva en BD
+
+```sql
+CREATE TABLE chat_sessions (
+  id          TEXT NOT NULL,
+  account_id  TEXT NOT NULL,
+  provider    TEXT NOT NULL DEFAULT 'agy',
+  title       TEXT,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL,
+  device_id   TEXT NOT NULL,
+  archived    INTEGER NOT NULL DEFAULT 0,
+  synced_at   TEXT NOT NULL,
+  PRIMARY KEY (id, account_id)
+);
+```

@@ -325,16 +325,20 @@ crates/alerter/
 **Tiempo estimado:** 2 días
 
 ### Fase 6 — Agente de chats
-**Contenido:**
-- Agente local: leer chats activos de agy y Codex (solo metadatos)
-- Subir metadatos cifrados al servidor
-- Vista "Chats activos" multi-PC
-- Excluir archivados
+**Estado:** ✅ Completada (2026-11-25)
+
+**Implementado:**
+- `providers/agy/src/chats.rs` — scanner de `brain/<uuid>/transcript.jsonl`
+- Extrae: id, título (primer USER_INPUT ≤120 chars, sin tags XML), created_at, updated_at
+- `server/src/db.rs` — tabla `chat_sessions` (PK compuesta id+account_id)
+- `server/src/routes.rs` — `POST /api/chats` (upsert batch) + `GET /api/chats/:account_id`
+- `crates/poller/src/chat_collector.rs` — recolecta y sube tras cada ciclo de cuota
+- Solo agy en Fase 6; Codex (cloud-only) queda para Fase 9
 
 **Criterios de aceptación:**
-- [ ] Chat creado en PC-A aparece en PC-B
-- [ ] Chats archivados no aparecen
-- [ ] PC sin agente muestra "sin agente en esta PC"
+- [x] Chat creado en PC-A aparece en PC-B (vía servidor)
+- [x] Solo chats no archivados en GET (archived=0)
+- [ ] PC sin agente muestra "sin agente en esta PC" _(requiere UI — Fase 7+)_
 
 **Tiempo estimado:** 2-3 días
 

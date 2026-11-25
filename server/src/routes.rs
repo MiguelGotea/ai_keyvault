@@ -340,3 +340,100 @@ pub async fn get_quota_readings(
 
     Ok(Json(readings))
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 6. Chat Sessions (Fase 6 — agy chats)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct PostChatSessionRequest {
+    pub account_id: String,
+    pub device_id: String,
+    pub chats: Vec<ChatSessionItem>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ChatSessionItem {
+    pub id: String,
+    pub provider: String,
+    pub title: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub archived: bool,
+}
+
+/// `POST /api/chats` — el poller sube metadatos de chats locales.
+pub async fn post_chat_sessions(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<PostChatSessionRequest>,
+) -> Result<Json<serde_json::Value>> {
+    let now = Utc::now().to_rfc3339();
+    let mut upserted = 0u32;
+
+    for chat in &payload.chats {
+        sqlx::query(
+            r#"
+            INSERT INTO chat_sessions (id, account_id, provider, title, created_at, updated_at, device_id, archived, synced_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id, account_id) DO UPDATE SET
+                title      = excluded.title,
+                updated_at = excluded.updated_at,
+                archived   = excluded.archived,
+                device_id  = excluded.device_id,
+                synced_at  = excluded.synced_at
+            "#,
+        )
+        .bind(&chat.id)
+        .bind(&payload.account_id)
+        .bind(&chat.provider)
+        .bind(&chat.title)
+        .bind(&chat.created_at)
+        .bind(&chat.updated_at)
+        .bind(&payload.device_id)
+        .bind(chat.archived as i32)
+        .bind(&now)
+        .execute(&state.db)
+        .await?;
+        upserted += 1;
+    }
+
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "account_id": payload.account_id,
+        "upserted": upserted,
+        "synced_at": now
+    })))
+}
+
+/// `GET /api/chats/:account_id` — devuelve los chats más recientes de una cuenta.
+pub async fn get_chat_sessions(
+    State(state): State<Arc<AppState>>,
+    Path(account_id): Path<String>,
+) -> Result<Json<Vec<ChatSessionItem>>> {
+    let rows = sqlx::query(
+        r#"
+        SELECT id, provider, title, created_at, updated_at, archived
+        FROM chat_sessions
+        WHERE account_id = ? AND archived = 0
+        ORDER BY updated_at DESC
+        LIMIT 50
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    let chats = rows
+        .into_iter()
+        .map(|r| ChatSessionItem {
+            id: r.get("id"),
+            provider: r.get("provider"),
+            title: r.get("title"),
+            created_at: r.get("created_at"),
+            updated_at: r.get("updated_at"),
+            archived: r.get::<i32, _>("archived") != 0,
+        })
+        .collect();
+
+    Ok(Json(chats))
+}

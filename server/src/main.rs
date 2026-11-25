@@ -67,6 +67,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/api/quota/readings/:account_id",
             get(routes::get_quota_readings),
         )
+        .route("/api/chats", post(routes::post_chat_sessions))
+        .route("/api/chats/:account_id", get(routes::get_chat_sessions))
         .layer(cors)
         .with_state(state);
 
