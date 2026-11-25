@@ -165,6 +165,7 @@ jobs:
         run: |
           $src = "target\x86_64-pc-windows-msvc\release\ai-keyvault-poller.exe"
           $dst = "apps\desktop\src-tauri\binaries\ai-keyvault-poller-x86_64-pc-windows-msvc.exe"
+          New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
           Copy-Item -Path $src -Destination $dst -Force
           $sizeMB = [math]::Round((Get-Item $dst).Length / 1MB, 2)
           Write-Host "[OK] Sidecar copiado: $sizeMB MB"
