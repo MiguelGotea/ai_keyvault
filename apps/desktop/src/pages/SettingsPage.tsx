@@ -3,6 +3,7 @@
  *  Fase 14: persistencia de autobloqueo en localStorage + Rust.
  */
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import es from "../i18n/es.json";
 
@@ -186,6 +187,7 @@ export default function SettingsPage() {
           </div>
           <Toggle value={settings.dpapiEnabled} onChange={handleDpapiToggle} />
         </div>
+        <AutostartRow />
       </section>
 
       {/* Modal confirmación DPAPI */}
@@ -223,6 +225,9 @@ export default function SettingsPage() {
         <Row label="Sincronizar bóveda con VPS">
           <VaultSyncButtons />
         </Row>
+        <Row label="Sesión en esta PC">
+          <GlobalLogoutButton />
+        </Row>
       </section>
 
       {/* Guardar */}
@@ -245,6 +250,154 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div style={rowStyles.row}>
       <label style={rowStyles.label}>{label}</label>
       <div style={rowStyles.control}>{children}</div>
+    </div>
+  );
+}
+
+/** Toggle «Iniciar con Windows (en bandeja)» (Fase 19.3, D-03). */
+function AutostartRow() {
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<boolean>("get_autostart_enabled")
+      .then(setEnabled)
+      .catch((e) => setError(`No se pudo leer inicio con Windows: ${String(e)}`));
+  }, []);
+
+  async function handleToggle(next: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      await invoke("set_autostart_enabled", { enabled: next });
+      setEnabled(next);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingTop: 10, borderTop: "1px solid var(--color-border)" }}>
+      <div style={styles.dpapiRow}>
+        <div>
+          <div style={styles.label}>Iniciar con Windows (en bandeja)</div>
+          <div style={styles.dpapiDesc}>
+            Abre AI KeyVault minimizado en la bandeja del sistema al iniciar sesión en Windows.
+          </div>
+        </div>
+        <Toggle value={enabled} onChange={(v) => { if (!busy) handleToggle(v); }} />
+      </div>
+      {error && <span style={{ fontSize: 12, color: "var(--color-danger)" }}>⚠️ {error}</span>}
+    </div>
+  );
+}
+
+/** Botón de cierre de sesión global en esta PC (Fase 19.2, D-12). */
+function GlobalLogoutButton() {
+  const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  async function executeLogout(forceWithoutSync: boolean) {
+    setBusy(true);
+    setLogoutError(null);
+    try {
+      await invoke("global_logout", { forceWithoutSync });
+      localStorage.removeItem("akv_settings");
+      localStorage.removeItem("autolock_minutes");
+      navigate("/unlock", { replace: true });
+    } catch (e) {
+      setLogoutError(
+        `No se pudo subir la bóveda pendiente antes de salir (${String(e)}). ¿Deseas cerrar sesión local sin sincronizar?`
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+      {!confirming ? (
+        <button
+          onClick={() => setConfirming(true)}
+          style={{
+            padding: "6px 12px",
+            fontSize: 12,
+            border: "1px solid var(--color-danger)",
+            borderRadius: "var(--radius-md)",
+            background: "transparent",
+            color: "var(--color-danger)",
+            cursor: "pointer",
+            fontWeight: 600,
+          }}
+        >
+          Cerrar sesión global en esta PC
+        </button>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+            Borra la sesión y bóveda locales de esta PC (no borra nada en el VPS ni tus cuentas de agy/Codex).
+          </span>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              disabled={busy}
+              onClick={() => executeLogout(false)}
+              style={{
+                padding: "6px 12px",
+                fontSize: 12,
+                border: "none",
+                borderRadius: "var(--radius-md)",
+                background: "var(--color-danger)",
+                color: "#fff",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              {busy ? "Cerrando…" : "Confirmar cierre de sesión"}
+            </button>
+            <button
+              disabled={busy}
+              onClick={() => { setConfirming(false); setLogoutError(null); }}
+              style={{
+                padding: "6px 12px",
+                fontSize: 12,
+                border: "1px solid var(--color-border)",
+                borderRadius: "var(--radius-md)",
+                background: "var(--color-bg)",
+                color: "var(--color-text-secondary)",
+                cursor: "pointer",
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+          {logoutError && (
+            <div style={{ fontSize: 12, color: "var(--color-danger)", display: "flex", flexDirection: "column", gap: 6 }}>
+              <span>⚠️ {logoutError}</span>
+              <button
+                disabled={busy}
+                onClick={() => executeLogout(true)}
+                style={{
+                  alignSelf: "flex-start",
+                  padding: "5px 10px",
+                  fontSize: 11,
+                  border: "1px solid var(--color-danger)",
+                  borderRadius: "var(--radius-sm)",
+                  background: "transparent",
+                  color: "var(--color-danger)",
+                  cursor: "pointer",
+                }}
+              >
+                Forzar cierre local sin sincronizar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

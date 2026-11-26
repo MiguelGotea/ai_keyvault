@@ -45,6 +45,8 @@ uuid = { version = "1", features = ["v4"] }
 
 # chrono — fechas para state_mut().updated_at en vault commands
 chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+zeroize = "1.8"
 
 # NOTA FASE 12: providers/agy y providers/codex usan rusqlite bundled (requiere cmake).
 # Se agregarán en Fase 13 (switch de cuenta) solo si se instala cmake, o bien

@@ -1,6 +1,6 @@
-/** UnlockPage — Fase 12: pantalla de desbloqueo con bóveda local real.
- *  - Primer uso → flujo de creación con clave maestra
- *  - Uso normal → desbloqueo con clave maestra
+/** UnlockPage — Fase 19.2: Primer arranque estilo Bitwarden + desbloqueo en arranques siguientes.
+ *  - Sin sesión local → Iniciar sesión (URL + usuario + clave maestra) o Crear usuario nuevo.
+ *  - Con sesión local → solo clave maestra (mostrando nombre del usuario).
  *  - Recuperación → clave de respaldo AKVR-...
  */
 import { useState, useEffect } from "react";
@@ -9,10 +9,16 @@ import { invoke } from "@tauri-apps/api/core";
 import { useServerHealth } from "../hooks/useServerHealth";
 import { useCommand } from "../hooks/useCommand";
 import ServerStatusBadge from "../components/ServerStatusBadge";
-import type { VaultStatus } from "../types/api";
 import es from "../i18n/es.json";
 
-type ScreenMode = "unlock" | "create" | "recovery" | "show_recovery_key";
+type ScreenMode = "login" | "register" | "unlock" | "recovery" | "show_recovery_key";
+
+interface SessionInfo {
+  has_session: boolean;
+  username: string | null;
+  display_name: string | null;
+  server_url: string;
+}
 
 interface UnlockResult { success: boolean; error: string | null; accounts_count: number; }
 interface CreateVaultResult { success: boolean; recovery_key: string | null; error: string | null; }
@@ -21,7 +27,10 @@ export default function UnlockPage() {
   const navigate = useNavigate();
   const health = useServerHealth();
 
-  const [mode, setMode] = useState<ScreenMode>("unlock");
+  const [mode, setMode] = useState<ScreenMode>("login");
+  const [serverUrl, setServerUrl] = useState("http://198.211.97.243:3010");
+  const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
@@ -30,58 +39,49 @@ export default function UnlockPage() {
   const [loading, setLoading] = useState(false);
   const [recoveryKeyToShow, setRecoveryKeyToShow] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [checkingCloud, setCheckingCloud] = useState(false);
   const [cloudNotice, setCloudNotice] = useState<string | null>(null);
 
-  // Verificar si existe bóveda en disco
-  const { data: vaultStatus, refetch: refetchVaultStatus } = useCommand<VaultStatus>("get_vault_status");
+  const { data: sessionInfo } = useCommand<SessionInfo>("get_session_info");
 
-  // Si no hay bóveda local, intentar descargarla del VPS antes de mostrar "Crear bóveda"
-  async function checkCloudVault() {
-    setCheckingCloud(true);
-    setErrorMsg(null);
-    try {
-      const res = await invoke<{ success: boolean; direction: string; error: string | null }>(
-        "download_vault_sync"
-      );
-      if (res.success && res.direction === "download") {
-        await refetchVaultStatus();
-        setMode("unlock");
-        setCloudNotice("☁️ Bóveda encontrada en la nube. Ingresa tu clave maestra para desbloquear.");
-      } else {
-        setMode("create");
-      }
-    } catch (e) {
-      setErrorMsg(`No se pudo consultar la bóveda en la nube: ${String(e)}`);
-      setMode("create");
-    } finally {
-      setCheckingCloud(false);
+  useEffect(() => {
+    if (!sessionInfo) return;
+    setServerUrl(sessionInfo.server_url);
+    if (sessionInfo.has_session) {
+      setMode("unlock");
+    } else {
+      setMode("login");
+    }
+  }, [sessionInfo]);
+
+  async function startAutolockIfConfigured() {
+    const autolockMinutes = parseInt(localStorage.getItem("autolock_minutes") ?? "0", 10);
+    if (autolockMinutes > 0) {
+      await invoke("start_autolock_timer", { minutes: autolockMinutes });
     }
   }
 
-  useEffect(() => {
-    if (vaultStatus && !vaultStatus.initialized) {
-      checkCloudVault();
-    } else if (vaultStatus && vaultStatus.initialized) {
-      setMode("unlock");
+  // ── Iniciar sesión (traer usuario y bóveda desde el VPS) ────────────────────
+  async function handleLogin() {
+    if (!serverUrl.trim() || !username.trim() || !password) {
+      return setErrorMsg("Completa URL del servidor, usuario y clave maestra.");
     }
-  }, [vaultStatus?.initialized]);
-
-  // ── Crear bóveda nueva ──────────────────────────────────────────────────────
-  async function handleCreate() {
-    if (!password) return setErrorMsg("Ingresa una clave maestra.");
-    if (password !== confirmPassword) return setErrorMsg("Las claves no coinciden.");
-    if (password.length < 12) return setErrorMsg("La clave debe tener al menos 12 caracteres.");
-
     setLoading(true);
     setErrorMsg(null);
     try {
-      const result = await invoke<CreateVaultResult>("create_vault", { password });
-      if (result.success && result.recovery_key) {
-        setRecoveryKeyToShow(result.recovery_key);
-        setMode("show_recovery_key");
+      const result = await invoke<UnlockResult>("login_user_and_sync", {
+        serverUrl: serverUrl.trim(),
+        username: username.trim(),
+        password,
+      });
+      if (result.success) {
+        try {
+          await startAutolockIfConfigured();
+        } catch (e) {
+          setCloudNotice(`Sesión iniciada, pero falló el timer de autobloqueo: ${String(e)}`);
+        }
+        navigate("/dashboard");
       } else {
-        setErrorMsg(result.error ?? "Error desconocido al crear la bóveda.");
+        setErrorMsg(result.error ?? "Credenciales inválidas.");
       }
     } catch (e) {
       setErrorMsg(String(e));
@@ -90,7 +90,38 @@ export default function UnlockPage() {
     }
   }
 
-  // ── Desbloquear bóveda ──────────────────────────────────────────────────────
+  // ── Crear usuario nuevo + bóveda ────────────────────────────────────────────
+  async function handleRegister() {
+    if (!displayName.trim() || !username.trim()) {
+      return setErrorMsg("Ingresa tu nombre y nombre de usuario.");
+    }
+    if (!password) return setErrorMsg("Ingresa una clave maestra.");
+    if (password !== confirmPassword) return setErrorMsg("Las claves no coinciden.");
+    if (password.length < 12) return setErrorMsg("La clave debe tener al menos 12 caracteres.");
+
+    setLoading(true);
+    setErrorMsg(null);
+    try {
+      const result = await invoke<CreateVaultResult>("register_user_and_vault", {
+        serverUrl: serverUrl.trim(),
+        displayName: displayName.trim(),
+        username: username.trim(),
+        password,
+      });
+      if (result.success && result.recovery_key) {
+        setRecoveryKeyToShow(result.recovery_key);
+        setMode("show_recovery_key");
+      } else {
+        setErrorMsg(result.error ?? "Error desconocido al crear usuario y bóveda.");
+      }
+    } catch (e) {
+      setErrorMsg(String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Desbloquear bóveda (arranques siguientes) ───────────────────────────────
   async function handleUnlock() {
     if (!password) return setErrorMsg("Ingresa tu clave maestra.");
     setLoading(true);
@@ -98,23 +129,10 @@ export default function UnlockPage() {
     try {
       const result = await invoke<UnlockResult>("unlock_vault", { password });
       if (result.success) {
-        // Fase 14: iniciar timer de autobloqueo (0 = desactivado por defecto)
-        const autolockMinutes = parseInt(localStorage.getItem("autolock_minutes") ?? "0");
-        if (autolockMinutes > 0) {
-          try {
-            await invoke("start_autolock_timer", { minutes: autolockMinutes });
-          } catch (e) {
-            setErrorMsg(`Bóveda desbloqueada, pero falló el timer de autobloqueo: ${String(e)}`);
-          }
-        }
-        // Sincronizar bóveda del VPS antes de entrar al dashboard
         try {
-          const syncRes = await invoke<{ success: boolean; error: string | null }>("download_vault_sync");
-          if (!syncRes.success && syncRes.error) {
-            setCloudNotice(`Aviso de sincronización: ${syncRes.error}`);
-          }
+          await startAutolockIfConfigured();
         } catch (e) {
-          setCloudNotice(`No se pudo sincronizar con el VPS: ${String(e)}`);
+          setErrorMsg(`Bóveda desbloqueada, pero falló el timer de autobloqueo: ${String(e)}`);
         }
         navigate("/dashboard");
       } else {
@@ -177,8 +195,13 @@ export default function UnlockPage() {
           <span style={styles.icon}>🔐</span>
           <h1 style={styles.title}>{es.app.nombre}</h1>
           <p style={styles.subtitle}>
-            {mode === "create" && es.vault.primer_uso}
-            {mode === "unlock" && es.unlock.subtitulo}
+            {mode === "login" && "Inicia sesión para traer tu bóveda"}
+            {mode === "register" && "Crea tu usuario y bóveda nueva"}
+            {mode === "unlock" && (
+              sessionInfo?.display_name
+                ? `Hola, ${sessionInfo.display_name} (@${sessionInfo.username})`
+                : es.unlock.subtitulo
+            )}
             {mode === "recovery" && "Recuperación con clave de respaldo"}
             {mode === "show_recovery_key" && "Guarda tu clave de recuperación"}
           </p>
@@ -190,10 +213,33 @@ export default function UnlockPage() {
           <button style={styles.recheckBtn} onClick={health.recheck} disabled={health.checking}>↻</button>
         </div>
 
-        {/* Error / aviso nube */}
-        {checkingCloud && (
-          <div style={styles.warningBox}>☁️ Verificando si ya tienes una bóveda en la nube…</div>
+        {/* Selector Iniciar sesión / Crear usuario cuando no hay sesión local */}
+        {(mode === "login" || mode === "register") && (
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              style={{
+                ...styles.btn,
+                flex: 1,
+                ...(mode === "login" ? styles.btnPrimary : {}),
+              }}
+              onClick={() => { setMode("login"); setErrorMsg(null); }}
+            >
+              Iniciar sesión
+            </button>
+            <button
+              style={{
+                ...styles.btn,
+                flex: 1,
+                ...(mode === "register" ? styles.btnPrimary : {}),
+              }}
+              onClick={() => { setMode("register"); setErrorMsg(null); }}
+            >
+              Crear usuario nuevo
+            </button>
+          </div>
         )}
+
+        {/* Error / aviso nube */}
         {cloudNotice && !errorMsg && (
           <div style={{ ...styles.warningBox, background: "#ECFDF5", borderColor: "#A7F3D0", color: "#065F46" }}>
             {cloudNotice}
@@ -226,9 +272,84 @@ export default function UnlockPage() {
           </div>
         )}
 
-        {/* ── PANTALLA: CREAR BÓVEDA ── */}
-        {mode === "create" && (
+        {/* ── PANTALLA: INICIAR SESIÓN ── */}
+        {mode === "login" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>URL del servidor</label>
+              <input
+                type="text"
+                style={styles.input}
+                value={serverUrl}
+                onChange={e => setServerUrl(e.target.value)}
+              />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>Usuario</label>
+              <input
+                type="text"
+                placeholder="tu-usuario"
+                style={styles.input}
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleLogin()}
+                autoFocus
+              />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>{es.vault.clave_maestra}</label>
+              <input
+                type="password"
+                placeholder="••••••••••••"
+                style={styles.input}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleLogin()}
+              />
+            </div>
+            <button
+              style={{ ...styles.btn, ...styles.btnPrimary }}
+              onClick={handleLogin}
+              disabled={loading}
+            >
+              {loading ? "Iniciando sesión…" : "Iniciar sesión"}
+            </button>
+          </div>
+        )}
+
+        {/* ── PANTALLA: CREAR USUARIO NUEVO ── */}
+        {mode === "register" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>URL del servidor</label>
+              <input
+                type="text"
+                style={styles.input}
+                value={serverUrl}
+                onChange={e => setServerUrl(e.target.value)}
+              />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>Nombre</label>
+              <input
+                type="text"
+                placeholder="Tu nombre"
+                style={styles.input}
+                value={displayName}
+                onChange={e => setDisplayName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div style={styles.inputGroup}>
+              <label style={styles.inputLabel}>Usuario</label>
+              <input
+                type="text"
+                placeholder="tu-usuario"
+                style={styles.input}
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+              />
+            </div>
             <div style={styles.inputGroup}>
               <label style={styles.inputLabel}>{es.vault.clave_maestra}</label>
               <input
@@ -237,8 +358,7 @@ export default function UnlockPage() {
                 style={styles.input}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleCreate()}
-                autoFocus
+                onKeyDown={e => e.key === "Enter" && handleRegister()}
               />
             </div>
             <div style={styles.inputGroup}>
@@ -249,22 +369,15 @@ export default function UnlockPage() {
                 style={styles.input}
                 value={confirmPassword}
                 onChange={e => setConfirmPassword(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleCreate()}
+                onKeyDown={e => e.key === "Enter" && handleRegister()}
               />
             </div>
             <button
               style={{ ...styles.btn, ...styles.btnPrimary }}
-              onClick={handleCreate}
-              disabled={loading || checkingCloud}
+              onClick={handleRegister}
+              disabled={loading}
             >
-              {loading ? "Creando…" : es.vault.crear_boveda}
-            </button>
-            <button
-              style={styles.btnLink}
-              onClick={checkCloudVault}
-              disabled={checkingCloud}
-            >
-              ☁️ ¿Ya tienes bóveda en la nube? Reintentar descarga
+              {loading ? "Creando usuario y bóveda…" : "Crear usuario y bóveda"}
             </button>
           </div>
         )}

@@ -1,4 +1,4 @@
-//! Comandos Tauri para la bóveda local cifrada (Fase 12).
+﻿//! Comandos Tauri para la bóveda local cifrada (Fase 12).
 //! Gestiona el ciclo de vida: crear → desbloquear → autobloquear → recuperar.
 //!
 //! La bóveda se guarda en el directorio de datos de la app:
@@ -9,12 +9,14 @@
 //! - Al bloquearse: zeroize() borra los bytes de la clave de RAM.
 //! - La contraseña maestra NUNCA se guarda — se deriva con Argon2id en cada desbloqueo.
 
+use ai_keyvault_core::kdf::{derive_keys, KdfParams};
 use ai_keyvault_core::vault::{EncryptedVaultState, Vault};
 use chrono;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{command, AppHandle, Manager, State};
+use zeroize::Zeroize;
 
 // ── Estado global ────────────────────────────────────────────────────────────
 
@@ -30,6 +32,48 @@ impl Default for VaultState {
             vault: Mutex::new(None),
         }
     }
+}
+
+/// Credenciales de sesión autenticada en RAM (se borran con zeroize al bloquear o cerrar sesión).
+#[derive(Default)]
+pub struct SessionAuth {
+    pub server_url: String,
+    pub username: String,
+    pub auth_key_hex: String,
+}
+
+impl Drop for SessionAuth {
+    fn drop(&mut self) {
+        self.auth_key_hex.zeroize();
+    }
+}
+
+pub struct SessionAuthState {
+    pub auth: Mutex<Option<SessionAuth>>,
+}
+
+impl Default for SessionAuthState {
+    fn default() -> Self {
+        Self {
+            auth: Mutex::new(None),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SessionFile {
+    pub server_url: String,
+    pub username: String,
+    pub display_name: String,
+    pub device_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SessionInfoResponse {
+    pub has_session: bool,
+    pub username: Option<String>,
+    pub display_name: Option<String>,
+    pub server_url: String,
 }
 
 // ── Tipos de respuesta al frontend ───────────────────────────────────────────
@@ -72,6 +116,38 @@ pub fn identity_map_path(app: &AppHandle) -> PathBuf {
         .app_data_dir()
         .expect("No se pudo obtener AppData dir")
         .join("identity-map.enc")
+}
+
+/// Ruta del archivo de sesión local (`session.json`).
+pub fn session_path(app: &AppHandle) -> PathBuf {
+    app.path()
+        .app_data_dir()
+        .expect("No se pudo obtener AppData dir")
+        .join("session.json")
+}
+
+pub fn load_session_file(app: &AppHandle) -> Option<SessionFile> {
+    let path = session_path(app);
+    let raw = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str::<SessionFile>(&raw).ok()
+}
+
+fn save_session_file(app: &AppHandle, session: &SessionFile) -> Result<(), String> {
+    let path = session_path(app);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("No se pudo crear directorio de sesión: {e}"))?;
+    }
+    let json = serde_json::to_string_pretty(session)
+        .map_err(|e| format!("Error serializando sesión: {e}"))?;
+    std::fs::write(&path, json).map_err(|e| format!("Error guardando session.json: {e}"))?;
+    Ok(())
+}
+
+fn current_device_id() -> String {
+    std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "desktop-win".to_string())
 }
 
 /// Regenera el mapa local cifrado correo → UUID a partir de la bóveda desbloqueada.
@@ -194,6 +270,7 @@ pub async fn create_vault(
 pub async fn unlock_vault(
     app: AppHandle,
     vault_state: State<'_, VaultState>,
+    session_auth: State<'_, SessionAuthState>,
     password: String,
 ) -> Result<UnlockResult, String> {
     if !vault_exists(&app) {
@@ -210,6 +287,18 @@ pub async fn unlock_vault(
     match vault.unlock_with_password(&password) {
         Ok(_) => {
             sync_identity_map(&app, &vault)?;
+            if let Some(sess) = load_session_file(&app) {
+                if let Ok((auth_key, _)) =
+                    derive_keys(&password, &vault.state().salt, &vault.state().kdf_params)
+                {
+                    let mut auth_guard = session_auth.auth.lock().unwrap();
+                    *auth_guard = Some(SessionAuth {
+                        server_url: sess.server_url,
+                        username: sess.username,
+                        auth_key_hex: hex::encode(auth_key.0),
+                    });
+                }
+            }
             let count = vault.state().accounts.len();
             let mut guard = vault_state.vault.lock().unwrap();
             *guard = Some(vault);
@@ -230,14 +319,348 @@ pub async fn unlock_vault(
 /// Bloquea la bóveda — hace zeroize de la VaultKey en memoria.
 /// El poller sigue corriendo (lee del SO, no de la bóveda).
 #[command]
-pub async fn lock_vault(vault_state: State<'_, VaultState>) -> Result<(), String> {
-    let mut guard = vault_state.vault.lock().unwrap();
-    if let Some(vault) = &mut *guard {
-        vault.lock();
+pub async fn lock_vault(
+    vault_state: State<'_, VaultState>,
+    session_auth: State<'_, SessionAuthState>,
+) -> Result<(), String> {
+    {
+        let mut guard = vault_state.vault.lock().unwrap();
+        if let Some(vault) = &mut *guard {
+            vault.lock();
+        }
     }
+    let mut auth_guard = session_auth.auth.lock().unwrap();
+    *auth_guard = None;
     Ok(())
 }
 
+/// Información de la sesión local para primer arranque vs arranques siguientes (Fase 19.2).
+#[command]
+pub async fn get_session_info(app: AppHandle) -> Result<SessionInfoResponse, String> {
+    let default_url = crate::api_client::SERVER_URL.to_string();
+    if let Some(sess) = load_session_file(&app) {
+        Ok(SessionInfoResponse {
+            has_session: vault_exists(&app),
+            username: Some(sess.username),
+            display_name: Some(sess.display_name),
+            server_url: sess.server_url,
+        })
+    } else {
+        Ok(SessionInfoResponse {
+            has_session: false,
+            username: None,
+            display_name: None,
+            server_url: default_url,
+        })
+    }
+}
+
+/// Crea un usuario nuevo + bóveda cifrada y la registra en el VPS (Fase 19.2).
+#[command]
+pub async fn register_user_and_vault(
+    app: AppHandle,
+    vault_state: State<'_, VaultState>,
+    session_auth: State<'_, SessionAuthState>,
+    server_url: String,
+    display_name: String,
+    username: String,
+    password: String,
+) -> Result<CreateVaultResult, String> {
+    use crate::api_client::http_client;
+
+    let clean_url = server_url.trim().trim_end_matches('/').to_string();
+    let clean_user = username.trim().to_lowercase();
+    let clean_name = display_name.trim().to_string();
+    if clean_user.is_empty() || clean_name.is_empty() {
+        return Ok(CreateVaultResult {
+            success: false,
+            recovery_key: None,
+            error: Some("Ingresa tu nombre y nombre de usuario.".into()),
+        });
+    }
+    if password.len() < 12 {
+        return Ok(CreateVaultResult {
+            success: false,
+            recovery_key: None,
+            error: Some("La clave maestra debe tener al menos 12 caracteres.".into()),
+        });
+    }
+
+    let (vault, recovery) =
+        Vault::create_new(&password, None).map_err(|e| format!("Error creando bóveda: {e}"))?;
+    let (auth_key, _) = derive_keys(&password, &vault.state().salt, &vault.state().kdf_params)
+        .map_err(|e| format!("Error derivando clave de autenticación: {e}"))?;
+
+    let auth_key_hex = hex::encode(auth_key.0);
+    let device_id = current_device_id();
+    let encrypted_payload = serde_json::to_string_pretty(vault.state())
+        .map_err(|e| format!("Error serializando bóveda: {e}"))?;
+
+    let reg_body = serde_json::json!({
+        "username": clean_user,
+        "display_name": clean_name,
+        "kdf_salt_hex": hex::encode(&vault.state().salt),
+        "kdf_memory_kib": vault.state().kdf_params.memory_kib,
+        "kdf_iterations": vault.state().kdf_params.iterations,
+        "kdf_parallelism": vault.state().kdf_params.parallelism,
+        "auth_key_hex": auth_key_hex,
+        "device_id": device_id,
+        "device_name": device_id,
+        "encrypted_payload": encrypted_payload,
+    });
+
+    let resp = http_client()
+        .post(&format!("{clean_url}/api/auth/register"))
+        .json(&reg_body)
+        .send()
+        .await
+        .map_err(|e| format!("No se pudo conectar al servidor: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let err_body = resp.text().await.unwrap_or_default();
+        return Ok(CreateVaultResult {
+            success: false,
+            recovery_key: None,
+            error: Some(format!(
+                "No se pudo registrar usuario ({status}): {err_body}"
+            )),
+        });
+    }
+
+    save_vault_state(&app, vault.state())?;
+    sync_identity_map(&app, &vault)?;
+    save_session_file(
+        &app,
+        &SessionFile {
+            server_url: clean_url.clone(),
+            username: clean_user.clone(),
+            display_name: clean_name,
+            device_id,
+        },
+    )?;
+
+    {
+        let mut auth_guard = session_auth.auth.lock().unwrap();
+        *auth_guard = Some(SessionAuth {
+            server_url: clean_url,
+            username: clean_user,
+            auth_key_hex,
+        });
+    }
+    {
+        let mut guard = vault_state.vault.lock().unwrap();
+        *guard = Some(vault);
+    }
+
+    Ok(CreateVaultResult {
+        success: true,
+        recovery_key: Some(recovery.to_formatted_string()),
+        error: None,
+    })
+}
+
+/// Inicia sesión en una bóveda existente del VPS (estilo Bitwarden) y la descifra en local.
+#[command]
+pub async fn login_user_and_sync(
+    app: AppHandle,
+    vault_state: State<'_, VaultState>,
+    session_auth: State<'_, SessionAuthState>,
+    server_url: String,
+    username: String,
+    password: String,
+) -> Result<UnlockResult, String> {
+    use crate::api_client::http_client;
+
+    let clean_url = server_url.trim().trim_end_matches('/').to_string();
+    let clean_user = username.trim().to_lowercase();
+    if clean_user.is_empty() || password.is_empty() {
+        return Ok(UnlockResult {
+            success: false,
+            error: Some("Ingresa usuario y clave maestra.".into()),
+            accounts_count: 0,
+        });
+    }
+
+    let params_resp = http_client()
+        .post(&format!("{clean_url}/api/auth/params"))
+        .json(&serde_json::json!({ "username": clean_user }))
+        .send()
+        .await
+        .map_err(|e| format!("Error conectando al servidor: {e}"))?;
+
+    if !params_resp.status().is_success() {
+        return Ok(UnlockResult {
+            success: false,
+            error: Some(format!(
+                "Error consultando servidor: HTTP {}",
+                params_resp.status()
+            )),
+            accounts_count: 0,
+        });
+    }
+
+    let params_json: serde_json::Value = params_resp
+        .json()
+        .await
+        .map_err(|e| format!("Respuesta inválida del servidor: {e}"))?;
+    let salt_hex = params_json
+        .get("kdf_salt_hex")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "Falta kdf_salt_hex en respuesta".to_string())?;
+    let salt = hex::decode(salt_hex).map_err(|e| format!("Salt inválido: {e}"))?;
+    let kdf_params = KdfParams {
+        memory_kib: params_json
+            .get("kdf_memory_kib")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(65536) as u32,
+        iterations: params_json
+            .get("kdf_iterations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(3) as u32,
+        parallelism: params_json
+            .get("kdf_parallelism")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(4) as u32,
+    };
+
+    let (auth_key, _) = derive_keys(&password, &salt, &kdf_params)
+        .map_err(|e| format!("Error derivando clave de autenticación: {e}"))?;
+    let auth_key_hex = hex::encode(auth_key.0);
+    let device_id = current_device_id();
+
+    let login_resp = http_client()
+        .post(&format!("{clean_url}/api/auth/login"))
+        .json(&serde_json::json!({
+            "username": clean_user,
+            "auth_key_hex": auth_key_hex,
+            "device_id": device_id,
+            "device_name": device_id,
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("Error conectando al servidor: {e}"))?;
+
+    if !login_resp.status().is_success() {
+        let body: serde_json::Value = login_resp.json().await.unwrap_or_default();
+        let msg = body
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Credenciales inválidas")
+            .to_string();
+        return Ok(UnlockResult {
+            success: false,
+            error: Some(msg),
+            accounts_count: 0,
+        });
+    }
+
+    let login_json: serde_json::Value = login_resp
+        .json()
+        .await
+        .map_err(|e| format!("Error leyendo respuesta de login: {e}"))?;
+    let display_name = login_json
+        .get("display_name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&clean_user)
+        .to_string();
+    let encrypted_payload = login_json
+        .get("encrypted_payload")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "La respuesta no contiene la bóveda cifrada".to_string())?;
+
+    let enc_state: EncryptedVaultState = serde_json::from_str(encrypted_payload)
+        .map_err(|e| format!("Bóveda descargada inválida: {e}"))?;
+    let mut vault = Vault::load_locked(enc_state);
+    vault
+        .unlock_with_password(&password)
+        .map_err(|e| format!("No se pudo descifrar la bóveda con esa clave maestra: {e}"))?;
+
+    save_vault_state(&app, vault.state())?;
+    sync_identity_map(&app, &vault)?;
+    save_session_file(
+        &app,
+        &SessionFile {
+            server_url: clean_url.clone(),
+            username: clean_user.clone(),
+            display_name,
+            device_id,
+        },
+    )?;
+
+    let count = vault.state().accounts.len();
+    {
+        let mut auth_guard = session_auth.auth.lock().unwrap();
+        *auth_guard = Some(SessionAuth {
+            server_url: clean_url,
+            username: clean_user,
+            auth_key_hex,
+        });
+    }
+    {
+        let mut guard = vault_state.vault.lock().unwrap();
+        *guard = Some(vault);
+    }
+
+    Ok(UnlockResult {
+        success: true,
+        error: None,
+        accounts_count: count,
+    })
+}
+
+/// Cierre de sesión global en esta PC (D-12):
+/// Sube bóveda pendiente (salvo force_without_sync), detiene poller y borra datos locales de sesión.
+/// Nunca borra nada en el VPS ni toca logins de agy/Codex en el SO.
+#[command]
+pub async fn global_logout(
+    app: AppHandle,
+    vault_state: State<'_, VaultState>,
+    session_auth: State<'_, SessionAuthState>,
+    poller: State<'_, crate::commands::poller::PollerManager>,
+    force_without_sync: bool,
+) -> Result<(), String> {
+    if !force_without_sync {
+        crate::commands::security::sync_vault_to_vps(&app).await?;
+    }
+
+    crate::commands::poller::kill_poller_process(&poller);
+    let _ = crate::commands::security::cancel_autolock_timer().await;
+
+    {
+        let mut guard = vault_state.vault.lock().unwrap();
+        if let Some(vault) = &mut *guard {
+            vault.lock();
+        }
+        *guard = None;
+    }
+    {
+        let mut auth_guard = session_auth.auth.lock().unwrap();
+        *auth_guard = None;
+    }
+
+    let id_map = identity_map_path(&app);
+    let paths = [
+        vault_path(&app),
+        session_path(&app),
+        id_map.clone(),
+        id_map.with_extension("key"),
+        app.path()
+            .app_data_dir()
+            .expect("No se pudo obtener AppData dir")
+            .join("dpapi.cache"),
+    ];
+    for p in paths {
+        if p.exists() {
+            std::fs::remove_file(&p)
+                .map_err(|e| format!("No se pudo eliminar {}: {e}", p.display()))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Información de la sesión local para primer arranque vs arranques siguientes (Fase 19.2).
 /// Desbloquea la bóveda usando la clave de recuperación y establece nueva contraseña.
 #[command]
 pub async fn recover_vault(

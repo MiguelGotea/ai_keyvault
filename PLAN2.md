@@ -643,13 +643,18 @@ Aplicado D-01, D-02 y D-06:
   - `crates/core/src/kdf.rs` ya implementa `derive_keys()` que separa `AuthKey` (servidor) de `MasterDerivationKey` (cifrado local).
   - `server/src/db.rs` y `server/src/routes.rs` **no** tienen tabla `users`, verificación de `AuthKey` ni bloqueo progresivo por intentos (`GET /api/vault/sync` devuelve el último snapshot global sin usuario).
   - **Cambios aditivos propuestos para `19.1`** (pendiente de aprobación del autor): tablas `users` y `user_vaults` en `server/src/db.rs`; endpoints `POST /api/auth/register`, `POST /api/auth/params`, `POST /api/auth/login` y `POST /api/auth/vault` en `server/src/routes.rs` + `main.rs` (sin modificar ni eliminar rutas existentes).
-- **19.1 Servidor — ✅ Tests en verde (2026-11-25, pendiente de deploy al VPS):**
+- **19.1 Servidor — ✅ Desplegado en VPS y tests en verde (2026-11-25):**
   - `server/src/db.rs`: tablas aditivas `users` y `user_vaults`.
   - `server/src/routes.rs` + `main.rs`: `POST /api/auth/register`, `POST /api/auth/params`, `POST /api/auth/login` (bloqueo progresivo tras 5 fallos, sin enumeración de usuario) y `POST /api/auth/vault`.
   - Verificado: `cargo fmt --all -- --check` y `cargo test -p ai-keyvault-server --offline` (`5 passed` unit + `3 passed` integration).
   - `docs/contrato-api.md`: documentados los 4 endpoints. Siguiente sub-paso: `19.2`.
-- **19.2** App: pantallas de primer arranque, arranques siguientes y cierre de sesión global.
-- **19.3** «Iniciar con Windows».
+- **19.2 App — ✅ Compilado y tests en verde (2026-11-25, pendiente de verificación en PC-A/PC-B):**
+  - `vault.rs` + `security.rs` + `main.rs`: `session.json`, `SessionAuthState` (`Zeroize`), `get_session_info`, `register_user_and_vault`, `login_user_and_sync`, `global_logout`, y sync autenticado vía `/api/auth/vault`.
+  - `UnlockPage.tsx`: primer arranque estilo Bitwarden (**Iniciar sesión** / **Crear usuario nuevo**) y arranques siguientes solo con clave maestra + nombre de usuario.
+  - `SettingsPage.tsx`: botón **«Cerrar sesión global en esta PC»** con confirmación y subida previa. Siguiente sub-paso: `19.3` («Iniciar con Windows»).
+- **19.3 «Iniciar con Windows» — 🟡 Código escrito (2026-11-25), pendiente de `cargo test` en MSVC y prueba en uso real:**
+  - `security.rs` + `main.rs`: `get_autostart_enabled`, `set_autostart_enabled` (`HKCU\...\Run` con `--minimized`), y ocultar ventana al iniciar con `--minimized`.
+  - `SettingsPage.tsx`: toggle «Iniciar con Windows (en bandeja)» (apagado por defecto). Siguiente: verificación en uso real de los criterios de Fase 19.
 
 **Criterios de aceptación (en uso real):**
 - [ ] PC sin sesión muestra las dos opciones; con sesión pide solo la clave.

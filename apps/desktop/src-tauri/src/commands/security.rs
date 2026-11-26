@@ -81,7 +81,7 @@ pub struct VaultSyncResult {
 /// Sube la bóveda cifrada al VPS (conocimiento cero — el servidor no puede descifrarla).
 /// Mapea: POST /api/vault/sync con `{ device_id, encrypted_payload }`.
 pub async fn sync_vault_to_vps(app: &AppHandle) -> Result<(), String> {
-    use crate::commands::vault::vault_path;
+    use crate::commands::vault::{vault_path, SessionAuthState};
 
     let path = vault_path(app);
     if !path.exists() {
@@ -93,7 +93,44 @@ pub async fn sync_vault_to_vps(app: &AppHandle) -> Result<(), String> {
 
     let device_id = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "desktop-win".to_string());
 
-    // Asegurar que el dispositivo existe en `devices` (requerido por FK de `vault_snapshots`)
+    // Si hay sesión de usuario autenticada (Fase 19), subir a /api/auth/vault
+    let session_creds = {
+        let state = app.state::<SessionAuthState>();
+        let guard = state.auth.lock().unwrap();
+        guard.as_ref().map(|a| {
+            (
+                a.server_url.clone(),
+                a.username.clone(),
+                a.auth_key_hex.clone(),
+            )
+        })
+    };
+
+    if let Some((server_url, username, auth_key_hex)) = session_creds {
+        let resp = http_client()
+            .post(&format!("{server_url}/api/auth/vault"))
+            .json(&serde_json::json!({
+                "username": username,
+                "auth_key_hex": auth_key_hex,
+                "device_id": device_id,
+                "encrypted_payload": vault_str,
+            }))
+            .send()
+            .await
+            .map_err(|e| format!("Error al subir bóveda de usuario: {e}"))?;
+
+        if resp.status().is_success() {
+            info!("☁️ Bóveda de usuario sincronizada con VPS");
+            return Ok(());
+        } else {
+            return Err(format!(
+                "Error del servidor al sincronizar bóveda: {}",
+                resp.status()
+            ));
+        }
+    }
+
+    // Fallback legado sin usuario registrado
     let reg_payload = DeviceRegistration {
         device_id: device_id.clone(),
         device_name: device_id.clone(),
@@ -287,4 +324,84 @@ pub async fn get_last_backup_info() -> Result<BackupInfo, String> {
         last_backup_at: None,
         message: "Sin commits de respaldo aún en ai_keyvault_data.".into(),
     })
+}
+
+const AUTOSTART_REG_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+const AUTOSTART_VALUE_NAME: &str = "AI KeyVault";
+
+/// Consulta si «Iniciar con Windows» está habilitado en el registro del usuario (D-03).
+#[command]
+pub async fn get_autostart_enabled() -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let out = std::process::Command::new("reg")
+            .args(["query", AUTOSTART_REG_KEY, "/v", AUTOSTART_VALUE_NAME])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| format!("No se pudo consultar inicio automático: {e}"))?;
+        Ok(out.status.success())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(false)
+    }
+}
+
+/// Activa o desactiva «Iniciar con Windows (en bandeja)» (D-03).
+#[command]
+pub async fn set_autostart_enabled(enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        if enabled {
+            let exe = std::env::current_exe()
+                .map_err(|e| format!("No se pudo obtener la ruta del ejecutable: {e}"))?;
+            let value = format!("\"{}\" --minimized", exe.display());
+            let out = std::process::Command::new("reg")
+                .args([
+                    "add",
+                    AUTOSTART_REG_KEY,
+                    "/v",
+                    AUTOSTART_VALUE_NAME,
+                    "/t",
+                    "REG_SZ",
+                    "/d",
+                    &value,
+                    "/f",
+                ])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .map_err(|e| format!("No se pudo registrar inicio automático: {e}"))?;
+            if !out.status.success() {
+                let err = String::from_utf8_lossy(&out.stderr);
+                return Err(format!("Error al guardar inicio automático: {err}"));
+            }
+        } else {
+            let out = std::process::Command::new("reg")
+                .args([
+                    "delete",
+                    AUTOSTART_REG_KEY,
+                    "/v",
+                    AUTOSTART_VALUE_NAME,
+                    "/f",
+                ])
+                .creation_flags(CREATE_NO_WINDOW)
+                .output()
+                .map_err(|e| format!("No se pudo quitar inicio automático: {e}"))?;
+            // Si no existía la entrada, no es error al desactivar
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if !out.status.success() && !stderr.contains("unable to find") {
+                return Err(format!("Error al quitar inicio automático: {stderr}"));
+            }
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = enabled;
+        Err("Iniciar con Windows solo está disponible en Windows.".into())
+    }
 }

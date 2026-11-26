@@ -12,7 +12,7 @@ mod commands;
 mod tray;
 
 use commands::poller::PollerManager;
-use commands::vault::VaultState;
+use commands::vault::{SessionAuthState, VaultState};
 use tauri::Manager;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -36,11 +36,20 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         // Estado global de la bóveda (Mutex<Option<Vault>>)
         .manage(VaultState::default())
+        // Estado de sesión autenticada en RAM (AuthKey con zeroize)
+        .manage(SessionAuthState::default())
         // Estado global del poller (Mutex<PollerStatus>)
         .manage(PollerManager::default())
         .setup(|app| {
             // Configurar el icono de la bandeja del sistema
             tray::setup_tray(app)?;
+
+            // D-03: si arranca con Windows (--minimized), iniciar oculto en bandeja
+            if std::env::args().any(|a| a == "--minimized") {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
+            }
 
             #[cfg(debug_assertions)]
             {
@@ -56,8 +65,12 @@ fn main() {
             // Health / conectividad
             commands::health::ping_server,
             commands::api::check_server_health,
-            // Bóveda local (Fase 12)
+            // Bóveda local y sesión (Fase 12 / 19)
             commands::vault::get_vault_status,
+            commands::vault::get_session_info,
+            commands::vault::register_user_and_vault,
+            commands::vault::login_user_and_sync,
+            commands::vault::global_logout,
             commands::vault::create_vault,
             commands::vault::unlock_vault,
             commands::vault::lock_vault,
@@ -106,6 +119,8 @@ fn main() {
             commands::security::upload_vault_sync,
             commands::security::download_vault_sync,
             commands::security::get_last_backup_info,
+            commands::security::get_autostart_enabled,
+            commands::security::set_autostart_enabled,
         ])
         .build(tauri::generate_context!())
         .expect("Error al construir la aplicación AI KeyVault")
