@@ -46,6 +46,7 @@ export default function CommandPalette({ open, onClose }: Props) {
       { id: "nav-chats", label: es.nav.chats, category: "Ir a", run: () => { navigate("/chats"); onClose(); } },
       { id: "nav-accounts", label: es.nav.accounts, category: "Ir a", run: () => { navigate("/accounts"); onClose(); } },
       { id: "nav-stats", label: es.nav.stats, category: "Ir a", run: () => { navigate("/stats"); onClose(); } },
+      { id: "nav-cooldown", label: "⏱️ Experimento de cooldown", category: "Ir a", run: () => { navigate("/cooldown"); onClose(); } },
       { id: "nav-settings", label: es.nav.settings, category: "Ir a", run: () => { navigate("/settings"); onClose(); } },
     ];
 

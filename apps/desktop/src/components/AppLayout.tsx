@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { to: "/chats", icon: "💬", label: es.nav.chats },
   { to: "/accounts", icon: "🗝️", label: es.nav.accounts },
   { to: "/devices", icon: "💻", label: "Mis dispositivos" },
+  { to: "/cooldown", icon: "⏱️", label: "Cooldown" },
   { to: "/stats", icon: "📊", label: es.nav.stats },
   { to: "/settings", icon: "⚙️", label: es.nav.settings },
 ];

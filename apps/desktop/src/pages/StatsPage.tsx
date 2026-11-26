@@ -1,6 +1,7 @@
 /** StatsPage — Fase 15: Estadísticas avanzadas (heatmap, comparativa, semanal). */
 import { useMemo, useState } from "react";
 import { useCommand } from "../hooks/useCommand";
+import { computeEfficiencyAndWaste, computeModelTokenStats } from "../utils/stats";
 import type { AccountInfo, HeatmapCell, PoolSummary } from "../types/api";
 import es from "../i18n/es.json";
 
@@ -21,6 +22,22 @@ export default function StatsPage() {
   );
 
   const compare = useCommand<PoolSummary[]>("get_stats_compare", { days });
+  const vaultPools = useMemo(
+    () => (compare.data ?? []).filter(p => accountById.has(p.account_id)),
+    [compare.data, accountById]
+  );
+  const modelStats = useMemo(() => computeModelTokenStats(vaultPools), [vaultPools]);
+  const efficiencyStats = useMemo(() => computeEfficiencyAndWaste(vaultPools), [vaultPools]);
+  const totalTokensUsed = modelStats.reduce((s, m) => s + m.tokensUsed, 0);
+  const avgEfficiency =
+    efficiencyStats.length > 0
+      ? efficiencyStats.reduce((s, e) => s + e.projectedEndPercent, 0) / efficiencyStats.length
+      : 0;
+  const avgWasted =
+    efficiencyStats.length > 0
+      ? efficiencyStats.reduce((s, e) => s + e.wastedPercent, 0) / efficiencyStats.length
+      : 0;
+
   const heatmap = useCommand<HeatmapCell[]>(
     "get_stats_heatmap",
     { accountId: selectedAccount?.id ?? "", days },
@@ -52,6 +69,74 @@ export default function StatsPage() {
           ))}
         </div>
       </div>
+
+      {/* KPIs ampliados (Fase 27) */}
+      <div style={styles.kpiRow}>
+        <div style={styles.compareCard}>
+          <span style={styles.comparePool}>Tokens acumulados</span>
+          <span style={styles.comparePct}>{totalTokensUsed.toLocaleString("es-MX")}</span>
+        </div>
+        <div style={styles.compareCard}>
+          <span style={styles.comparePool}>Eficiencia proyectada promedio</span>
+          <span style={{ ...styles.comparePct, color: "var(--color-success)" }}>
+            {avgEfficiency.toFixed(1)}%
+          </span>
+        </div>
+        <div style={styles.compareCard}>
+          <span style={styles.comparePool}>Cuota desperdiciada estimada</span>
+          <span style={{ ...styles.comparePct, color: "var(--color-warning)" }}>
+            {avgWasted.toFixed(1)}%
+          </span>
+        </div>
+      </div>
+
+      {/* Tokens por modelo / pool (Fase 27) */}
+      <section style={styles.section}>
+        <h3 style={styles.sectionTitle}>Tokens por modelo / pool</h3>
+        {modelStats.length === 0 ? (
+          <div style={styles.hint}>Sin lecturas de tokens en la ventana seleccionada.</div>
+        ) : (
+          <div style={styles.compareGrid}>
+            {modelStats.map(m => (
+              <div key={`${m.provider}-${m.pool}`} style={styles.compareCard}>
+                <div style={styles.compareAccount}>{m.provider.toUpperCase()} / {m.pool}</div>
+                <div style={styles.comparePct}>{m.tokensUsed.toLocaleString("es-MX")}</div>
+                <div style={styles.comparePool}>
+                  {m.tokensLimit > 0
+                    ? `de ${m.tokensLimit.toLocaleString("es-MX")} tokens (${m.accountsCount} cuenta/s)`
+                    : `${m.avgPercentUsed.toFixed(1)}% uso promedio (${m.accountsCount} cuenta/s)`}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Eficiencia y cuota desperdiciada (Fase 27) */}
+      <section style={styles.section}>
+        <h3 style={styles.sectionTitle}>Eficiencia y cuota desperdiciada al reset</h3>
+        {efficiencyStats.length === 0 ? (
+          <div style={styles.hint}>Sin datos suficientes para proyectar eficiencia.</div>
+        ) : (
+          <div style={styles.compareGrid}>
+            {efficiencyStats.map(eff => (
+              <div key={`eff-${eff.accountId}-${eff.pool}`} style={styles.compareCard}>
+                <div style={styles.compareAccount}>
+                  {accountById.get(eff.accountId)?.alias ?? eff.accountId}
+                </div>
+                <div style={styles.comparePool}>{eff.provider} / {eff.pool}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: eff.efficiencyLabel === "Óptima" ? "var(--color-success)" : eff.efficiencyLabel === "Moderada" ? "var(--color-warning)" : "var(--color-danger)" }}>
+                  Eficiencia {eff.efficiencyLabel} ({eff.projectedEndPercent.toFixed(1)}%)
+                </div>
+                <div style={styles.compareMeta}>
+                  Desperdicio est.: {eff.wastedPercent.toFixed(1)}%
+                  {eff.wastedTokens > 0 ? ` (~${eff.wastedTokens.toLocaleString("es-MX")} tok)` : ""}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Comparativa */}
       <section style={styles.section}>
@@ -146,6 +231,7 @@ const styles: Record<string, React.CSSProperties> = {
   section: { background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: 20, display: "flex", flexDirection: "column", gap: 14 },
   sectionTitle: { fontSize: 15, fontWeight: 600, color: "var(--color-text)", margin: 0 },
   hint: { color: "var(--color-text-secondary)", fontSize: 13 },
+  kpiRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 },
   compareGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 },
   compareCard: { background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 5 },
   compareAccount: { fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" },

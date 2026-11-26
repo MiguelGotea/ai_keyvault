@@ -12,6 +12,7 @@ import StatsPage from "./pages/StatsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AccountsPage from "./pages/AccountsPage";
 import DevicesPage from "./pages/DevicesPage";
+import CooldownExperimentPage from "./pages/CooldownExperimentPage";
 import AppLayout from "./components/AppLayout";
 
 /**
@@ -99,6 +100,7 @@ function App() {
         <Route path="/chats" element={<ChatsPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/devices" element={<DevicesPage />} />
+        <Route path="/cooldown" element={<CooldownExperimentPage />} />
         <Route path="/stats" element={<StatsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
