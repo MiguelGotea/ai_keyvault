@@ -276,15 +276,6 @@ export default function UnlockPage() {
         {mode === "login" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>URL del servidor</label>
-              <input
-                type="text"
-                style={styles.input}
-                value={serverUrl}
-                onChange={e => setServerUrl(e.target.value)}
-              />
-            </div>
-            <div style={styles.inputGroup}>
               <label style={styles.inputLabel}>Usuario</label>
               <input
                 type="text"
@@ -320,15 +311,6 @@ export default function UnlockPage() {
         {/* ── PANTALLA: CREAR USUARIO NUEVO ── */}
         {mode === "register" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={styles.inputGroup}>
-              <label style={styles.inputLabel}>URL del servidor</label>
-              <input
-                type="text"
-                style={styles.input}
-                value={serverUrl}
-                onChange={e => setServerUrl(e.target.value)}
-              />
-            </div>
             <div style={styles.inputGroup}>
               <label style={styles.inputLabel}>Nombre</label>
               <input

@@ -91,13 +91,6 @@ export default function SettingsPage() {
       {/* Servidor */}
       <section style={styles.section}>
         <h3 style={styles.sectionTitle}>{es.ajustes.seccion_servidor}</h3>
-        <Row label={es.ajustes.url_servidor}>
-          <input
-            style={styles.input}
-            value={settings.serverUrl}
-            onChange={e => set("serverUrl", e.target.value)}
-          />
-        </Row>
         <Row label={es.ajustes.device_id}>
           <input
             style={styles.input}

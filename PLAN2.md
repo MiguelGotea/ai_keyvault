@@ -632,7 +632,7 @@ Aplicado D-01, D-02 y D-06:
 
 **Flujo:**
 1. **Primer arranque sin sesión en la PC:** pantalla con dos opciones.
-   - **Iniciar sesión (traer mi usuario y bóveda):** URL del servidor (con valor por defecto), usuario y clave maestra. Baja la bóveda cifrada, la descifra en local y registra el dispositivo.
+   - **Iniciar sesión (traer mi usuario y bóveda):** usuario y clave maestra (URL del servidor fija internamente en el binario; no se muestra ni edita en la UI). Baja la bóveda cifrada, la descifra en local y registra el dispositivo.
    - **Crear usuario nuevo:** nombre, usuario y clave maestra (mín. 12 caracteres, con confirmación). Crea el usuario y la bóveda, muestra la **clave de respaldo una sola vez** y registra el dispositivo.
 2. **Arranques siguientes:** solo la clave maestra (pantalla de desbloqueo con el nombre del usuario). La recuperación con clave de respaldo sigue disponible.
 3. **Ajustes → «Cerrar sesión global en esta PC»:** confirma, sube primero la bóveda pendiente (o avisa si no pudo) y borra la sesión local: bóveda local y caché, caché DPAPI, claves del dispositivo, mapa correo→UUID del poller y ajustes de sesión. Detiene el poller y vuelve a la pantalla de dos opciones. **No borra nada en el VPS.** **Nunca** toca el login de agy/Codex del SO: solo borra la sesión de la herramienta (decidido por el autor).
