@@ -1,8 +1,14 @@
 # PLAN.md — Plan de Desarrollo de AI KeyVault
 
-**Versión:** 1.0.0 — Primera Etapa Completada
+**Versión:** 1.1.0 — Primera Etapa Completada (documento histórico del backend)
 **Última actualización:** 2026-11-25
-**Estado:** ✅ Backend operativo en VPS `198.211.97.243:3010`. ⏳ Segunda etapa: app de escritorio Tauri 2.
+**Estado:** ✅ Backend operativo en VPS `198.211.97.243:3010`. 🟡 La app de escritorio (etapa 2) vive en `PLAN2.md`.
+
+> **Cómo leer este documento**
+> - Cubre **solo la etapa 1 (backend)**. Está congelado: no se le agregan fases nuevas. El estado de la app de escritorio vive únicamente en `PLAN2.md`.
+> - **Nomenclatura de etapas:** etapa 1 = backend · etapa 2 = app de escritorio Tauri 2 · etapa 3 (futura) = proveedores adicionales (Fase 9). *(Antes «segunda etapa» se usaba para dos cosas distintas; ya no.)*
+> - **Leyenda:** ✅ terminado y verificado · 🟡 código escrito, sin verificar en uso real · ⬜ pendiente · ⏸ pospuesto · 📄 solo documentado. En los criterios de aceptación, `[x]` = verificado en uso real; `[ ]` = no verificado (aunque la fase figure ✅).
+> - Las letras A–F son etiquetas históricas de fases extra. Referirse a ellas **por nombre**, no por letra.
 
 ---
 
@@ -12,11 +18,11 @@ AI KeyVault es una bóveda + tablero personal para administrar cuentas de agente
 
 **Estado al cierre de primera etapa (2026-11-25):**
 - Fases 0–8 completadas ✅ — Backend 100% operativo
-- Fases A (switch de cuenta), C (chats Codex), D (switch log), E (alert log) completadas ✅
-- Fase F (re-login automático) documentada como procedimiento manual ✅
-- Fase 9 (proveedores adicionales) pospuesta a segunda etapa ⏸
+- Fases A (chats Codex), C (cooldown H1), D (alert log), E (switch log) completadas ✅ *(nombres alineados con CLAUDE.md)*
+- Fase F (renovación de token Codex / re-login) documentada como procedimiento manual 📄
+- Fase 9 (proveedores adicionales) pospuesta a la etapa 3 ⏸
 - Hipótesis H1 confirmada: cooldown empieza con el primer uso de la semana
-- Siguiente etapa: app de escritorio Tauri 2 (ver `docs/desktop-app-insumos.md`)
+- Siguiente etapa: app de escritorio Tauri 2 (ver `docs/desktop-app-insumos.md`; estado real en `PLAN2.md`)
 
 ---
 
@@ -35,12 +41,12 @@ AI KeyVault es una bóveda + tablero personal para administrar cuentas de agente
 | 6 | Agente de chats (agy) | ✅ Completada |
 | 7 | Estadísticas | ✅ Completada |
 | 8 | Ping mínimo | ✅ Completada |
-| A | Switch de cuenta (agy + Codex) | ✅ Completada |
-| C | Chats Codex (reader + endpoints) | ✅ Completada |
-| D | Switch log (tabla + endpoints REST) | ✅ Completada |
-| E | Alert log (tabla + endpoints REST) | ✅ Completada |
-| F | Re-login automático | 📄 Documentado como procedimiento manual |
-| 9 | Proveedores adicionales | ⏸ Pospuesta — Segunda Etapa |
+| A | Chats Codex (lee `state_5.sqlite`) | ✅ Completada |
+| C | Cooldown: hipótesis H1 confirmada con datos reales | ✅ Completada |
+| D | Alert log (tabla `alert_log` + `/api/alerts`) | ✅ Completada |
+| E | Switch log (tabla `switch_log` + `/api/switch`) | ✅ Completada |
+| F | Renovación de token Codex (re-login) | 📄 Documentado como procedimiento manual |
+| 9 | Proveedores adicionales | ⏸ Pospuesta — Etapa 3 |
 
 ### Estado del VPS (verificado 2026-11-25)
 
@@ -67,10 +73,12 @@ AI KeyVault es una bóveda + tablero personal para administrar cuentas de agente
 | agy token es JWT | Token opaco (`ya29`), vida ~1h, ruta: `gemini:antigravity` → `token.access_token` |
 | **H1 (cooldown con primer uso)** | **Confirmada** — el contador de 167h aparece solo cuando hay consumo |
 | Chats ChatGPT.com / Gemini.com trackeables | Solo agentes locales (agy `brain/`, Codex `state_5.sqlite`) — chats web viven en la nube sin API pública |
+| Codex: `tokens_used` desglosado en la tabla | Entero total en `threads`. Desglose real en `token_usage_record` del JSONL (`rollout_path`) |
+| Codex token: plan y `subscription_end` en raíz del JWT | Están en `https://api.openai.com/auth` → `chatgpt_plan_type` y `chatgpt_subscription_active_until` |
 
 ---
 
-## Estado actual: Fase 0 — Investigación
+## Registro histórico — Fase 0 (Investigación, cerrada ✅)
 
 ### Completado ✅
 - [x] CLAUDE.md con todas las reglas de trabajo
@@ -103,27 +111,7 @@ AI KeyVault es una bóveda + tablero personal para administrar cuentas de agente
 - [x] VPS: Caddy instalado (Caddyfile pendiente de configurar con subdominio)
 - [x] Push inicial a ambos repos en GitHub
 
-### Hallazgos críticos de la investigación (corrigen supuestos)
-
-| Supuesto original | Realidad verificada |
-|-------------------|---------------------|
-| Pools de agy: `gemini-5h`, `3p-5h`, `gemini-weekly`, `3p-weekly` | **Solo ventanas semanales** en cuentas personales. No hay ventanas de 5h. |
-| Endpoint `cloudcode-pa.googleapis.com` disponible | **HTTP 403** en cuentas personales — solo Enterprise |
-| Cuota de agy vía API JSON | **Solo vía `agy /usage`** (texto parseado) o `transcript.jsonl` local |
-| Codex: JSON por sesión en `~/.codex/sessions/` | **SQLite**: `~/.codex/state_5.sqlite` tabla `threads`. El número puede cambiar con la versión |
-| Codex: endpoint `/wham/profiles/me` | **HTTP 404** — endpoint descartado |
-| Codex: `tokens_used` desglosado en la tabla | Entero total en `threads`. Desglose real en `token_usage_record` del JSONL (`rollout_path`) |
-| agy token es JWT | **Token opaco** (`ya29`), vida ~1h. Ruta: `gemini:antigravity` → `token.access_token` |
-| Codex token: plan y `subscription_end` en raíz del JWT | Están en `https://api.openai.com/auth` → `chatgpt_plan_type` y `chatgpt_subscription_active_until` |
-
-### Hallazgo clave para el experimento de cooldown (agy)
-
-La UI de `agy /usage` muestra:
-- Antes de usar: `100.00% — Quota available` (sin `resetTime` visible)
-- Después de usar Gemini: `98.41% — Refreshes in 167h 55m`
-- Después de usar Claude+GPT: `97.48% — Refreshes in 167h 59m`
-
-**Interpretación preliminar:** el contador de "167h" (~7 días) aparece solo cuando hay consumo. Esto apoya **H1** (el reloj empieza con el primer uso), pero necesita confirmación con más muestras para distinguirlo de H3 (horario fijo que solo se muestra cuando hay consumo).
+> Los hallazgos de esta fase están consolidados en la tabla «Hallazgos críticos confirmados» (más arriba) y en `docs/research/`. La hipótesis H1 (el reloj empieza con el primer uso) quedó **confirmada** con datos reales (fase C).
 
 ---
 
@@ -178,7 +166,7 @@ EOF
 chmod 600 /opt/ai-keyvault/.env
 chown ai-keyvault:ai-keyvault /opt/ai-keyvault/.env
 
-# 5. Configurar Caddy (agregar al Caddyfile)
+# 5. [PENDIENTE — sin subdominio por ahora] Configurar Caddy (agregar al Caddyfile)
 # Editar /etc/caddy/Caddyfile y agregar:
 # keyvault.tudominio.com {
 #     reverse_proxy localhost:3010
@@ -201,7 +189,8 @@ echo "ai-keyvault-deploy ALL=(ALL) NOPASSWD: /bin/systemctl restart ai-keyvault,
 # 8. Configurar firewall
 ufw allow 80/tcp
 ufw allow 443/tcp
-# Puerto 3010 NO se abre al exterior — solo Caddy lo usa internamente
+# ESTADO REAL: sin subdominio/TLS el servidor se expone por IP directa → `ufw allow 3010/tcp` (ver Fase 2).
+# Cuando exista subdominio + Caddy, cerrar 3010 al exterior.
 
 # 9. Instalar fail2ban
 apt install -y fail2ban
@@ -212,13 +201,13 @@ apt install -y fail2ban
 
 ## Fases de desarrollo
 
-### Fase 0 — Investigación y base ← ACTUAL
+### Fase 0 — Investigación y base ✅ COMPLETADA
 **Criterios de aceptación:**
 - [x] Documentos con evidencia en docs/research/
 - [x] ADRs justificados
 - [x] Modelo de amenazas
-- [ ] cooldown-logger corriendo y capturando datos
-- [ ] Usuario aprueba para continuar
+- [x] cooldown-logger corriendo y capturando datos
+- [x] Usuario aprueba para continuar
 
 ### Fase 1 — Núcleo seguro (crates/core) ✅ COMPLETADA
 **Contenido implementado:**
@@ -258,7 +247,7 @@ apt install -y fail2ban
 - [x] Deploy automático funciona: push → binario en VPS (binario activo en `198.211.97.243:3010`)
 - [x] El servidor no puede descifrar nada (demostrado en `test_servidor_no_puede_descifrar_vault`)
 - [x] Prueba de restauración pasa (`test_restauracion_desde_backup`)
-- [ ] Entrar desde una segunda PC con URL + clave maestra y ver las mismas cuentas _(requiere app desktop — Fase 5+)_
+- [ ] Entrar desde una segunda PC con URL + clave maestra y ver las mismas cuentas _(requiere app desktop — se valida en `PLAN2.md` Fase 18)_
 
 ### Fase 3 — Adaptadores agy + Codex ✅ COMPLETADA
 **Contenido implementado:**
@@ -280,7 +269,7 @@ apt install -y fail2ban
 - [~] Cambio real de cuenta de Codex _(requiere 2 cuentas Windows; lectura y roundtrip sí probados)_
 
 > **Nota:** Los tests de integración real corren localmente con `-- --include-ignored`.
-> El switch completo entre cuentas se validará cuando haya 2 cuentas disponibles (Fase 5+).
+> El switch completo entre cuentas se validará con 2 cuentas reales (ver `PLAN2.md` Fase 18).
 
 ### Fase 4 — Cuota y planes ✅ COMPLETADA
 **Contenido implementado:**
@@ -300,7 +289,7 @@ apt install -y fail2ban
 - [x] Lecturas con fuente y antigüedad visibles _(curl `%40` devuelve `source`, `read_at`, `percent_used`)_
 - [x] agy cuota funcionando: `gemini-weekly`, `claude-gpt-weekly`, `claude-gpt-5h` subidos al VPS _(2026-11-25)_
 - [x] account_id correcto desde Credential Manager de Windows _(`gemini:antigravity` → `id_token_email`)_
-- [ ] Datos coherentes entre PCs _(requiere 2 PCs corriendo el poller — se valida en Fase 5+)_
+- [ ] Datos coherentes entre PCs _(requiere 2 PCs corriendo el poller — se valida en `PLAN2.md` Fase 18)_
 
 **Estado final Fase 4 (2026-11-25):**
 - Parser agy reescrito para formato real (TSV con local datetime)
@@ -310,17 +299,6 @@ apt install -y fail2ban
 - CI completo en verde (fmt, clippy, tests, cargo audit)
 
 **Fix aplicado (2026-11-25):** `agy /usage` → `agy --print /usage`
-  - `models.rs`: `PollerConfig`, `QuotaSnapshot`, `LeaseResponse`.
-  - `main.rs`: binario ejecutable con configuración por variables de entorno (`AKYV_SERVER_URL`, `AKYV_DEVICE_ID`, `AKYV_POLL_INTERVAL`).
-- **6 tests unitarios** (sin red, sin providers reales).
-- **1 test de integración** `#[ignore]`: ciclo completo con servidor real y agy instalado.
-- Script `crates/poller/scripts/test_poller_manual.ps1` para prueba manual en Windows.
-
-**Pendiente para cerrar criterios:**
-- [ ] Correr el poller en esta PC y verificar lecturas en el servidor
-- [ ] Datos coherentes entre PCs (mismo % visto desde dos PCs)
-- [ ] Lecturas con fuente y antigüedad visibles (endpoint GET `/api/quota/readings/:id`)
-- [ ] Lease funciona: solo un consultador activo por cuenta
 
 **Cómo probar el poller localmente:**
 ```powershell
@@ -336,14 +314,6 @@ cargo run --package ai-keyvault-poller
 # Reemplazar ACCOUNT_ID con tu email de agy
 curl.exe http://198.211.97.243:3010/api/quota/readings/tu@gmail.com
 ```
-  - `models.rs`: `PollerConfig`, `QuotaSnapshot`, `LeaseResponse`.
-- **5 tests unitarios** (sin red, sin providers reales): config defaults, serialización JSON, payload de lease y upload, snapshot de Codex.
-- **1 test de integración** `#[ignore]`: ciclo completo con servidor real y agy instalado.
-
-**Criterios de aceptación:**
-- [ ] Datos coherentes entre PCs (mismo % visto desde dos PCs)
-- [ ] Lecturas con fuente y antigüedad visibles
-- [ ] Lease funciona: solo un consultador activo por cuenta
 
 **Tiempo estimado:** 3 días
 
@@ -352,7 +322,7 @@ curl.exe http://198.211.97.243:3010/api/quota/readings/tu@gmail.com
 
 **Contenido:**
 - `crates/alerter/` — nuevo crate: detector de umbrales + notificador
-- Toast notifications en Windows (`winrt-notification`)
+- Toast notifications en Windows vía PowerShell `NotifyIcon` (`winrt-notification` quedó **descartado**: `STATUS_ACCESS_VIOLATION`, ver CLAUDE.md §13)
 - ntfy.sh configurado via `AKYV_NTFY_TOPIC` (env var)
 - Alerta al 80% (previa, `WARN`) y 95% (crítica, `CRIT`)
 - Anti-ruido: cooldown por `(account_id, pool, level)` — no spam
@@ -391,7 +361,7 @@ crates/alerter/
 - `server/src/db.rs` — tabla `chat_sessions` (PK compuesta id+account_id)
 - `server/src/routes.rs` — `POST /api/chats` (upsert batch) + `GET /api/chats/:account_id`
 - `crates/poller/src/chat_collector.rs` — recolecta y sube tras cada ciclo de cuota
-- Solo agy en Fase 6; Codex (cloud-only) queda para Fase 9
+- Solo agy en Fase 6. Codex se resolvió después (fase A, chats Codex): lee `~/.codex/state_5.sqlite` tabla `threads` (verificado)
 
 **Criterios de aceptación:**
 - [x] Chat creado en PC-A aparece en PC-B (vía servidor)
@@ -440,9 +410,9 @@ crates/alerter/
 **Tiempo estimado:** 2 días
 
 ### Fase 9 — Proveedores adicionales
-**Estado:** ⏸ Pospuesta — Segunda Etapa del proyecto
+**Estado:** ⏸ Pospuesta — Etapa 3 del proyecto
 
-**Contenido (segunda etapa):**
+**Contenido (etapa 3):**
 - Adaptadores: Claude (Anthropic), Gemini (Google AI Studio), OpenCode, Grok
 - Pestaña de chat de consumo (chat normal vs agente)
 - Un adaptador nuevo sin cambios en el núcleo
@@ -451,7 +421,7 @@ crates/alerter/
 > proveedor y no tienen API pública de historial. Lo que sí se trackea son las
 > sesiones de los agentes de código (agy local y Codex local), no los chats web.
 
-**Tiempo estimado (segunda etapa):** 5-7 días
+**Tiempo estimado (etapa 3):** 5-7 días
 
 ---
 
@@ -483,49 +453,6 @@ crates/alerter/
 
 ## ✅ PRIMERA ETAPA COMPLETADA — 2026-11-25
 
-El backend está 100% operativo. La segunda etapa (app de escritorio Tauri 2) comienza en un chat nuevo usando `docs/desktop-app-insumos.md` como spec de entrada.
+El backend está operativo (servidor VPS, poller, alerter, providers). Este documento queda **congelado como registro histórico de la etapa 1**.
 
-### Pendientes identificados del prompt original (§ del AI-KeyVault-prompt-claude-code.md)
-
-Los siguientes ítems estaban en el spec original y **no se implementaron** en la primera etapa. Todos son responsabilidad de la app de escritorio o de fases avanzadas:
-
-| Item del prompt | Sección | Estado |
-|----------------|---------|--------|
-| App de escritorio Tauri 2 con UI | §4, §9 | ⏳ Segunda etapa — Fase 10+ |
-| Pantalla de desbloqueo con clave maestra / clave de respaldo | §9.1, §5.1 | ⏳ Segunda etapa |
-| Panel con tarjetas de cuentas y barras de cuota | §9.2 | ⏳ Segunda etapa |
-| Detalle de cuenta con pestañas (Resumen, Cuota, Stats, Chats, Credenciales, Historial) | §9.3 | ⏳ Segunda etapa |
-| Paleta de comandos `Ctrl+K` para cambiar cuenta, copiar contraseña | §9 | ⏳ Segunda etapa |
-| Portapapeles con limpieza automática (30 s) | §5.3 | ⏳ Segunda etapa |
-| Autobloqueo configurable (15 min por defecto) | §2, §5.3 | ⏳ Segunda etapa — crate core listo |
-| Caché local cifrada + DPAPI para desbloqueo rápido | §5.3 | ⏳ Segunda etapa |
-| Pantalla "Mis dispositivos" (revocar acceso) | §7.17 | ⏳ Segunda etapa |
-| Pantalla "Ajustes" (tema, autobloqueo, frecuencias, ntfy, backups) | §9.10 | ⏳ Segunda etapa |
-| Tema claro/oscuro intercambiable | §2 | ⏳ Segunda etapa |
-| Español 100% con archivos i18n | §2 | ⏳ Segunda etapa |
-| Alertas con **sugerencia de cuenta alternativa** ("cambia a esta") | §8.1 | ⏳ Segunda etapa — detección implementada, UI falta |
-| Silenciar alerta por X horas | §8.1 | ⏳ Segunda etapa |
-| Alertas de **fin de suscripción** (7 días / 1 día antes) | §8.1 | ⏳ Segunda etapa |
-| Alertas de **login vencido o rechazado** | §8.1 | ⏳ Segunda etapa |
-| Ping desde la UI con lista "cuentas que necesitan ping" | §8.2 | ⏳ Segunda etapa — backend listo |
-| Botón "Deshacer" en cambio de cuenta desde la UI | §8.3 | ⏳ Segunda etapa — revert implementado en Rust |
-| Login guiado por primera vez (capturar token del login oficial) | §8.3 | ⏳ Segunda etapa |
-| "Sin agente en esta PC" en vista de chats | §10 | ⏳ Segunda etapa |
-| Tokens detallados por JSONL (`token_usage_record`) | §6.3 | 📄 Investigado, pendiente de implementar |
-| Verificación de respaldo en `ai_keyvault_data` | §3, Fase 2 | 📄 Workflow existe, nunca se probó restauración real |
-| Consulta de cuota desde el VPS 24/7 (delegación explícita) | §5.2 | ⏸ Pospuesto — riesgo documentado en ADR-003 |
-| Pestaña "Chat de consumo" (chat web vs agente) | §6.5 | ⏸ Pospuesto — sin API pública de ChatGPT/Gemini.com |
-| Proveedores adicionales: Claude, Gemini, OpenCode, Grok | §9, Fase 9 | ⏸ Pospuesto — Segunda Etapa |
-| Instalador Windows firmado (SmartScreen) | §13 | ⏳ Fase final de segunda etapa |
-| Versión portable (sin instalador) | §13 | ⏳ Fase final de segunda etapa |
-| `docs/operaciones.md` §rotación de claves | §13 | 📄 Procedimiento manual documentado |
-
-### Próximos pasos para segunda etapa
-
-1. Leer `docs/desktop-app-insumos.md` — spec completo del frontend Tauri 2
-2. Iniciar Fase 10: Scaffolding Tauri 2 (`src-tauri/` + `src/`)
-3. Implementar autenticación local (Argon2id) y desbloqueo de bóveda
-4. Dashboard de cuota (consumir endpoints `/api/stats/*`)
-5. Switch de cuenta con 1 click (consumir `/api/switch`)
-6. Pantalla de alertas y ping (consumir `/api/alerts`, `/api/pings`)
-7. Firma del instalador y distribución (Fase final)
+La app de escritorio (etapa 2) se gestiona **solo** en `PLAN2.md`. La tabla de pendientes contra el prompt original que vivía aquí se movió a `PLAN2.md` → «Matriz de cumplimiento del prompt original», para que exista una sola fuente de verdad.

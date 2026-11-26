@@ -44,9 +44,11 @@
 | D | ✅ | Alert log: historial de alertas en VPS (`/api/alerts`) |
 | E | ✅ | Switch log: historial de cambios de cuenta (`/api/switch`) |
 | F | 📄 | Codex token renewal: documentado como procedimiento manual |
-| 9 | ⏸ | **Segunda etapa** — proveedores adicionales (Claude, Gemini, Grok) |
+| 9 | ⏸ | **Etapa 3** — proveedores adicionales (Claude, Gemini, Grok) |
 
-### Segunda etapa: App de escritorio ✅ v0.2.0
+### Segunda etapa: App de escritorio 🟡 v0.2.4
+
+> UI completa e instalable, pero el flujo de datos poller → VPS → app está **en reparación** (ver `PLAN2.md`, Fase 18). Las marcas ✅ de esta tabla significan «código escrito y compilando»; el estado real está en `PLAN2.md`.
 
 | Fase | Estado | Descripción |
 |------|--------|-------------|
@@ -56,7 +58,9 @@
 | 13 | ✅ | Dashboard — QuotaCard, AppLayout, switch cuentas, poller IPC |
 | 14 | ✅ | Autobloqueo IPC — timer Rust + evento Tauri → lock_vault |
 | 15 | ✅ | Configuración, vault sync VPS, alertas, pings, chats, stats |
-| 16 | ✅ | Build verificado, CI en verde, v0.2.0 instalada en Windows |
+| 16 | ✅ | Build verificado, CI en verde, instalable en Windows |
+| 17 | 🟡 | Alineación con el diseño: bóveda como fuente de verdad, captura de login, switch real (v0.2.1 → v0.2.4) |
+| 18 | ⬜ | **Reconexión del flujo de datos** (siguiente) |
 
 **Instalación (Windows):**
 
@@ -64,7 +68,7 @@
 
 ```
 1. Compilar: pnpm tauri build  (desde apps/desktop/)
-2. Instalar: src-tauri/target/release/bundle/nsis/AI KeyVault_0.2.0_x64-setup.exe
+2. Instalar: src-tauri/target/release/bundle/nsis/AI KeyVault_<versión>_x64-setup.exe
 3. La app abre en /unlock — crea tu bóveda con una clave maestra (mín. 12 caracteres)
 4. El poller arranca automáticamente y se ve en la bandeja del sistema
 ```
@@ -103,7 +107,7 @@ ai-keyvault-poller (bg)       →    API Rust/axum + SQLite    ←   Actions CI/
 
 ---
 
-## 🖥️ App de Escritorio — v0.2.0 ✅
+## 🖥️ App de Escritorio — v0.2.4 🟡
 
 La app de escritorio **Tauri 2** (Rust + React/TypeScript) está operativa. Consume el backend VPS ya existente. Toda la comunicación HTTP al VPS va por comandos Rust — nunca `fetch()` desde React.
 
@@ -121,9 +125,7 @@ La app de escritorio **Tauri 2** (Rust + React/TypeScript) está operativa. Cons
 - DPAPI: desactivado por defecto. Con advertencia explícita.
 - Vault sync: la bóveda local se sube al VPS cifrada (conocimiento cero — el servidor no puede descifrarla).
 
-**Pendiente (segunda vuelta):**
-- Instalar `cmake` → habilitar `providers/agy` y `providers/codex` → switch real de credenciales desde la UI
-- Firma de código para eliminar SmartScreen warning
+**Pendiente:** ver `PLAN2.md` (Fase 18 y «Matriz de cumplimiento del prompt original»). Incluye la firma de código para eliminar el aviso de SmartScreen.
 
 ---
 
@@ -176,7 +178,7 @@ ai_keyvault/
     agy/                    # Adaptador Antigravity (Credential Manager + cuota)
     codex/                  # Adaptador Codex (auth.json + chats SQLite)
   apps/
-    desktop/                # [SEGUNDA ETAPA] App Tauri 2
+    desktop/                # Etapa 2: App Tauri 2
   docs/
     adr/                    # Architecture Decision Records
     research/               # Investigación con evidencia verificada
@@ -191,7 +193,8 @@ ai_keyvault/
 ## 📖 Documentación adicional
 
 - [`CLAUDE.md`](CLAUDE.md) — Reglas de trabajo para el agente de desarrollo
-- [`PLAN.md`](PLAN.md) — Plan detallado por fases con estado actual
+- [`PLAN.md`](PLAN.md) — Historia del backend (etapa 1, congelado)
+- [`PLAN2.md`](PLAN2.md) — App de escritorio: decisiones, estado real, Fase 18 y matriz de pendientes
 - [`docs/operaciones.md`](docs/operaciones.md) — VPS, BD, deploy, variables de entorno
 - [`docs/desktop-app-insumos.md`](docs/desktop-app-insumos.md) — Spec app de escritorio
 - [`docs/adr/`](docs/adr/) — Decisiones técnicas justificadas

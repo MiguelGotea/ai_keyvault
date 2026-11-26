@@ -1,9 +1,37 @@
 # PLAN2.md — Segunda Etapa: App de Escritorio Tauri 2
 
-**Versión:** 1.5.0 — Fases 10-17 completadas ✅
+**Versión del documento:** 2.0.0 — reordenado y corregido 2026-11-25
 **Fecha de inicio:** 2026-11-25
-**Estado:** ✅ App de escritorio v0.2.4 — Alertas corregidas, Codex import, bóveda como fuente de verdad, switch real.
+**Estado real:** 🟡 App v0.2.4 con UI completa y código en `main`, pero con el flujo de datos roto. Ver «Cómo leer este documento» y la Fase 18.
 **Referencia de entrada:** `docs/desktop-app-insumos.md` — spec completo del frontend
+
+---
+
+## Cómo leer este documento
+
+- **Nomenclatura de etapas:** etapa 1 = backend (`PLAN.md`, congelado) · **etapa 2 = esta app de escritorio** · etapa 3 (futura) = proveedores adicionales (Fase 9).
+- **Leyenda:** ✅ terminado y verificado en uso real · 🟡 código escrito, sin verificar · ⬜ pendiente · ⏸ pospuesto · ⚠ desviación o contradicción abierta.
+- **Etiquetas de decisión:** `[DECIDIDO]` no se reabre sin bloqueo técnico documentado · `[PROPUESTA]` requiere aprobación del autor antes de implementarse · `[VERIFICADO]` / `[SUPUESTO]` según evidencia.
+- Las secciones de las Fases 10–16 se conservan como **registro histórico** (los hallazgos son valiosos). Donde una decisión fue superada por la Fase 17 está marcada **[SUPERADO]**.
+- La fuente de verdad de lo decidido es la sección «Decisiones» de abajo. La fuente de verdad de lo que falta respecto al prompt original es la «Matriz de cumplimiento» al final.
+
+### Estado real por fase (propuesto; el autor confirma)
+
+| Fase | Contenido | Estado |
+|------|-----------|--------|
+| 10 | Scaffold, toolchain MSVC, CI | ✅ (build e instalación verificados) |
+| 11 | Comunicación Rust ↔ VPS ↔ React | 🟡 (3 incidentes de «error decoding response body») |
+| 12 | Bóveda local, desbloqueo, bandeja | 🟡 |
+| 13 | Dashboard y gestión de cuentas | 🟡 (rediseñado en F17) |
+| 14 | Autobloqueo y sync de bóveda | 🟡 (sync no probado en una 2.ª PC) |
+| 15 | Ping, alertas, chats, ajustes | 🟡 |
+| 16 | Estadísticas e instalador | 🟡 |
+| 17 | Alineación con el diseño original | 🟡 |
+| **18** | **Reconexión del flujo de datos** | **⬜ siguiente** |
+| 19 | Sesión de usuario y primer arranque | ⬜ |
+| 20 | Credenciales de cuenta y portapapeles | ⬜ |
+| 21–25 | Funciones posteriores (orden de D-11) | ⬜ |
+| 26–28 | Cierre del switch, estadísticas ampliadas, instalador | ⬜ |
 
 ---
 
@@ -32,7 +60,7 @@ La primera etapa dejó el backend 100% operativo (VPS `198.211.97.243:3010`, API
 | `providers/codex` (auth.json, switch, chats SQLite) | ✅ Listo |
 | Backup diario → `ai_keyvault_data` (GitHub) | ✅ Workflow activo |
 | CI/CD deploy-server en verde | ✅ |
-| `apps/desktop/` | ✅ Scaffold completo — pendiente de primer build |
+| `apps/desktop/` | *(histórico: scaffold al inicio de la etapa; el estado actual está en la tabla «Estado real por fase»)* |
 
 ---
 
@@ -45,7 +73,7 @@ La primera etapa dejó el backend 100% operativo (VPS `198.211.97.243:3010`, API
 | Framework desktop | **Tauri 2** (Rust + React 18 + TypeScript + Vite) |
 | Toolchain Windows | **MSVC** para Tauri (`x86_64-pc-windows-msvc`). GNU se mantiene para cross-compile al VPS. Ambos coexisten; `apps/desktop/src-tauri/rust-toolchain.toml` fuerza MSVC solo en ese directorio. |
 | Comunicación UI → VPS | **Todo por comandos Rust** (`#[tauri::command]` con `reqwest`). Sin `fetch()` externo en React. CSP configurada para bloquearlo. |
-| Poller | Sidecar Tauri. Proceso hijo que corre mientras la app está abierta. Se detiene al Salir. No depende de la bóveda (lee del SO directamente). |
+| Poller | Sidecar Tauri. Proceso hijo que corre mientras la app está abierta. Se detiene al Salir. No depende de la bóveda (lee del SO directamente). *(Ajustado por D-01, D-02 y D-03, ya decididas.)* |
 | Nombre del sidecar | `ai-keyvault-poller-x86_64-pc-windows-msvc.exe` en disco. Referenciado como `"binaries/ai-keyvault-poller"` en `tauri.conf.json`. |
 | Autobloqueo | Bloquea solo la UI. `vault.lock()` hace `zeroize` de `VaultKey`. El poller **sigue corriendo**. |
 | IPC poller ↔ Tauri | Solo expone: `poller_status`, `poller_pause`, `poller_resume`. **Nunca descifrado ni credenciales**. |
@@ -55,7 +83,40 @@ La primera etapa dejó el backend 100% operativo (VPS `198.211.97.243:3010`, API
 | VPS TLS | Sin subdominio por ahora. IP directa `198.211.97.243:3010`. Caddy instalado, pendiente de configurar cuando se obtenga subdominio. |
 | Proveedores en UI | Solo agy + Codex (los únicos con backend implementado). |
 | Workspace Cargo desktop | `apps/desktop/src-tauri/Cargo.toml` declara `[workspace]` vacío. Tiene su propio `Cargo.lock` y `target/`. Usa `crates/core` como path dependency. |
-| ai_keyvault_data | Backup automático ya funciona (workflow `backup.yml`). La UI muestra estado del último backup en Configuración. |
+| ai_keyvault_data | Backup automático ya funciona (workflow `backup.yml`). La UI muestra estado del último backup en Configuración *(🟡 no implementado)*. Ver D-04 (dump cifrado + restauración probada). |
+
+---
+
+### Decisiones tomadas durante la implementación (Fases 14–17) — `[DECIDIDO]`
+
+| Tema | Decisión | Origen |
+|------|----------|--------|
+| Autobloqueo | **Opt-in: 0 = desactivado por defecto** (el prompt original pedía 15 min). Desvío consciente. | F14 |
+| Fuente de verdad de *qué cuentas existen* | **La bóveda.** El VPS guarda lecturas y registros (cuota, alertas, pings, switches, chats), no la lista de cuentas. | F17 |
+| Concepto «Activar cuenta» | **No existe.** Solo «Usar en esta PC» (switch). | F17 |
+| Agregar cuenta | **Captura desde el login del SO**, nunca formulario manual de tokens. agy: flujo OAuth guiado (limpia credencial, abre `agy`, espera hasta 120 s, captura). Codex: importar el `auth.json` actual. | F17 |
+| Switch de cuenta | Escribe el **blob completo descifrado** de la bóveda (agy: Credential Manager `gemini:antigravity`; Codex: `auth.json`). **Nunca JSON sintético.** | F17 |
+| Booleanos del VPS | SQLite los devuelve como 0/1; el cliente usa el deserializador `de_bool_or_int`. | F17 |
+
+### Decisiones cerradas el 2026-11-25 (respuestas del autor) — `[DECIDIDO]`
+
+| ID | Tema | Decisión |
+|----|------|----------|
+| D-01 | Alcance del poller | Lee **solo la cuenta activa** de cada PC. Las demás cuentas muestran su **última lectura conocida con su antigüedad** y el reinicio guardado en esa lectura. No se rotan cuentas para leer. Probar Codex por cuenta con `CODEX_HOME` queda como mejora futura, no se hace ahora. |
+| D-02 | Identidad de cuenta | **UUID opaco de la bóveda** en toda la cadena (VPS, poller, app). El poller usa un mapa local cifrado correo→UUID. El VPS deja de ver correos. Prohibido cruzar por alias. |
+| D-03 | Arranque del poller | Sigue siendo sidecar. Se agrega la opción **«Iniciar con Windows»** en Ajustes (opt-in, app en bandeja). |
+| D-04 | Respaldo `ai_keyvault_data` | El dump se **cifra antes de subirlo** y se prueba una **restauración real**. La fecha del último backup se muestra en Ajustes. |
+| D-05 | Transporte | Se mantiene IP directa por HTTP. TLS con subdominio queda como tarea futura (no hay subdominio). |
+| D-06 | Frecuencia | 10 min para la cuenta activa. *Con D-01 los 60 min para «las demás» no tienen qué leer; aplicarán solo si en el futuro se leen cuentas no activas.* |
+| D-07 | Correo y contraseña | Se guardan **cifrados** por cuenta, junto con alias, notas y detalles, con botón de copiar y **limpieza del portapapeles a 30 s** (Fase 20). |
+| D-08 | Autobloqueo | **0 = desactivado por defecto** (opt-in). Desvío aprobado respecto al prompt original (15 min). |
+| D-09 | Ping automático | Solo sobre la **cuenta activa**. Para las demás, la app avisa «esta cuenta necesita ping» y el usuario la activa con «Usar en esta PC» y hace el ping manual. |
+| D-10 | Proveedores adicionales | Claude, Gemini, OpenCode y Grok (etapa 3) quedan **fuera** hasta que la etapa 2 esté verificada de punta a punta. |
+| D-11 | Orden después de la Fase 18 | Fase 19 sesión → Fase 20 credenciales → alternativa en alertas → silenciar/suscripción → `Ctrl+K` → pestañas de detalle → tema claro y dispositivos → resto (ver Fases 19–28). Nada de eso entra en la Fase 18. |
+| D-12 | Sesión y primer arranque | Estilo Bitwarden. Ver Fase 19. El cierre de sesión global **no** afecta los logins de agy/Codex. |
+| D-13 | Arranque desde cero | Las bases de datos (VPS y locales) fueron **limpiadas** el 2026-11-25. No hay nada en producción: **sin código de migración ni compatibilidad hacia atrás**. Entorno de verificación: **2 PCs** (PC-A y PC-B). |
+
+**Limitación aceptada:** una cuenta que no está activa en ninguna PC no tiene lectura en vivo, solo la última conocida. La consulta desde el VPS 24/7 sigue ⏸.
 
 ---
 
@@ -76,7 +137,7 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 
 | Hallazgo | Impacto | Solución aplicada |
 |----------|---------|------------------|
-| `cmake` no instalado en la PC de desarrollo | `rusqlite bundled` (en `providers/codex`) fallaría al compilar el desktop | **Decisión:** `crates/core`, `providers/agy`, `providers/codex` NO se incluyen como dependencias del desktop en Fase 10. Se agregarán en Fase 12 cuando se necesiten. El desktop se comunica con el backend VPS via `reqwest`. |
+| `cmake` no instalado en la PC de desarrollo | `rusqlite bundled` (en `providers/codex`) fallaría al compilar el desktop | **Decisión:** `crates/core`, `providers/agy`, `providers/codex` NO se incluyen como dependencias del desktop en Fase 10. Se agregarán en Fase 12 cuando se necesiten. El desktop se comunica con el backend VPS via `reqwest`. **[SUPERADO en F17: `providers/agy` no requiere cmake; solo `providers/codex` (`rusqlite bundled`) sí.]** |
 | `thiserror v2` en desktop vs `v1` en crates backend | Cargo puede coexistir ambas versiones sin conflicto, pero para consistencia | Unificado en `thiserror = "1"` en el desktop |
 | `rust-toolchain.toml` necesita especificar el triple completo | Con solo `channel = "stable"` y dos toolchains instalados (gnu/msvc), no garantiza MSVC | Cambiado a `channel = "stable-x86_64-pc-windows-msvc"` |
 | `webviewInstallMode: offlineInstaller` requiere un MSI de WebView2 | Innecesario para testing local — WebView2 ya está instalado | Cambiado a `downloadBootstrapper` para el primer build de prueba |
@@ -206,7 +267,7 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 #### Criterios de aceptación
 - [ ] Clave maestra incorrecta → error claro, sin acceso
 - [ ] Clave de respaldo desbloquea y permite cambiar clave maestra
-- [ ] Autobloqueo a los 15 min → pantalla de desbloqueo aparece, el poller sigue corriendo
+- [ ] Autobloqueo (opt-in; 0 = desactivado por defecto, ver Decisiones) → pantalla de desbloqueo aparece, el poller sigue corriendo
 - [ ] Cerrar ventana → app en bandeja, `GET /health` del VPS sigue llegando (poller activo)
 - [ ] Salir desde bandeja → proceso poller termina
 - [ ] Ningún token ni email visible en logs al bloquear/desbloquear
@@ -349,7 +410,7 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 - [x] CI `rust-ci` en verde
 - [x] Build local `pnpm tauri build` → `.exe` instalado y verificado en Windows
 - [x] Todas las pestañas del dashboard funcionan sin errores
-- [x] Datos de cuota del VPS se muestran correctamente (cuentas del poller, no de la bóveda local)
+- [x] Datos de cuota del VPS se muestran correctamente (cuentas del poller, no de la bóveda local) **[SUPERADO en F17: la fuente de verdad es la bóveda; el cruce VPS↔bóveda no está verificado]**
 - [x] Versión bumpeada a v0.2.0 en Cargo.toml, tauri.conf.json, package.json
 - [x] CLAUDE.md §7 actualizado: Desktop ✅
 
@@ -436,21 +497,25 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 | 2026-11-25 | 17 | switch_agy() escribía JSON falso. | Rompía sesión de agy | Reescrito para escribir blob completo descifrado de la bóveda. |
 | 2026-11-25 | 17 | AlertRecord/ChatSession/SwitchRecord/PingRecord tenían campos incorrectos vs VPS. | "Error decoding response body" en Alertas | Corregidos campos y agregado deserializador de_bool_or_int (SQLite 0/1). |
 | 2026-11-25 | 17 | import_current_codex_credential faltaba en Rust. | Botón Codex sin funcionar | Implementado en vault.rs, registrado en main.rs, codex_auth_path_pub() en switch_cmd.rs. |
+| 2026-11-25 | 18.0 | Diagnóstico: backend etapa 1 intacto (solo aditivo en `vault.rs` y `ci.yml`); VPS activo y tablas consultadas vacías. | Base confirmada | Ver `docs/research/06-diagnostico-fase18.md`. |
+| 2026-11-25 | 18.0 | Cruce roto por 3 llaves distintas: poller sube `email`, UI filtra por `alias`, switch envía `UUID` y `StatsPage` hardcodea `"test@agy"`. | Dashboard/Alertas/Pings/Chats vacíos | Reparar en `18.2` aplicando D-02 (UUID opaco + mapa local cifrado). |
+| 2026-11-25 | 18.0 | Contratos rotos en `api_client.rs` (`QuotaReading`, `HeatmapCell`, `DeviceRegistration`), `level` `"critical"` vs `"crit"`, y falta `GET /api/stats/export/:account_id`. | Errores de deserialización al haber datos | Corregir y cubrir con tests de fixtures en `18.3`. |
+| 2026-11-25 | 18.0 | Sidecar `start_poller` sin env vars, descarta `_rx` (`last_poll_at` siempre `None`), `pause/resume` solo en memoria, y `.catch(() => {})` en `DashboardPage`/`UnlockPage`. | Poller sin visibilidad de errores ni estado real | Reparar en `18.4`. |
+| 2026-11-25 | 18.0 | `PingPage` registra `post_ping` con `success: true` sin ejecutar ping real; `deviceId` hardcodeado a `"desktop-dev"`; `switch_codex` conserva JSON sintético `_akv_switch`. | Desvíos funcionales respecto a F17 | Corregir en `18.2`/`18.4` (o listar para fase correspondiente). |
 
 ---
 
-## ✅ SEGUNDA ETAPA COMPLETADA — 2026-11-25
+## 🟡 ESTADO DE LA SEGUNDA ETAPA — revisado 2026-11-25
 
-> App de escritorio v0.2.0 instalada y verificada en Windows. CI en verde (secrets-scan ✅, rust-ci ✅, frontend-ci ✅). Todas las pantallas funcionales. Documentación actualizada. Commits pusheados a main.
->
-> **Pendientes opcionales para tercera vuelta:** cmake (switch real), firma de código, OfflineInstaller, Ctrl+K.
-> Ver sección "Pendiente (tercera vuelta)" en Fase 16.
+> La app v0.2.4 compila, instala y tiene todas las pantallas, **pero el flujo de datos de extremo a extremo (poller → VPS → app) no funciona** según el autor, y varias decisiones se fueron modificando entre fases sin quedar cerradas.
+> Los ✅ de las Fases 10–17 significan «código escrito y compilando». Los criterios de aceptación con `[ ]` **nunca se verificaron en uso real**.
+> **Siguiente paso: Fase 18 (Reconexión)**, al final de este documento. No se agregan funciones nuevas hasta cerrarla.
 
 ---
 
 ## Fase 17 — Tercera vuelta: Alineación arquitectura + correcciones API
 
-**Estado:** ✅ Completada — 2026-11-25 (v0.2.1 → v0.2.4)
+**Estado:** 🟡 Código completado — 2026-11-25 (v0.2.1 → v0.2.4). Sin verificación en uso real.
 
 ### Objetivo
 Corregir las desviaciones del diseño original del prompt: la bóveda como fuente de verdad, flujo real de agregar cuentas (captura desde OS), switch real con blob completo, y corrección de todos los campos VPS reales.
@@ -500,3 +565,142 @@ Corregir las desviaciones del diseño original del prompt: la bóveda como fuent
 | (nuevo) | v0.2.4 | Codex import, corrección bool SQLite alertas/pings/switch/chats |
 
 **Versiones:** v0.2.1 → v0.2.2 → v0.2.2b → v0.2.3 → v0.2.4
+
+
+---
+
+## Fase 18 — Reconexión: restaurar el flujo de datos extremo a extremo
+
+**Estado:** 🟡 En curso — `18.0` y `18.1` completados (2026-11-25). **Siguiente: `18.2`.**
+**Naturaleza:** fase de **diagnóstico y reparación**. No se agregan funciones nuevas ni se reescribe lo que ya compila. Una sesión = un sub-paso; actualizar este documento al terminar cada uno.
+
+**Objetivo:** que cada cuenta de la bóveda muestre en el dashboard su cuota, reinicio y antigüedad de lectura, con el poller subiendo datos al VPS y la app leyéndolos con la misma llave de cuenta.
+
+### 18.0 Diagnóstico (solo lectura, sin tocar código) — ✅ Completado (2026-11-25)
+Entregable creado: `docs/research/06-diagnostico-fase18.md` con tabla «esperado / real / causa» y evidencia `[VERIFICADO]` / `[SUPUESTO]`.
+- Backend etapa 1 (`server/`, `providers/`): intacto; solo cambios aditivos en `crates/core/src/vault.rs` y `.github/workflows/ci.yml`.
+- VPS activo (`198.211.97.243:3010`), `keyvault.db` 52K (`Nov 25 18:49`) y endpoints de lectura vacíos (`[]` / HTTP 400 en `/api/vault/sync`).
+- Limpieza local y `ai_keyvault_data` confirmada por el autor: `AppData\Roaming\com.miguelgotea.ai-keyvault` vacío, `AppData\Local\com.miguelgotea.ai-keyvault` y `~/.ai-keyvault` eliminados, y `ai_keyvault_data` sin commits viejos en local ni remoto.
+- Causa raíz principal confirmada: 3 llaves incompatibles (poller=`email`, UI=`alias`, switch=`UUID`), contratos desalineados en `api_client.rs` (`QuotaReading`, `HeatmapCell`, `DeviceRegistration`), sidecar sin env vars ni captura de salida `_rx`, y `.catch` silenciosos.
+
+### 18.1 Decisiones — ✅ Cerrado (2026-11-25)
+Ya cerradas en «Decisiones cerradas» (D-01 a D-13). El diagnóstico `18.0` no contradice ninguna decisión cerrada; por el contrario, confirma que aplicar D-01 y D-02 resuelve la desconexión principal. Siguiente paso: `18.2`.
+
+### 18.2 Reparar identidad y cruce
+Aplicar D-01, D-02 y D-06 con el cambio mínimo posible. Cambios en el backend solo **aditivos**; cualquier eliminación se lista y se aprueba antes.
+
+### 18.3 Contrato API con tests
+Crear `docs/contrato-api.md` y fixtures JSON **con datos falsos** de cada endpoint que consume la app. Tests Rust que deserialicen cada fixture (incluidos los booleanos 0/1). Motivo: el error «decoding response body» apareció en F16 y de nuevo en F17.
+
+### 18.4 Errores visibles
+El dashboard muestra el estado del poller (corriendo / pausado / error + último envío) y, por cuenta, «última lectura hace X» o «sin lecturas». Prohibido `.catch(() => {})` en flujos críticos.
+
+### 18.5 Respaldo
+Implementar D-04: dump cifrado, restauración real probada y fecha del último backup en Ajustes.
+
+### 18.6 Criterios de aceptación (todos en uso real)
+- [ ] Partiendo de cero (bóveda nueva, VPS vacío), con 2 cuentas en la bóveda, la cuenta activa muestra % y reinicio con antigüedad < 15 min.
+- [ ] La misma bóveda vista desde PC-B (según el flujo de la Fase 19) muestra las lecturas que subió PC-A.
+- [ ] La cuenta no activa muestra su última lectura conocida con su antigüedad (no vacío ni error).
+- [ ] Con el autobloqueo activo, bloquear la UI no detiene el poller.
+- [ ] Estadísticas muestran burn rate de la cuenta activa tras ≥ 3 lecturas.
+- [ ] Una alerta de prueba (umbral bajado) aparece en `/alerts` y como toast.
+- [ ] Ping manual de una cuenta que lo necesita queda en el historial de `/ping`.
+- [ ] Switch real A→B→A verificado (cuota o `auth.json`) y «Deshacer» funciona.
+- [ ] CI en verde, incluidos los tests de contrato; `gitleaks` limpio.
+
+---
+
+## Fase 19 — Sesión de usuario y primer arranque (D-12)
+
+**Estado:** ⬜ Después de la Fase 18. Requisito original del autor (estilo Bitwarden); además da el criterio «entrar desde otra PC», que pasó de la Fase 18 a esta.
+
+**Flujo:**
+1. **Primer arranque sin sesión en la PC:** pantalla con dos opciones.
+   - **Iniciar sesión (traer mi usuario y bóveda):** URL del servidor (con valor por defecto), usuario y clave maestra. Baja la bóveda cifrada, la descifra en local y registra el dispositivo.
+   - **Crear usuario nuevo:** nombre, usuario y clave maestra (mín. 12 caracteres, con confirmación). Crea el usuario y la bóveda, muestra la **clave de respaldo una sola vez** y registra el dispositivo.
+2. **Arranques siguientes:** solo la clave maestra (pantalla de desbloqueo con el nombre del usuario). La recuperación con clave de respaldo sigue disponible.
+3. **Ajustes → «Cerrar sesión global en esta PC»:** confirma, sube primero la bóveda pendiente (o avisa si no pudo) y borra la sesión local: bóveda local y caché, caché DPAPI, claves del dispositivo, mapa correo→UUID del poller y ajustes de sesión. Detiene el poller y vuelve a la pantalla de dos opciones. **No borra nada en el VPS.** **Nunca** toca el login de agy/Codex del SO: solo borra la sesión de la herramienta (decidido por el autor).
+4. **Iniciar con Windows** (D-03): opción en Ajustes, apagada por defecto.
+
+**Sub-pasos:**
+- **19.0 Verificar el backend:** ¿el servidor ya tiene concepto de usuario (usuario único, clave de autenticación derivada y separada de la de cifrado, bloqueo por intentos)? Hoy hay registro de dispositivos y sync de bóveda. Si falta, el cambio en el servidor es **solo aditivo** y se lista y aprueba antes.
+- **19.1** Servidor: usuario + clave de autenticación (distinta de la clave de cifrado, que no sale del cliente).
+- **19.2** App: pantallas de primer arranque, arranques siguientes y cierre de sesión global.
+- **19.3** «Iniciar con Windows».
+
+**Criterios de aceptación (en uso real):**
+- [ ] PC sin sesión muestra las dos opciones; con sesión pide solo la clave.
+- [ ] Crear usuario nuevo genera bóveda y clave de respaldo, mostrada una sola vez.
+- [ ] En la 2.ª PC, URL + usuario + clave maestra muestra las mismas cuentas.
+- [ ] Cerrar sesión global deja la PC sin datos locales de la bóveda y el VPS conserva todo.
+- [ ] Clave incorrecta no revela si el usuario existe; hay bloqueo progresivo por intentos.
+- [ ] Ningún secreto en logs; `gitleaks` limpio; contrato API actualizado con sus fixtures.
+
+---
+
+## Fase 20 — Credenciales de cuenta y portapapeles (D-07)
+
+**Estado:** ⬜ Después de la Fase 19.
+
+- Por cuenta, cifrados en la bóveda: alias, notas, detalles, **correo y contraseña** (el 2FA queda en la app de autenticación del autor).
+- Botón de copiar correo y contraseña con **limpieza automática del portapapeles a 30 s**.
+- Editar y eliminar cuentas; la captura de login (agy/Codex) sigue siendo la forma de agregarlas.
+- **Criterios:** correo y contraseña no aparecen en logs ni en disco sin cifrar; el portapapeles se limpia a los 30 s; todo sobrevive a bloquear, desbloquear y sincronizar.
+
+---
+
+## Fases 21–28 — Orden después de la Fase 20 (D-11)
+
+Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fijado por el autor para 21–25; 26–28 es **orden propuesto** (el autor puede moverlas).
+
+| Fase | Contenido |
+|------|-----------|
+| 21 | Alertas con **sugerencia de cuenta alternativa** y botón «Cambiar a esa cuenta» |
+| 22 | **Silenciar alertas** por X horas, alertas de **fin de suscripción** (7 y 1 día) y de **login vencido** o consulta fallando |
+| 23 | Paleta de comandos **`Ctrl+K`** |
+| 24 | **Detalle de cuenta con pestañas** (Resumen, Cuota y cooldown, Estadísticas, Chat, Credenciales, Historial) |
+| 25 | **Tema claro/oscuro** y pantalla **«Mis dispositivos»** (revocar acceso) |
+| 26 | Cierre del switch: botón «Deshacer», aviso de reinicio de herramientas, detección de procesos sin cerrarlos, «sin agente en esta PC» |
+| 27 | Estadísticas ampliadas (tokens por modelo, eficiencia, cuota desperdiciada) y pantalla «Experimento de cooldown» |
+| 28 | Instalador firmado y versión portable |
+
+---
+
+## Matriz de cumplimiento del prompt original
+
+> Única fuente de verdad de lo que falta. Sustituye la tabla de pendientes que antes vivía en `PLAN.md`. `AI-KeyVault-prompt-claude-code.md` es el **prompt histórico**: no se vuelve a ejecutar; si choca con este documento, gana este documento.
+
+| § del prompt | Requisito | Estado | Nota |
+|---|---|---|---|
+| 5.1 | Bóveda: Argon2id, XChaCha20, clave de respaldo | ✅ backend · 🟡 UI | Tests de `crates/core` en verde |
+| 5.2 / 7.15 | Entrar desde otra PC con usuario + clave maestra; primer arranque con dos opciones; cierre de sesión global | ⬜ | **Fase 19** (D-12). El sync existe pero no se probó en una 2.ª PC |
+| 7.3 | Guardar correo + contraseña para copiar y pegar | ⬜ | **Fase 20** (D-07). Se eliminó el formulario manual en F17 |
+| 5.3 | Portapapeles con limpieza a 30 s | ⬜ | Fase 20 |
+| 5.3 | Autobloqueo | 🟡 | Desvío aprobado por el autor (D-08) |
+| 5.3 | DPAPI opt-in | 🟡 | |
+| 8.3 | Login guiado de cuentas | 🟡 | agy: OAuth guiado. Codex: solo importar el `auth.json` actual |
+| 8.3 | Switch con revertir | ✅ backend · 🟡 UI | |
+| 8.3 | «Deshacer», aviso de reinicio y detección de procesos | ⬜ | Fase 26 (revert existe en Rust) |
+| 7.4 / 7.7 | Cuota y reinicios por cuenta, «actualizado hace X por PC» | ⚠ | Flujo roto (D-01, D-02) |
+| 4.2 | Agente al iniciar Windows | ⬜ | D-03: opción «Iniciar con Windows» (Fase 19) |
+| Frecuencia | 10 min activas / 60 min inactivas | 🟡 | D-06: 10 min para la cuenta activa; los 60 min no aplican con D-01 |
+| 8.1 | Alertas 80 % / 95 % (toast + ntfy) | ✅ backend · 🟡 UI | |
+| 8.1 | Sugerencia de cuenta alternativa y botón «Cambiar» | ⬜ | Fase 21 |
+| 8.1 | Silenciar por X horas | ⬜ | Fase 22 (UI sin lógica) |
+| 7.10 / 8.1 | Fin de suscripción, login vencido, consulta fallando | ⬜ | Fase 22 |
+| 8.2 | Ping manual y automático | ✅ backend · 🟡 UI | |
+| 10 | Chats (metadatos, solo activos) | ✅ backend · 🟡 UI | |
+| 10 | «Sin agente en esta PC» | ⬜ | Fase 26 |
+| 11 | Estadísticas: burn rate, heatmap, comparativa, CSV | ✅ backend · 🟡 UI | |
+| 11 | Tokens por modelo, eficiencia, cuota desperdiciada | ⬜ | Fase 27 (`token_usage_record` investigado) |
+| 9.3 | Detalle de cuenta con 6 pestañas | ⬜ | Fase 24 |
+| 9 | Paleta `Ctrl+K` | ⬜ | Fase 23 |
+| 9 | Tema claro/oscuro | ⬜ | Fase 25 (hoy solo oscuro) |
+| 7.17 | Pantalla «Mis dispositivos» | ⬜ | Fase 25 (`register_device` existe) |
+| 9 | Pantalla «Experimento de cooldown» | ⬜ | Fase 27 |
+| 3 / 5.4 | Respaldo en `ai_keyvault_data` y restauración | ⬜ | D-04 (Fase 18.5): dump cifrado + restauración real |
+| 5.2 | Consulta desde el VPS 24/7 (delegada) | ⏸ | Riesgo en ADR-003 |
+| 6.5 | Chat de consumo | ⏸ | Sin API pública |
+| 9 / Fase 9 | Claude, Gemini, OpenCode, Grok | ⏸ | Etapa 3 (D-10) |
+| 13 | Instalador firmado y versión portable | ⬜ | Fase 28 |
