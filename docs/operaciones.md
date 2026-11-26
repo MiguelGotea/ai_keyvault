@@ -1140,29 +1140,96 @@ Es conocimiento cero: el VPS solo almacena el blob cifrado, nunca la clave.
 
 ---
 
-## §21 — Flujo de Cuentas en Dashboard (aclaracion)
+## §21 — Fuente de verdad: la Bóveda (corrección arquitectura)
 
-Las cuentas visibles en el dashboard NO provienen de la boveda local.
-Provienen de las **lecturas del poller** guardadas en el VPS.
+> [!IMPORTANT]
+> El Dashboard usa la **bóveda** como fuente de cuentas, NO el VPS directamente.
 
 **Flujo real:**
 ```
-Credential Manager / auth.json (Windows)
+Usuario agrega cuenta →
+  import_current_agy_credential / import_current_codex_credential
         |
+        v (cifrado XChaCha20)
+  vault.json local + sync VPS (upload_vault_sync)
+        |
+        v (list_vault_accounts)
+  Dashboard / AccountsPage / ChatsPage / AlertsPage
+        |
+        (cruce por alias)
         v
-ai-keyvault-poller (sidecar Tauri)
-        |
-        v (POST /api/quota/readings)
-VPS: tabla quota_readings
-        |
-        v (GET /api/stats/compare o /api/quota/readings/:id)
-Dashboard React (via invoke("get_pool_summary"))
+  VPS: datos de cuota / chats / alertas para esas cuentas
 ```
 
-La boveda local es para guardar credenciales cifradas (por ejemplo, para hacer switch
-de cuenta desde la UI). El poller lee del Credential Manager directamente, no de la boveda.
+El poller sigue leyendo del OS (Credential Manager / auth.json) directamente,
+SIN pasar por la bóveda. Los datos de cuota, chat y alertas se envían al VPS.
+El desktop cruza: `account.alias == pool.account_id` para mostrar cuota de cada cuenta.
 
 > [!NOTE]
-> Si el dashboard muestra cuentas que no se ingresaron manualmente, es porque el
-> poller las leyo automaticamente del Credential Manager de Windows (cuenta activa de agy)
-> o del archivo `~/.codex/auth.json` (cuenta de Codex) y las envio al VPS.
+> Si el Dashboard muestra "Sin datos de cuota aún", significa que el poller no ha
+> corrido todavía para esa cuenta. Los datos llegan solos cuando el poller está activo.
+
+---
+
+## §22 — Arquitectura real corregida (Fase 17 — 2026-11-25)
+
+### Flujo de agregar cuenta (único flujo correcto)
+
+**Para agy (Antigravity):**
+1. Usuario inicia sesión en agy en esta PC (cualquier cuenta)
+2. Hace clic en "🗝️ Mi Bóveda" → "+ Agregar cuenta" → elige "Antigravity"
+3. Escribe un alias (ej: `trabajo`, `personal`)
+4. Rust lee el blob de `gemini:antigravity` en Credential Manager de Windows
+5. Lo cifra con XChaCha20 y lo guarda en vault.json
+6. Sincroniza al VPS (best-effort)
+
+**Para Codex:**
+1. Usuario inicia sesión en Codex en esta PC
+2. "+ Agregar cuenta" → elige "Codex"
+3. Rust lee `~/.codex/auth.json`
+4. Lo cifra y guarda en vault.json + sync VPS
+
+### Flujo de switch de cuenta
+
+1. Usuario va al Dashboard → "⚡ Usar en esta PC"
+2. Rust llama `switch_account(account_id, provider, device_id)`
+3. Descifra `encrypted_tokens` de la bóveda
+4. Escribe el blob en Credential Manager / auth.json
+5. Registra en VPS `POST /api/switch`
+6. Avisa al usuario que reinicie las ventanas del agente
+
+> [!WARNING]
+> El switch NUNCA cierra procesos. Solo escribe las credenciales en el OS.
+> El usuario debe reiniciar las ventanas de agy / Codex para que surta efecto.
+
+### VPS endpoints — campos reales (verificados en server/src/routes.rs)
+
+| Endpoint | Campos de respuesta |
+|---|---|
+| `GET /api/alerts` | `id, account_id, provider, pool, level, percent_used, reset_time, notified_toast (0/1→bool), notified_ntfy (0/1→bool), detected_at` |
+| `GET /api/switch/history` | `id, to_account_id, from_account_id, provider, device_id, success (0/1→bool), reason, switched_at` |
+| `POST /api/switch` | body: `{to_account_id, from_account_id, provider, device_id, success, reason}` |
+| `GET /api/pings/needs` | `[{account_id, provider, pool, percent_used, needs_ping, last_read_at, reset_time}]` |
+| `GET /api/chats/:account_id` | `{id, account_id, provider, title, created_at, updated_at, archived (0/1→bool)}` — sin device_id |
+
+> [!NOTE]
+> SQLite guarda booleans como enteros `0/1`. El cliente Rust usa el deserializador
+> personalizado `de_bool_or_int` en `api_client.rs` para convertirlos correctamente.
+
+### providers/agy como dependencia Rust
+
+- `providers/agy` usa solo `windows_sys` → NO requiere cmake → se puede incluir en desktop
+- `providers/codex` requiere `rusqlite bundled` → SÍ requiere cmake → excluido hasta instalarlo
+
+### Comandos Rust disponibles (v0.2.4)
+
+| Comando | Descripción |
+|---|---|
+| `import_current_agy_credential(alias)` | Captura blob de Credential Manager → cifra → vault |
+| `import_current_codex_credential(alias)` | Captura ~/.codex/auth.json → cifra → vault |
+| `add_agy_account_oauth(alias)` | Flujo OAuth completo: limpia → abre agy → polling → captura |
+| `cancel_agy_oauth()` | Cancela el flujo OAuth en curso |
+| `decrypt_account_tokens(uuid)` | Descifra encrypted_tokens (uso interno del switch) |
+| `switch_account(account_id, provider, device_id)` | Switch real desde bóveda |
+| `list_vault_accounts()` | Lista cuentas descifradas (alias + provider, sin credenciales) |
+| `upload_vault_sync / download_vault_sync` | Sync cifrado de bóveda al VPS (conocimiento cero) |

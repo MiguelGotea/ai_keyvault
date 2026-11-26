@@ -1,8 +1,8 @@
 # PLAN2.md — Segunda Etapa: App de Escritorio Tauri 2
 
-**Versión:** 1.4.0 — Fases 10-16 completadas ✅
+**Versión:** 1.5.0 — Fases 10-17 completadas ✅
 **Fecha de inicio:** 2026-11-25
-**Estado:** ✅ App de escritorio funcional — v0.2.0 instalada y verificada. CI en verde. Pendiente: cmake para switch real de credenciales.
+**Estado:** ✅ App de escritorio v0.2.4 — Alertas corregidas, Codex import, bóveda como fuente de verdad, switch real.
 **Referencia de entrada:** `docs/desktop-app-insumos.md` — spec completo del frontend
 
 ---
@@ -431,6 +431,11 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 | 2026-11-25 | 16 | `pnpm install --frozen-lockfile` bloqueaba scripts de esbuild en CI. | Frontend CI en rojo | `pnpm approve-builds --all` + `.npmrc` con `onlyBuiltDependencies[]=esbuild`. |
 | 2026-11-25 | 16 | Scripts `.ps1` con emojis UTF-8 se rompían en PowerShell 5.1 (Windows-1252). | `copy-sidecar.ps1` no ejecutaba | Reemplazados emojis por prefijos ASCII. |
 | 2026-11-25 | 16 | Versión fija en `0.1.0` sin estrategia de bump. | Instalador siempre v0.1.0 | Bump a v0.2.0 en Cargo.toml, tauri.conf.json y package.json. |
+| 2026-11-25 | 17 | Dashboard mostraba cuentas del VPS, no de la bóveda. | Arquitectura incorrecta per prompt | Dashboard reescrito: fuente de verdad = vault, cruce por alias. |
+| 2026-11-25 | 17 | "Agregar cuenta" era formulario manual. | UX incorrecta | Reemplazado por captura automática desde OS. |
+| 2026-11-25 | 17 | switch_agy() escribía JSON falso. | Rompía sesión de agy | Reescrito para escribir blob completo descifrado de la bóveda. |
+| 2026-11-25 | 17 | AlertRecord/ChatSession/SwitchRecord/PingRecord tenían campos incorrectos vs VPS. | "Error decoding response body" en Alertas | Corregidos campos y agregado deserializador de_bool_or_int (SQLite 0/1). |
+| 2026-11-25 | 17 | import_current_codex_credential faltaba en Rust. | Botón Codex sin funcionar | Implementado en vault.rs, registrado en main.rs, codex_auth_path_pub() en switch_cmd.rs. |
 
 ---
 
@@ -440,3 +445,58 @@ Cada fase termina con: **tests pasando, CI en verde, escaneo de secretos limpio,
 >
 > **Pendientes opcionales para tercera vuelta:** cmake (switch real), firma de código, OfflineInstaller, Ctrl+K.
 > Ver sección "Pendiente (tercera vuelta)" en Fase 16.
+
+---
+
+## Fase 17 — Tercera vuelta: Alineación arquitectura + correcciones API
+
+**Estado:** ✅ Completada — 2026-11-25 (v0.2.1 → v0.2.4)
+
+### Objetivo
+Corregir las desviaciones del diseño original del prompt: la bóveda como fuente de verdad, flujo real de agregar cuentas (captura desde OS), switch real con blob completo, y corrección de todos los campos VPS reales.
+
+### Hallazgos críticos
+
+| Fecha | Hallazgo | Impacto | Solución |
+|---|---|---|---|
+| 2026-11-25 | Dashboard mostraba cuentas del VPS (polleadas), no de la bóveda | Arquitectura incorrecta | Dashboard reescrito: fuente de verdad = vault, datos VPS se cruzan por alias |
+| 2026-11-25 | "Agregar cuenta" era formulario manual | UX incorrecta per prompt original | Reemplazado por captura automática desde OS (Credential Manager / auth.json) |
+| 2026-11-25 | "Activar" = concepto incorrecto | No existe en el diseño original | Eliminado — solo existe "Usar en esta PC" en Dashboard |
+| 2026-11-25 | switch_agy() escribía JSON falso {_akv_switch:true} | Rompía sesión de agy | Reescrito para escribir blob completo de la bóveda |
+| 2026-11-25 | AlertRecord tenía campos incorrectos (alerted_at, message) | Error decoding response body | Corregido a detected_at, notified_toast, notified_ntfy |
+| 2026-11-25 | notified_toast/notified_ntfy llegaban como 0/1 (SQLite) | Error deserialización Rust | Agregado deserializador flexible de_bool_or_int con serde |
+| 2026-11-25 | SwitchRecord/PostSwitchPayload no coincidían con VPS | Switch history roto | Corregido: to_account_id, from_account_id, reason |
+| 2026-11-25 | ChatSession.archived llegaba como 0/1 (SQLite) | Error deserialización | Corregido con de_bool_or_int + device_id cambiado a Option<String> |
+| 2026-11-25 | ChatsPage usaba cuentas hardcodeadas/de VPS | No mostraba cuentas de la bóveda | Reescrito para usar list_vault_accounts |
+| 2026-11-25 | providers/agy NO requiere cmake | Permite incluirlo como dep del desktop | Solo usa windows_sys — cmake bloqueaba innecesariamente |
+
+### Nuevos comandos Rust
+
+| Comando | Descripción |
+|---|---|
+| `import_current_agy_credential(alias)` | Captura blob de gemini:antigravity en Credential Manager → cifra → vault |
+| `import_current_codex_credential(alias)` | Captura ~/.codex/auth.json → cifra como encrypted_tokens → vault |
+| `decrypt_account_tokens(uuid)` | Descifra encrypted_tokens para switch real |
+| `add_agy_account_oauth(alias)` | Flujo OAuth completo: limpia credencial, abre agy, polling 120s, captura |
+| `cancel_agy_oauth()` | Cancela el flujo OAuth en curso |
+
+### Correcciones de API client (api_client.rs)
+
+- `AlertRecord`: campos correctos + deserializador `de_bool_or_int` para `notified_toast`/`notified_ntfy`
+- `ChatSession`: `archived` con `de_bool_or_int`, `device_id` como `Option<String>`
+- `SwitchRecord`: campos reales del VPS (`to_account_id`, `from_account_id`, `success` con de_bool_or_int)
+- `PingRecord`: `success` y `is_manual` con `de_bool_or_int`
+
+### Commits
+
+| Hash | Versión | Descripción |
+|---|---|---|
+| d471030 | v0.2.1 | corregir alerts/pings/chats, switch real, gestión de cuentas en bóveda |
+| f167a96 | — | fix(ci): ejecutar tauri-build en todo push |
+| 815cd78 | — | fix(ci): crear directorio binaries antes de copiar sidecar |
+| 2722398 | v0.2.2 | bóveda como fuente de verdad, agregar cuenta por captura agy, switch con blob real |
+| d69b03d | v0.2.2b | flujo OAuth real (agy login → captura → boveda) |
+| 72f0f26 | v0.2.3 | terminar poller al salir, sync real de boveda VPS al reinstalar |
+| (nuevo) | v0.2.4 | Codex import, corrección bool SQLite alertas/pings/switch/chats |
+
+**Versiones:** v0.2.1 → v0.2.2 → v0.2.2b → v0.2.3 → v0.2.4

@@ -67,6 +67,7 @@ fn main() {
             commands::vault::decrypt_account_tokens,
             commands::vault::add_agy_account_oauth,
             commands::vault::cancel_agy_oauth,
+            commands::vault::import_current_codex_credential,
             // Cuota y estadísticas (VPS)
             commands::api::get_quota,
             commands::api::get_stats_summary,

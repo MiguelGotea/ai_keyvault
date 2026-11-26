@@ -569,3 +569,114 @@ pub async fn add_agy_account_oauth(
 
     Ok(res)
 }
+
+/// Importa la cuenta Codex actualmente activa en ~/.codex/auth.json
+/// y la guarda cifrada en la bóveda.
+///
+/// FLUJO:
+///   1. Lee ~/.codex/auth.json (escrito por Codex al hacer login)
+///   2. Extrae el email/account_id del JSON
+///   3. Cifra el JSON completo en la bóveda como encrypted_tokens
+///   4. Sincroniza al VPS (best-effort)
+#[command]
+pub async fn import_current_codex_credential(
+    app: AppHandle,
+    vault_state: State<'_, VaultState>,
+    alias: String,
+) -> Result<AddAccountResult, String> {
+    use crate::commands::switch_cmd::codex_auth_path_pub;
+
+    let auth_path = codex_auth_path_pub();
+
+    if !auth_path.exists() {
+        return Ok(AddAccountResult {
+            success: false,
+            id: None,
+            error: Some(
+                "No hay ninguna cuenta Codex activa (~/.codex/auth.json no encontrado). \
+                 Inicia sesión en Codex primero y vuelve a intentarlo."
+                    .into(),
+            ),
+        });
+    }
+
+    let cred_json = std::fs::read_to_string(&auth_path)
+        .map_err(|e| format!("No se pudo leer auth.json: {e}"))?;
+
+    // Validar que es JSON válido
+    let val: serde_json::Value = serde_json::from_str(&cred_json)
+        .map_err(|e| format!("auth.json no es JSON válido: {e}"))?;
+
+    // Extraer email/account_id
+    let email = val
+        .pointer("/user/email")
+        .or_else(|| val.get("email"))
+        .or_else(|| val.get("account_id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown@codex")
+        .to_string();
+
+    let alias_final = if alias.trim().is_empty() {
+        email.clone()
+    } else {
+        alias.trim().to_string()
+    };
+
+    let res: AddAccountResult = {
+        let mut guard = vault_state.vault.lock().unwrap();
+        match &mut *guard {
+            Some(vault) if vault.is_unlocked() => {
+                // Verificar que no exista ya un alias igual
+                let already_exists = vault
+                    .state()
+                    .accounts
+                    .iter()
+                    .any(|a| a.alias == alias_final);
+
+                if already_exists {
+                    Ok(AddAccountResult {
+                        success: false,
+                        id: None,
+                        error: Some(format!(
+                            "Ya existe una cuenta con el alias '{}' en la bóveda. \
+                             Usa otro alias o elimina la existente.",
+                            alias_final
+                        )),
+                    })
+                } else {
+                    match vault.add_account(
+                        "codex",
+                        &alias_final,
+                        &email,
+                        None,
+                        Some(&cred_json), // JSON completo cifrado como tokens
+                        None,
+                    ) {
+                        Ok(uuid) => {
+                            save_vault_state(&app, vault.state())?;
+                            Ok(AddAccountResult {
+                                success: true,
+                                id: Some(uuid.to_string()),
+                                error: None,
+                            })
+                        }
+                        Err(e) => Ok(AddAccountResult {
+                            success: false,
+                            id: None,
+                            error: Some(e.to_string()),
+                        }),
+                    }
+                }
+            }
+            Some(_) => Err("La bóveda está bloqueada".to_string()),
+            None => Err("No hay bóveda cargada".to_string()),
+        }
+    }?;
+
+    // Sincronizar con el VPS (best-effort)
+    if res.success {
+        let _ = crate::commands::security::sync_vault_to_vps(&app).await;
+    }
+
+    Ok(res)
+}

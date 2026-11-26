@@ -83,8 +83,29 @@ pub struct ChatSession {
     pub title: Option<String>,
     pub created_at: String,
     pub updated_at: String,
-    pub device_id: String,
+    #[serde(default)]
+    pub device_id: Option<String>,
+    #[serde(deserialize_with = "de_bool_or_int")]
     pub archived: bool,
+}
+
+/// Deserializa booleans que el VPS puede enviar como `true/false` o `0/1` (SQLite).
+fn de_bool_or_int<'de, D>(d: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{self, Visitor};
+    struct BoolOrInt;
+    impl<'de> Visitor<'de> for BoolOrInt {
+        type Value = bool;
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            write!(f, "bool or integer 0/1")
+        }
+        fn visit_bool<E: de::Error>(self, v: bool) -> Result<bool, E> { Ok(v) }
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<bool, E> { Ok(v != 0) }
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<bool, E> { Ok(v != 0) }
+    }
+    d.deserialize_any(BoolOrInt)
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -96,7 +117,9 @@ pub struct AlertRecord {
     pub level: String,       // "warn" | "crit" (minúscula en el VPS)
     pub percent_used: f64,
     pub reset_time: Option<String>,
+    #[serde(deserialize_with = "de_bool_or_int")]
     pub notified_toast: bool,
+    #[serde(deserialize_with = "de_bool_or_int")]
     pub notified_ntfy: bool,
     pub detected_at: String, // nombre real del VPS (no alerted_at)
 }
@@ -109,9 +132,11 @@ pub struct PingRecord {
     pub account_id: String,
     pub provider: String,
     pub device_id: String,
+    #[serde(deserialize_with = "de_bool_or_int")]
     pub success: bool,
     pub error: Option<String>,
     pub duration_ms: Option<i64>,
+    #[serde(deserialize_with = "de_bool_or_int")]
     pub is_manual: bool,
     pub pinged_at: String,
 }
@@ -172,6 +197,7 @@ pub struct SwitchRecord {
     pub from_account_id: Option<String>,
     pub provider: String,
     pub device_id: String,
+    #[serde(deserialize_with = "de_bool_or_int")]
     pub success: bool,
     pub reason: Option<String>,
     pub switched_at: String,

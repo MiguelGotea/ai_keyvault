@@ -153,6 +153,11 @@ fn codex_auth_path() -> std::path::PathBuf {
         .join("auth.json")
 }
 
+/// Versión pública para usar desde vault.rs en import_current_codex_credential.
+pub fn codex_auth_path_pub() -> std::path::PathBuf {
+    codex_auth_path()
+}
+
 // ── Comandos Tauri ───────────────────────────────────────────────────────────
 
 /// Obtiene la cuenta actualmente activa desde el Credential Manager / auth.json.
