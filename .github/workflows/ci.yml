@@ -220,13 +220,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
           Copy-Item "apps/desktop/src-tauri/target/release/ai-keyvault-desktop.exe" "$stagingDir/AI KeyVault.exe" -Force
           Copy-Item "target/x86_64-pc-windows-msvc/release/ai-keyvault-poller.exe" "$stagingDir/ai-keyvault-poller.exe" -Force
-          @"
-AI KeyVault v$ver — Edición Portable (Windows x64)
-===================================================
-1. Extrae esta carpeta en cualquier ubicación.
-2. Ejecuta "AI KeyVault.exe" (mantén "ai-keyvault-poller.exe" en la misma carpeta).
-3. Tu bóveda local se almacena cifrada en %APPDATA%\com.miguelgotea.ai-keyvault\.
-"@ | Set-Content -Path "$stagingDir/LEEME-PORTABLE.txt" -Encoding UTF8
+          @(
+            "AI KeyVault v$ver — Edición Portable (Windows x64)"
+            "==================================================="
+            "1. Extrae esta carpeta en cualquier ubicación."
+            "2. Ejecuta ""AI KeyVault.exe"" (mantén ""ai-keyvault-poller.exe"" en la misma carpeta)."
+            "3. Tu bóveda local se almacena cifrada en %APPDATA%\com.miguelgotea.ai-keyvault\."
+          ) | Set-Content -Path "$stagingDir/LEEME-PORTABLE.txt" -Encoding UTF8
           $zipPath = "$portableDir/AI-KeyVault-portable-v$ver-win-x64.zip"
           Compress-Archive -Path "$stagingDir/*" -DestinationPath $zipPath -Force
           Remove-Item -Recurse -Force $stagingDir
