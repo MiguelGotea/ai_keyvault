@@ -282,8 +282,9 @@ impl Vault {
         }
     }
 
-    /// Actualiza alias, correo, contraseña, notas y detalles cifrados de una cuenta existente.
+    /// Actualiza alias, correo, contraseña, notas, detalles y fin de suscripción de una cuenta existente.
     /// Conserva `encrypted_tokens` intacto.
+    #[allow(clippy::too_many_arguments)]
     pub fn update_account(
         &mut self,
         account_id: Uuid,
