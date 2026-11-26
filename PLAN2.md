@@ -623,7 +623,7 @@ Aplicado D-01, D-02 y D-06:
 - [ ] Una alerta de prueba (umbral bajado) aparece en `/alerts` y como toast.
 - [ ] Ping manual de una cuenta que lo necesita queda en el historial de `/ping`.
 - [ ] Switch real A→B→A verificado (cuota o `auth.json`) y «Deshacer» funciona.
-- [ ] CI en verde, incluidos los tests de contrato; `gitleaks` limpio.
+- [x] CI en verde, incluidos los tests de contrato; `gitleaks` limpio *(verificado 2026-11-25)*.
 
 ---
 

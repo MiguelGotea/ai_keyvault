@@ -56,8 +56,8 @@ export default function AccountsPage() {
       let result: { success: boolean; id: string | null; error: string | null };
 
       if (selectedProvider === "agy") {
-        // Lee de "gemini:antigravity" en el Credential Manager de Windows
-        result = await invoke("import_current_agy_credential", {
+        // Flujo OAuth guiado: limpia credencial, abre agy en consola y captura al completar (hasta 120 s)
+        result = await invoke("add_agy_account_oauth", {
           alias: importAlias.trim(),
         });
       } else {
@@ -97,13 +97,24 @@ export default function AccountsPage() {
     }
   }, [accounts]);
 
+  const handleCancelModal = useCallback(async () => {
+    if (importing && selectedProvider === "agy") {
+      try {
+        await invoke("cancel_agy_oauth");
+      } catch (e) {
+        setImportError(`No se pudo cancelar el flujo OAuth: ${String(e)}`);
+      }
+    }
+    setShowModal(false);
+  }, [importing, selectedProvider]);
+
   const providerInstructions = {
     agy: (
       <>
-        <strong>Requisito:</strong> tener Antigravity (<code>agy</code>) instalado y logueado en esta PC
-        con la cuenta que quieres guardar.
+        <strong>Login guiado (OAuth):</strong> al confirmar, la app abrirá <code>agy</code> para que
+        inicies sesión en el navegador con la cuenta que quieres guardar (espera hasta 120 s).
         <br />
-        La app captura el token de <code>gemini:antigravity</code> en el Credential Manager.
+        Al terminar, captura automáticamente el token de <code>gemini:antigravity</code> y lo cifra en tu bóveda.
       </>
     ),
     codex: (
@@ -220,7 +231,7 @@ export default function AccountsPage() {
           <div style={styles.modal}>
             <div style={styles.modalHeader}>
               <h3 style={styles.modalTitle}>Agregar cuenta a la bóveda</h3>
-              <button style={styles.closeBtn} onClick={() => setShowModal(false)}>✕</button>
+              <button style={styles.closeBtn} onClick={handleCancelModal}>✕</button>
             </div>
 
             <div style={styles.modalBody}>
@@ -277,9 +288,15 @@ export default function AccountsPage() {
             </div>
 
             <div style={styles.modalFooter}>
-              <button style={styles.cancelBtn} onClick={() => setShowModal(false)}>Cancelar</button>
+              <button style={styles.cancelBtn} onClick={handleCancelModal}>Cancelar</button>
               <button style={styles.saveBtn} onClick={handleImport} disabled={importing}>
-                {importing ? "Importando…" : "✅ Importar y guardar"}
+                {importing
+                  ? selectedProvider === "agy"
+                    ? "⏳ Esperando login en navegador…"
+                    : "Importando…"
+                  : selectedProvider === "agy"
+                  ? "🌐 Iniciar login OAuth"
+                  : "✅ Importar y guardar"}
               </button>
             </div>
           </div>
