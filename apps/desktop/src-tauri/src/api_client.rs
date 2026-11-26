@@ -162,6 +162,16 @@ pub struct DeviceRegistration {
     pub public_key_hex: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DeviceItem {
+    pub id: String,
+    pub name: String,
+    #[serde(deserialize_with = "de_bool_or_int")]
+    pub is_active: bool,
+    pub created_at: String,
+    pub last_seen_at: String,
+}
+
 /// El VPS devuelve un array de objetos con todos los campos del ping.
 /// NO envuelve en { accounts_needing_ping: [...] }.
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -261,5 +271,12 @@ mod contract_tests {
             serde_json::from_str(include_str!("../tests/fixtures/pings.json")).expect("pings.json");
         assert!(pings[0].success);
         assert!(pings[0].is_manual);
+
+        let devices: Vec<DeviceItem> =
+            serde_json::from_str(include_str!("../tests/fixtures/devices.json"))
+                .expect("devices.json");
+        assert_eq!(devices.len(), 2);
+        assert!(devices[0].is_active);
+        assert!(!devices[1].is_active);
     }
 }

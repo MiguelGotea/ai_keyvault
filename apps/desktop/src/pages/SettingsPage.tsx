@@ -40,6 +40,11 @@ export default function SettingsPage() {
     localStorage.setItem("autolock_minutes", String(settings.autolockMinutes));
   }, [settings.autolockMinutes]);
 
+  // Aplicar tema claro/oscuro inmediatamente al cambiar (Fase 25)
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", settings.theme === "dark" ? "dark" : "light");
+  }, [settings.theme]);
+
   function set<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings(s => ({ ...s, [key]: value }));
     setSaved(false);
@@ -208,6 +213,39 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Apariencia (Fase 25) */}
+      <section style={styles.section}>
+        <h3 style={styles.sectionTitle}>Apariencia</h3>
+        <Row label="Tema de la interfaz">
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => set("theme", "dark")}
+              style={{
+                ...styles.btnOutline,
+                background: settings.theme === "dark" ? "var(--color-primary)" : "var(--color-surface)",
+                color: settings.theme === "dark" ? "#FFFFFF" : "var(--color-text)",
+                borderColor: settings.theme === "dark" ? "var(--color-primary)" : "var(--color-border)",
+              }}
+            >
+              🌙 Oscuro
+            </button>
+            <button
+              type="button"
+              onClick={() => set("theme", "light")}
+              style={{
+                ...styles.btnOutline,
+                background: settings.theme === "light" ? "var(--color-primary)" : "var(--color-surface)",
+                color: settings.theme === "light" ? "#FFFFFF" : "var(--color-text)",
+                borderColor: settings.theme === "light" ? "var(--color-primary)" : "var(--color-border)",
+              }}
+            >
+              ☀️ Claro
+            </button>
+          </div>
+        </Row>
+      </section>
 
       {/* Respaldo */}
       <section style={styles.section}>

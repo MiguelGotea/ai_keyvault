@@ -106,6 +106,8 @@ fn main() {
             commands::api::post_ping,
             // Dispositivos (VPS)
             commands::api::register_device,
+            commands::api::get_devices,
+            commands::api::revoke_device,
             // Poller IPC (Fase 13)
             commands::poller::get_poller_status,
             commands::poller::start_poller,

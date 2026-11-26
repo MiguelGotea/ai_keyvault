@@ -4,9 +4,9 @@
 //! Este módulo hace la petición HTTP desde Rust y devuelve JSON serializado.
 
 use crate::api_client::{
-    http_client, AlertRecord, ChatSession, DeviceRegistration, HeatmapCell, PingNeedItem,
-    PingRecord, PoolSummary, PostPingPayload, PostSwitchPayload, QuotaReading, SwitchRecord,
-    SERVER_URL,
+    http_client, AlertRecord, ChatSession, DeviceItem, DeviceRegistration, HeatmapCell,
+    PingNeedItem, PingRecord, PoolSummary, PostPingPayload, PostSwitchPayload, QuotaReading,
+    SwitchRecord, SERVER_URL,
 };
 use tauri::command;
 
@@ -292,6 +292,32 @@ pub async fn register_device(
     http_client()
         .post(&format!("{SERVER_URL}/api/devices/register"))
         .json(&payload)
+        .send()
+        .await
+        .map_err(req_err)?;
+    Ok(())
+}
+
+/// Lista los dispositivos registrados en el VPS (Fase 25).
+#[command]
+pub async fn get_devices() -> Result<Vec<DeviceItem>, String> {
+    let devices = http_client()
+        .get(&format!("{SERVER_URL}/api/devices"))
+        .send()
+        .await
+        .map_err(req_err)?
+        .json::<Vec<DeviceItem>>()
+        .await
+        .map_err(req_err)?;
+    Ok(devices)
+}
+
+/// Revoca el acceso de un dispositivo en el VPS (Fase 25).
+#[command]
+pub async fn revoke_device(device_id: String) -> Result<(), String> {
+    http_client()
+        .post(&format!("{SERVER_URL}/api/devices/revoke"))
+        .json(&serde_json::json!({ "device_id": device_id }))
         .send()
         .await
         .map_err(req_err)?;

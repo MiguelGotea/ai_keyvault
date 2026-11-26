@@ -13,6 +13,8 @@
 |---|---|---|---|
 | `GET /health` | App / Poller | `{ status, service, version, timestamp }` | |
 | `POST /api/devices/register` | App | Req: `{ device_id, device_name, public_key_hex }` · Resp: `{ device_id, registered, message }` | `device_name` obligatorio |
+| `GET /api/devices` | App | `Vec<{ id, name, is_active, created_at, last_seen_at }>` | `is_active`: bool o 0/1 (Fase 25) |
+| `POST /api/devices/revoke` | App | Req: `{ device_id }` · Resp: `{ ok, device_id, revoked }` | Fase 25 |
 | `POST /api/vault/sync` | App | Req: `{ device_id, encrypted_payload }` · Resp: `{ version, checksum_sha256, updated_at }` | Conocimiento cero |
 | `GET /api/vault/sync` | App | `{ version, device_id, encrypted_payload, checksum_sha256, updated_at }` | HTTP 400 si no hay snapshot |
 | `POST /api/quota/lease` | Poller | Req: `{ account_id, device_id, lease_seconds }` · Resp: `{ acquired, locked_by, locked_until }` | |

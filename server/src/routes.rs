@@ -80,6 +80,59 @@ pub async fn register_device(
     }))
 }
 
+#[derive(Debug, Serialize)]
+pub struct DeviceItem {
+    pub id: String,
+    pub name: String,
+    pub is_active: bool,
+    pub created_at: String,
+    pub last_seen_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RevokeDeviceRequest {
+    pub device_id: String,
+}
+
+/// `GET /api/devices` — lista los dispositivos registrados (Fase 25).
+pub async fn list_devices(State(state): State<Arc<AppState>>) -> Result<Json<Vec<DeviceItem>>> {
+    let rows = sqlx::query(
+        "SELECT id, name, is_active, created_at, last_seen_at FROM devices ORDER BY last_seen_at DESC",
+    )
+    .fetch_all(&state.db)
+    .await?;
+
+    let devices = rows
+        .into_iter()
+        .map(|r| DeviceItem {
+            id: r.get("id"),
+            name: r.get("name"),
+            is_active: r.get::<i64, _>("is_active") != 0,
+            created_at: r.get("created_at"),
+            last_seen_at: r.get("last_seen_at"),
+        })
+        .collect();
+
+    Ok(Json(devices))
+}
+
+/// `POST /api/devices/revoke` — revoca el acceso de un dispositivo (Fase 25).
+pub async fn revoke_device(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RevokeDeviceRequest>,
+) -> Result<Json<serde_json::Value>> {
+    sqlx::query("UPDATE devices SET is_active = 0 WHERE id = ?")
+        .bind(&payload.device_id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({
+        "ok": true,
+        "device_id": payload.device_id,
+        "revoked": true
+    })))
+}
+
 // ─────────────────────────────────────────────
 // 3. Sincronización de Bóveda Cifrada (Conocimiento Cero)
 // ─────────────────────────────────────────────

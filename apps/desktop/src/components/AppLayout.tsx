@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { to: "/ping", icon: "📡", label: es.nav.ping },
   { to: "/chats", icon: "💬", label: es.nav.chats },
   { to: "/accounts", icon: "🗝️", label: es.nav.accounts },
+  { to: "/devices", icon: "💻", label: "Mis dispositivos" },
   { to: "/stats", icon: "📊", label: es.nav.stats },
   { to: "/settings", icon: "⚙️", label: es.nav.settings },
 ];

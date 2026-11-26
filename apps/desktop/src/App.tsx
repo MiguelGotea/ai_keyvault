@@ -11,6 +11,7 @@ import ChatsPage from "./pages/ChatsPage";
 import StatsPage from "./pages/StatsPage";
 import SettingsPage from "./pages/SettingsPage";
 import AccountsPage from "./pages/AccountsPage";
+import DevicesPage from "./pages/DevicesPage";
 import AppLayout from "./components/AppLayout";
 
 /**
@@ -24,6 +25,17 @@ function App() {
   const location = useLocation();
   // Ref para evitar múltiples suscripciones al rerender
   const unlistenRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    // Aplicar tema guardado (claro / oscuro) al iniciar (Fase 25)
+    try {
+      const raw = localStorage.getItem("akv_settings");
+      const theme = raw ? JSON.parse(raw).theme : "dark";
+      document.documentElement.setAttribute("data-theme", theme === "light" ? "light" : "dark");
+    } catch {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -86,6 +98,7 @@ function App() {
         <Route path="/ping" element={<PingPage />} />
         <Route path="/chats" element={<ChatsPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
+        <Route path="/devices" element={<DevicesPage />} />
         <Route path="/stats" element={<StatsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>

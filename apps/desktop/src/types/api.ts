@@ -173,6 +173,14 @@ export interface Device {
   last_seen_at: string | null;
 }
 
+export interface DeviceItem {
+  id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  last_seen_at: string;
+}
+
 // ── Poller IPC (Fase 13) ─────────────────────────────────────────────────────
 
 export type PollerState = "running" | "paused" | "stopped" | "error";
