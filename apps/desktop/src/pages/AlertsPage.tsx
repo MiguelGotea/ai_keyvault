@@ -1,16 +1,26 @@
 /**
- * AlertsPage — Log de alertas del VPS.
+ * AlertsPage — Log de alertas del VPS con sugerencia de cuenta alternativa (Fase 21).
  * Solo muestra alertas de cuentas que están en la bóveda.
  */
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
-import type { AlertRecord, AccountInfo } from "../types/api";
+import type { AlertRecord, AccountInfo, PoolSummary, SwitchResult } from "../types/api";
 import es from "../i18n/es.json";
 
+interface AlternativeCandidate {
+  account: AccountInfo;
+  percentUsed: number | null;
+}
+
 export default function AlertsPage() {
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
+  const [switchMsg, setSwitchMsg] = useState<string | null>(null);
+
   // Cuentas de la bóveda (fuente de verdad)
   const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
   const alerts = useCommand<AlertRecord[]>("get_alerts", {});
+  const compare = useCommand<PoolSummary[]>("get_stats_compare", { days: 7 });
 
   // D-02: filtrar alertas por UUID de bóveda y mostrar su alias
   const accountById = useMemo(
@@ -23,19 +33,87 @@ export default function AlertsPage() {
     [alerts.data, accountById]
   );
 
+  // Índice de uso por `${account_id}:${pool}` para sugerir alternativa
+  const usageByAccountPool = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of compare.data ?? []) {
+      map.set(`${p.account_id}:${p.pool}`, p.current_percent_used);
+    }
+    return map;
+  }, [compare.data]);
+
+  function findAlternative(alert: AlertRecord): AlternativeCandidate | null {
+    const candidates = (vaultAccounts.data ?? []).filter(
+      a => a.provider === alert.provider && a.id !== alert.account_id
+    );
+    if (candidates.length === 0) return null;
+
+    let best: AlternativeCandidate | null = null;
+    for (const cand of candidates) {
+      const pct = usageByAccountPool.get(`${cand.id}:${alert.pool}`) ?? null;
+      if (pct !== null && pct >= 80) continue;
+      if (!best) {
+        best = { account: cand, percentUsed: pct };
+      } else {
+        const bestScore = best.percentUsed ?? 50;
+        const candScore = pct ?? 50;
+        if (candScore < bestScore) {
+          best = { account: cand, percentUsed: pct };
+        }
+      }
+    }
+    return best;
+  }
+
+  async function handleSwitchAlternative(account: AccountInfo) {
+    setSwitchingId(account.id);
+    setSwitchMsg(null);
+    try {
+      const result = await invoke<SwitchResult>("switch_account", {
+        accountId: account.id,
+        provider: account.provider,
+        deviceId: "desktop-win",
+      });
+      if (result.success) {
+        setSwitchMsg(`✅ Cambiado a '${account.alias}'. ${result.restart_notice ?? ""}`);
+      } else {
+        setSwitchMsg(`❌ ${result.error ?? "Error desconocido al cambiar de cuenta."}`);
+      }
+    } catch (e) {
+      setSwitchMsg(`❌ Error: ${String(e)}`);
+    } finally {
+      setSwitchingId(null);
+    }
+  }
+
   const isLoading = alerts.loading || vaultAccounts.loading;
 
   return (
     <div style={styles.page}>
       <div style={styles.header}>
         <h2 style={styles.title}>{es.alertas.titulo}</h2>
-        <button style={styles.refreshBtn} onClick={alerts.refetch} disabled={isLoading}>
+        <button
+          style={styles.refreshBtn}
+          onClick={() => { alerts.refetch(); compare.refetch(); }}
+          disabled={isLoading}
+        >
           {isLoading ? "⏳" : "↻"} Actualizar
         </button>
       </div>
 
       {isLoading && <div style={styles.hint}>Cargando alertas…</div>}
       {alerts.error && <div style={styles.error}>{alerts.error}</div>}
+      {compare.error && <div style={styles.error}>No se pudo consultar cuota para sugerencias: {compare.error}</div>}
+
+      {switchMsg && (
+        <div style={{
+          ...styles.switchBanner,
+          color: switchMsg.startsWith("✅") ? "var(--color-success)" : "var(--color-danger)",
+        }}>
+          <span>{switchMsg}</span>
+          <button style={styles.closeBtn} onClick={() => setSwitchMsg(null)}>✕</button>
+        </div>
+      )}
 
       {!isLoading && (vaultAccounts.data ?? []).length === 0 && (
         <div style={styles.empty}>
@@ -53,7 +131,9 @@ export default function AlertsPage() {
 
       {filteredAlerts.length > 0 && (
         <div style={styles.list}>
-          {filteredAlerts.map(alert => (
+          {filteredAlerts.map(alert => {
+            const alt = findAlternative(alert);
+            return (
             <div
               key={alert.id}
               style={{
@@ -82,8 +162,24 @@ export default function AlertsPage() {
                 {alert.notified_toast && <span style={styles.notifBadge}>🔔 Toast</span>}
                 {alert.notified_ntfy && <span style={styles.notifBadge}>📲 Ntfy</span>}
               </div>
+              {alt && (
+                <div style={styles.altRow}>
+                  <span style={styles.altText}>
+                    💡 Alternativa disponible: <strong>{alt.account.alias}</strong>
+                    {alt.percentUsed !== null ? ` (${alt.percentUsed.toFixed(1)}% usado)` : " (sin lecturas recientes)"}
+                  </span>
+                  <button
+                    style={styles.switchBtn}
+                    disabled={switchingId === alt.account.id}
+                    onClick={() => handleSwitchAlternative(alt.account)}
+                  >
+                    {switchingId === alt.account.id ? "Cambiando…" : "⚡ Cambiar a esa cuenta"}
+                  </button>
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -107,4 +203,9 @@ const styles: Record<string, React.CSSProperties> = {
   alertBody: { fontSize: 13, color: "var(--color-text)", display: "flex", flexWrap: "wrap" as const, gap: 6, alignItems: "center" },
   alertMsg: { color: "var(--color-text-secondary)", fontSize: 12 },
   notifBadge: { fontSize: 10, padding: "1px 6px", background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: 999 },
+  switchBanner: { padding: "10px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center" },
+  closeBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--color-text-disabled)" },
+  altRow: { marginTop: 6, paddingTop: 8, borderTop: "1px solid var(--color-border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" as const },
+  altText: { fontSize: 12, color: "var(--color-text-secondary)" },
+  switchBtn: { padding: "5px 12px", border: "none", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600 },
 };

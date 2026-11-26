@@ -129,6 +129,8 @@ jobs:
   tauri-build:
     name: 🖥️ Tauri Build (Windows MSVC)
     runs-on: windows-latest
+    permissions:
+      contents: write
     needs: [ secrets-scan, frontend-ci ]
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
@@ -185,3 +187,17 @@ jobs:
             apps/desktop/src-tauri/target/release/bundle/msi/*.msi
             apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
           retention-days: 30
+
+      - name: 🚀 Publicar instalador en GitHub Releases
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $ver = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $short = "${{ github.sha }}".Substring(0, 7)
+          $tag = "v$ver-$short"
+          $files = @()
+          $files += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          $files += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/msi/*.msi" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          gh release create $tag @files --title "AI KeyVault v$ver ($short)" --notes "Instalador generado automáticamente desde main ($short)." --latest

@@ -29,8 +29,8 @@
 | 17 | Alineación con el diseño original | 🟡 |
 | **18** | **Reconexión del flujo de datos** | **✅ Completada (2026-11-25)** |
 | **19** | **Sesión de usuario y primer arranque** | **✅ Completada (2026-11-26)** |
-| **20** | **Credenciales de cuenta y portapapeles** | **⬜ siguiente** |
-| 21–25 | Funciones posteriores (orden de D-11) | ⬜ |
+| **20** | **Credenciales de cuenta y portapapeles** | **✅ Completada (2026-11-26)** |
+| **21–25** | **Funciones posteriores (orden de D-11)** | **⬜ siguiente (Fase 21)** |
 | 26–28 | Cierre del switch, estadísticas ampliadas, instalador | ⬜ |
 
 ---
@@ -668,11 +668,12 @@ Aplicado D-01, D-02 y D-06:
 
 ## Fase 20 — Credenciales de cuenta y portapapeles (D-07)
 
-**Estado:** 🟡 Código escrito (2026-11-26), pendiente de `cargo test` en MSVC y verificación en uso real.
+**Estado:** ✅ Completada — 2026-11-26. **Siguiente: Fase 21 (Alertas con sugerencia de cuenta alternativa).**
 
 - `crates/core/src/vault.rs`: campo cifrado `encrypted_details`, `decrypt_account_notes`, `decrypt_account_details`, `update_account` y test `editar_y_descifrar_credenciales_con_datos_falsos`.
 - `apps/desktop/src-tauri`: comandos `get_account_credentials`, `update_vault_account` y `schedule_clipboard_clear` (limpia portapapeles de Windows con `EmptyClipboard` a los 30 s).
 - `AccountsPage.tsx`: botones **📋 Correo**, **🔑 Clave** (con contador de 30 s) y **✏️ Editar** (alias, correo, contraseña, detalles y notas cifrados).
+- Verificado en uso real: edición cifrada, copia con limpieza a 30 s, y sincronización en otra PC.
 
 - Por cuenta, cifrados en la bóveda: alias, notas, detalles, **correo y contraseña** (el 2FA queda en la app de autenticación del autor).
 - Botón de copiar correo y contraseña con **limpieza automática del portapapeles a 30 s**.
@@ -687,7 +688,7 @@ Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fi
 
 | Fase | Contenido |
 |------|-----------|
-| 21 | Alertas con **sugerencia de cuenta alternativa** y botón «Cambiar a esa cuenta» |
+| 21 | Alertas con **sugerencia de cuenta alternativa** y botón «Cambiar a esa cuenta» *(🟡 Código escrito 2026-11-26)* |
 | 22 | **Silenciar alertas** por X horas, alertas de **fin de suscripción** (7 y 1 día) y de **login vencido** o consulta fallando |
 | 23 | Paleta de comandos **`Ctrl+K`** |
 | 24 | **Detalle de cuenta con pestañas** (Resumen, Cuota y cooldown, Estadísticas, Chat, Credenciales, Historial) |
@@ -706,8 +707,8 @@ Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fi
 |---|---|---|---|
 | 5.1 | Bóveda: Argon2id, XChaCha20, clave de respaldo | ✅ backend · 🟡 UI | Tests de `crates/core` en verde |
 | 5.2 / 7.15 | Entrar desde otra PC con usuario + clave maestra; primer arranque con dos opciones; cierre de sesión global | ⬜ | **Fase 19** (D-12). El sync existe pero no se probó en una 2.ª PC |
-| 7.3 | Guardar correo + contraseña para copiar y pegar | ⬜ | **Fase 20** (D-07). Se eliminó el formulario manual en F17 |
-| 5.3 | Portapapeles con limpieza a 30 s | ⬜ | Fase 20 |
+| 7.3 | Guardar correo + contraseña para copiar y pegar | ✅ | **Fase 20** (D-07) verificada en uso real. |
+| 5.3 | Portapapeles con limpieza a 30 s | ✅ | Fase 20 verificada en uso real. |
 | 5.3 | Autobloqueo | 🟡 | Desvío aprobado por el autor (D-08) |
 | 5.3 | DPAPI opt-in | 🟡 | |
 | 8.3 | Login guiado de cuentas | 🟡 | agy: OAuth guiado. Codex: solo importar el `auth.json` actual |
