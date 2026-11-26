@@ -24,7 +24,7 @@
 
 ---
 
-## 📦 Estado del proyecto — 2026-11-25
+## 📦 Estado del proyecto — 2026-11-26
 
 ### Primera etapa: Backend + API (✅ Completada)
 
@@ -46,31 +46,33 @@
 | F | 📄 | Codex token renewal: documentado como procedimiento manual |
 | 9 | ⏸ | **Etapa 3** — proveedores adicionales (Claude, Gemini, Grok) |
 
-### Segunda etapa: App de escritorio 🟡 v0.2.4
+### Segunda etapa: App de escritorio ✅ v0.2.5 (Fases 18–28 completadas)
 
-> UI completa e instalable, pero el flujo de datos poller → VPS → app está **en reparación** (ver `PLAN2.md`, Fase 18). Las marcas ✅ de esta tabla significan «código escrito y compilando»; el estado real está en `PLAN2.md`.
+> Consulta [PLAN2.md](PLAN2.md) para el detalle completo de decisiones (D-01 a D-13) y matriz de cumplimiento.
 
 | Fase | Estado | Descripción |
 |------|--------|-------------|
-| 10 | ✅ | Scaffold Tauri 2 completo — íconos, CI, scripts, toolchain MSVC |
-| 11 | ✅ | Capa comunicación Rust↔VPS↔React — comandos API, hooks useCommand |
-| 12 | ✅ | Bóveda local real — Argon2id, desbloqueo, creación, recuperación |
-| 13 | ✅ | Dashboard — QuotaCard, AppLayout, switch cuentas, poller IPC |
-| 14 | ✅ | Autobloqueo IPC — timer Rust + evento Tauri → lock_vault |
-| 15 | ✅ | Configuración, vault sync VPS, alertas, pings, chats, stats |
-| 16 | ✅ | Build verificado, CI en verde, instalable en Windows |
-| 17 | 🟡 | Alineación con el diseño: bóveda como fuente de verdad, captura de login, switch real (v0.2.1 → v0.2.4) |
-| 18 | ⬜ | **Reconexión del flujo de datos** (siguiente) |
+| 10–17 | ✅ | Scaffold Tauri 2, bóveda local, dashboard, autobloqueo, configuración, build CI |
+| 18 | ✅ | Reconexión del flujo de datos (`IdentityMap`, contrato API, errores visibles, respaldo cifrado) |
+| 19 | ✅ | Sesión de usuario, primer arranque estilo Bitwarden, cierre de sesión global, inicio con Windows |
+| 20 | ✅ | Credenciales de cuenta (correo/contraseña) y portapapeles con limpieza a 30 s |
+| 21 | ✅ | Alertas con sugerencia de cuenta alternativa y botón «Cambiar a esa cuenta» |
+| 22 | ✅ | Silenciar alertas por X horas, fin de suscripción (7 y 1 día) y consulta fallando |
+| 23 | ✅ | Paleta de comandos `Ctrl+K` |
+| 24 | ✅ | Detalle de cuenta con 6 pestañas |
+| 25 | ✅ | Tema claro/oscuro y pantalla «Mis dispositivos» (revocar acceso) |
+| 26 | ✅ | Cierre del switch («Deshacer», detección de procesos sin cerrarlos, «sin agente en esta PC») |
+| 27 | ✅ | Estadísticas ampliadas (tokens por modelo, eficiencia, cuota desperdiciada) y «Experimento de cooldown» |
+| 28 | ✅ | Versión portable `.zip` y soporte de firma Authenticode en CI (ver `docs/firma-y-portable.md`) |
 
 **Instalación (Windows):**
 
-> Windows puede mostrar una advertencia de SmartScreen porque el instalador no está firmado con un certificado de código. Haz clic en **"Más información" → "Ejecutar de todas formas"**.
+> En GitHub Releases tienes tanto el instalador (`AI KeyVault_<versión>_x64-setup.exe` / `.msi`) como la edición portable (`AI-KeyVault-portable-v<versión>-win-x64.zip`). Si el binario no tiene firma Authenticode configurada, Windows puede mostrar SmartScreen: **"Más información" → "Ejecutar de todas formas"**.
 
 ```
-1. Compilar: pnpm tauri build  (desde apps/desktop/)
-2. Instalar: src-tauri/target/release/bundle/nsis/AI KeyVault_<versión>_x64-setup.exe
-3. La app abre en /unlock — crea tu bóveda con una clave maestra (mín. 12 caracteres)
-4. El poller arranca automáticamente y se ve en la bandeja del sistema
+1. Descargar de GitHub Releases (instalador .exe o portable .zip) o compilar con: pnpm tauri build
+2. La app abre en /unlock — inicia sesión o crea tu usuario + bóveda con clave maestra (mín. 12 caracteres)
+3. El poller arranca automáticamente (salvo en modo «Sin agente en esta PC») y se ve en la bandeja del sistema
 ```
 
 ---
@@ -192,6 +194,8 @@ ai_keyvault/
 
 ## 📖 Documentación adicional
 
+- [`docs/manual-de-usuario.md`](docs/manual-de-usuario.md) — **Manual completo de usuario final** (todas las pantallas y funciones)
+- [`docs/firma-y-portable.md`](docs/firma-y-portable.md) — Edición portable y firma Authenticode en CI
 - [`CLAUDE.md`](CLAUDE.md) — Reglas de trabajo para el agente de desarrollo
 - [`PLAN.md`](PLAN.md) — Historia del backend (etapa 1, congelado)
 - [`PLAN2.md`](PLAN2.md) — App de escritorio: decisiones, estado real, Fase 18 y matriz de pendientes

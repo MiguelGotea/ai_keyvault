@@ -3,7 +3,7 @@
 > Este archivo es leído automáticamente por el agente de desarrollo al abrir el proyecto.
 > **No eliminar. No modificar sin actualizar la versión.**
 
-Versión: 2.1.0 | Fecha: 2026-11-25
+Versión: 2.2.0 | Fecha: 2026-11-26
 
 ---
 
@@ -11,9 +11,9 @@ Versión: 2.1.0 | Fecha: 2026-11-25
 
 **AI KeyVault** es una bóveda + tablero personal para administrar cuentas de agentes de IA de programación (Antigravity/agy, Codex, y en la etapa 3 Claude, Gemini, Grok y otros). Es una **herramienta personal** del autor para sus propias cuentas en sus propias PCs. No tiene fines comerciales ni de distribución masiva.
 
-**Estado al 2026-11-25:**
+**Estado al 2026-11-26:**
 - **Etapa 1 (backend)** ✅ operativa: servidor VPS + poller + alerter + providers.
-- **Etapa 2 (app de escritorio Tauri 2)** 🟡 v0.2.4: UI completa, pero el flujo de datos poller → VPS → app **no funciona**. Siguiente paso: `PLAN2.md` Fase 18 (Reconexión).
+- **Etapa 2 (app de escritorio Tauri 2)** ✅ v0.2.5: Fases 18–28 completadas y verificadas (sesión multi-PC, bóveda cifrada, poller/pings/switch con deshacer, alertas inteligentes, paleta `Ctrl+K`, detalle con 6 pestañas, tema claro/oscuro, «Mis dispositivos», estadísticas ampliadas, «Experimento de cooldown» y versión portable `.zip`).
 - **Etapa 3 (futura):** proveedores adicionales (Fase 9).
 
 *(«Segunda etapa» significa siempre la app de escritorio.)*

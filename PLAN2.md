@@ -691,11 +691,11 @@ Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fi
 | 21 | Alertas con **sugerencia de cuenta alternativa** y botón «Cambiar a esa cuenta» *(✅ Completada 2026-11-26)* |
 | 22 | **Silenciar alertas** por X horas, alertas de **fin de suscripción** (7 y 1 día) y de **login vencido** o consulta fallando *(✅ Completada 2026-11-26)* |
 | 23 | Paleta de comandos **`Ctrl+K`** *(✅ Completada 2026-11-26)* |
-| 24 | **Detalle de cuenta con pestañas** (Resumen, Cuota y cooldown, Estadísticas, Chat, Credenciales, Historial) *(🟡 Código escrito 2026-11-26)* |
+| 24 | **Detalle de cuenta con pestañas** (Resumen, Cuota y cooldown, Estadísticas, Chat, Credenciales, Historial) *(✅ Completada 2026-11-26)* |
 | 25 | **Tema claro/oscuro** y pantalla **«Mis dispositivos»** (revocar acceso) *(✅ Completada 2026-11-26)* |
 | 26 | Cierre del switch: botón «Deshacer», aviso de reinicio de herramientas, detección de procesos sin cerrarlos, «sin agente en esta PC» *(✅ Completada 2026-11-26)* |
 | 27 | Estadísticas ampliadas (tokens por modelo, eficiencia, cuota desperdiciada) y pantalla «Experimento de cooldown» *(✅ Completada 2026-11-26)* |
-| 28 | Instalador firmado y versión portable *(🟡 Código escrito 2026-11-26)* |
+| 28 | Instalador firmado y versión portable *(✅ Completada 2026-11-26)* |
 
 ---
 
@@ -705,34 +705,34 @@ Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fi
 
 | § del prompt | Requisito | Estado | Nota |
 |---|---|---|---|
-| 5.1 | Bóveda: Argon2id, XChaCha20, clave de respaldo | ✅ backend · 🟡 UI | Tests de `crates/core` en verde |
-| 5.2 / 7.15 | Entrar desde otra PC con usuario + clave maestra; primer arranque con dos opciones; cierre de sesión global | ⬜ | **Fase 19** (D-12). El sync existe pero no se probó en una 2.ª PC |
-| 7.3 | Guardar correo + contraseña para copiar y pegar | ✅ | **Fase 20** (D-07) verificada en uso real. |
-| 5.3 | Portapapeles con limpieza a 30 s | ✅ | Fase 20 verificada en uso real. |
-| 5.3 | Autobloqueo | 🟡 | Desvío aprobado por el autor (D-08) |
-| 5.3 | DPAPI opt-in | 🟡 | |
-| 8.3 | Login guiado de cuentas | 🟡 | agy: OAuth guiado. Codex: solo importar el `auth.json` actual |
-| 8.3 | Switch con revertir | ✅ backend · 🟡 UI | |
-| 8.3 | «Deshacer», aviso de reinicio y detección de procesos | ⬜ | Fase 26 (revert existe en Rust) |
-| 7.4 / 7.7 | Cuota y reinicios por cuenta, «actualizado hace X por PC» | ⚠ | Flujo roto (D-01, D-02) |
-| 4.2 | Agente al iniciar Windows | ⬜ | D-03: opción «Iniciar con Windows» (Fase 19) |
-| Frecuencia | 10 min activas / 60 min inactivas | 🟡 | D-06: 10 min para la cuenta activa; los 60 min no aplican con D-01 |
-| 8.1 | Alertas 80 % / 95 % (toast + ntfy) | ✅ backend · 🟡 UI | |
-| 8.1 | Sugerencia de cuenta alternativa y botón «Cambiar» | ⬜ | Fase 21 |
-| 8.1 | Silenciar por X horas | ⬜ | Fase 22 (UI sin lógica) |
-| 7.10 / 8.1 | Fin de suscripción, login vencido, consulta fallando | ⬜ | Fase 22 |
-| 8.2 | Ping manual y automático | ✅ backend · 🟡 UI | |
-| 10 | Chats (metadatos, solo activos) | ✅ backend · 🟡 UI | |
-| 10 | «Sin agente en esta PC» | ⬜ | Fase 26 |
-| 11 | Estadísticas: burn rate, heatmap, comparativa, CSV | ✅ backend · 🟡 UI | |
-| 11 | Tokens por modelo, eficiencia, cuota desperdiciada | ⬜ | Fase 27 (`token_usage_record` investigado) |
-| 9.3 | Detalle de cuenta con 6 pestañas | ⬜ | Fase 24 |
-| 9 | Paleta `Ctrl+K` | ✅ | Fase 23 verificada en uso real. |
-| 9 | Tema claro/oscuro | ⬜ | Fase 25 (hoy solo oscuro) |
-| 7.17 | Pantalla «Mis dispositivos» | ⬜ | Fase 25 (`register_device` existe) |
-| 9 | Pantalla «Experimento de cooldown» | ⬜ | Fase 27 |
-| 3 / 5.4 | Respaldo en `ai_keyvault_data` y restauración | ⬜ | D-04 (Fase 18.5): dump cifrado + restauración real |
-| 5.2 | Consulta desde el VPS 24/7 (delegada) | ⏸ | Riesgo en ADR-003 |
+| 5.1 | Bóveda: Argon2id, XChaCha20, clave de respaldo | ✅ | Tests de `crates/core` y uso real en verde |
+| 5.2 / 7.15 | Entrar desde otra PC con usuario + clave maestra; primer arranque con dos opciones; cierre de sesión global | ✅ | **Fase 19** (D-12) completada |
+| 7.3 | Guardar correo + contraseña para copiar y pegar | ✅ | **Fase 20** (D-07) verificada en uso real |
+| 5.3 | Portapapeles con limpieza a 30 s | ✅ | **Fase 20** verificada en uso real |
+| 5.3 | Autobloqueo | ✅ | Desvío aprobado por el autor (D-08), persistente |
+| 5.3 | DPAPI opt-in | ✅ | Desbloqueo rápido opcional con advertencia |
+| 8.3 | Login guiado de cuentas | ✅ | agy: OAuth guiado. Codex: importar `auth.json` actual |
+| 8.3 | Switch con revertir | ✅ | Switch real + restauración si falla |
+| 8.3 | «Deshacer», aviso de reinicio y detección de procesos | ✅ | **Fase 26**: `undo_last_switch` + `tasklist` sin cerrar procesos |
+| 7.4 / 7.7 | Cuota y reinicios por cuenta, «actualizado hace X por PC» | ✅ | **Fase 18**: cruce por UUID (`IdentityMap`) + estado en dashboard |
+| 4.2 | Agente al iniciar Windows | ✅ | **Fase 19** (D-03): opción «Iniciar con Windows» |
+| Frecuencia | 10 min activas / 60 min inactivas | ✅ | D-06: 10 min para la cuenta activa |
+| 8.1 | Alertas 80 % / 95 % (toast + ntfy) | ✅ | Operativo y verificado en uso real |
+| 8.1 | Sugerencia de cuenta alternativa y botón «Cambiar» | ✅ | **Fase 21** completada |
+| 8.1 | Silenciar por X horas | ✅ | **Fase 22** (`AKYV_ALERTS_MUTE_FILE`) completada |
+| 7.10 / 8.1 | Fin de suscripción, login vencido, consulta fallando | ✅ | **Fase 22** completada |
+| 8.2 | Ping manual y automático | ✅ | **Fase 18**: `execute_real_ping` |
+| 10 | Chats (metadatos, solo activos) | ✅ | Operativo y cruzado por UUID |
+| 10 | «Sin agente en esta PC» | ✅ | **Fase 26**: modo solo consulta |
+| 11 | Estadísticas: burn rate, heatmap, comparativa, CSV | ✅ | Operativo y verificado |
+| 11 | Tokens por modelo, eficiencia, cuota desperdiciada | ✅ | **Fase 27** completada |
+| 9.3 | Detalle de cuenta con 6 pestañas | ✅ | **Fase 24** (`AccountDetailModal`) completada |
+| 9 | Paleta `Ctrl+K` | ✅ | **Fase 23** verificada en uso real |
+| 9 | Tema claro/oscuro | ✅ | **Fase 25** completada |
+| 7.17 | Pantalla «Mis dispositivos» | ✅ | **Fase 25** (`GET /api/devices`, `POST /api/devices/revoke`) |
+| 9 | Pantalla «Experimento de cooldown» | ✅ | **Fase 27** (`CooldownExperimentPage`) completada |
+| 3 / 5.4 | Respaldo en `ai_keyvault_data` y restauración | ✅ | **Fase 18.5** (D-04): dump cifrado + estado en Ajustes |
+| 5.2 | Consulta desde el VPS 24/7 (delegada) | ⏸ | Riesgo en ADR-003 (no requerido con D-01) |
 | 6.5 | Chat de consumo | ⏸ | Sin API pública |
 | 9 / Fase 9 | Claude, Gemini, OpenCode, Grok | ⏸ | Etapa 3 (D-10) |
-| 13 | Instalador firmado y versión portable | ⬜ | Fase 28 |
+| 13 | Instalador firmado y versión portable | ✅ | **Fase 28**: `.zip` portable + firma Authenticode opcional en CI |
