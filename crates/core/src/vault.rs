@@ -17,6 +17,8 @@ pub struct VaultAccount {
     pub encrypted_password: Option<EncryptedField>,
     pub encrypted_tokens: Option<EncryptedField>,
     pub encrypted_notes: Option<EncryptedField>,
+    #[serde(default)]
+    pub encrypted_details: Option<EncryptedField>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -183,6 +185,7 @@ impl Vault {
             encrypted_password: enc_password,
             encrypted_tokens: enc_tokens,
             encrypted_notes: enc_notes,
+            encrypted_details: None,
             created_at: now,
             updated_at: now,
         };
@@ -243,5 +246,146 @@ impl Vault {
         } else {
             Ok(None)
         }
+    }
+
+    /// Descifra las notas de una cuenta si existen.
+    pub fn decrypt_account_notes(&self, account_id: Uuid) -> Result<Option<String>> {
+        self.decrypt_optional_field(account_id, |a| &a.encrypted_notes)
+    }
+
+    /// Descifra los detalles adicionales de una cuenta si existen.
+    pub fn decrypt_account_details(&self, account_id: Uuid) -> Result<Option<String>> {
+        self.decrypt_optional_field(account_id, |a| &a.encrypted_details)
+    }
+
+    fn decrypt_optional_field<F>(&self, account_id: Uuid, selector: F) -> Result<Option<String>>
+    where
+        F: FnOnce(&VaultAccount) -> &Option<EncryptedField>,
+    {
+        let vk = self.unlocked_key.as_ref().ok_or(VaultError::VaultLocked)?;
+        let acc = self
+            .state
+            .accounts
+            .iter()
+            .find(|a| a.id == account_id)
+            .ok_or(VaultError::DecryptionFailed)?;
+
+        if let Some(enc) = selector(acc) {
+            let bytes = vk.decrypt_field(enc)?;
+            let s = String::from_utf8(bytes).map_err(|_| VaultError::DecryptionFailed)?;
+            Ok(Some(s))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Actualiza alias, correo, contraseña, notas y detalles cifrados de una cuenta existente.
+    /// Conserva `encrypted_tokens` intacto.
+    pub fn update_account(
+        &mut self,
+        account_id: Uuid,
+        alias: &str,
+        email: &str,
+        password: Option<&str>,
+        notes: Option<&str>,
+        details: Option<&str>,
+    ) -> Result<()> {
+        let vk = self.unlocked_key.as_ref().ok_or(VaultError::VaultLocked)?;
+        let now = Utc::now();
+
+        let acc = self
+            .state
+            .accounts
+            .iter_mut()
+            .find(|a| a.id == account_id)
+            .ok_or(VaultError::DecryptionFailed)?;
+
+        let aad_email = format!("{}:1:email", account_id);
+        acc.encrypted_email = vk.encrypt_field(email.as_bytes(), &aad_email)?;
+
+        acc.encrypted_password = match password.filter(|p| !p.is_empty()) {
+            Some(p) => Some(vk.encrypt_field(p.as_bytes(), &format!("{}:1:password", account_id))?),
+            None => None,
+        };
+
+        acc.encrypted_notes = match notes.filter(|n| !n.trim().is_empty()) {
+            Some(n) => Some(vk.encrypt_field(n.as_bytes(), &format!("{}:1:notes", account_id))?),
+            None => None,
+        };
+
+        acc.encrypted_details = match details.filter(|d| !d.trim().is_empty()) {
+            Some(d) => Some(vk.encrypt_field(d.as_bytes(), &format!("{}:1:details", account_id))?),
+            None => None,
+        };
+
+        acc.alias = alias.to_string();
+        acc.updated_at = now;
+        self.state.updated_at = now;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn editar_y_descifrar_credenciales_con_datos_falsos() {
+        let (mut vault, _) = Vault::create_new("FakeMasterPass123!", None).expect("create");
+        let id = vault
+            .add_account(
+                "agy",
+                "cuenta-falsa",
+                "test-fake-user@example.com",
+                None,
+                Some("{\"fake\":true}"),
+                None,
+            )
+            .expect("add");
+
+        vault
+            .update_account(
+                id,
+                "cuenta-editada",
+                "test-fake-user2@example.com",
+                Some("FakePass123!"),
+                Some("Nota falsa"),
+                Some("Detalle falso"),
+            )
+            .expect("update");
+
+        // Bloquear y volver a desbloquear para confirmar persistencia en state cifrado
+        let serialized = serde_json::to_string(vault.state()).expect("serialize");
+        assert!(!serialized.contains("FakePass123!"));
+        assert!(!serialized.contains("Nota falsa"));
+        assert!(!serialized.contains("Detalle falso"));
+
+        let loaded_state: EncryptedVaultState =
+            serde_json::from_str(&serialized).expect("deserialize");
+        let mut reopened = Vault::load_locked(loaded_state);
+        reopened
+            .unlock_with_password("FakeMasterPass123!")
+            .expect("unlock");
+
+        assert_eq!(
+            reopened.decrypt_account_email(id).unwrap(),
+            "test-fake-user2@example.com"
+        );
+        assert_eq!(
+            reopened.decrypt_account_password(id).unwrap().as_deref(),
+            Some("FakePass123!")
+        );
+        assert_eq!(
+            reopened.decrypt_account_notes(id).unwrap().as_deref(),
+            Some("Nota falsa")
+        );
+        assert_eq!(
+            reopened.decrypt_account_details(id).unwrap().as_deref(),
+            Some("Detalle falso")
+        );
+        assert_eq!(
+            reopened.decrypt_account_tokens(id).unwrap().as_deref(),
+            Some("{\"fake\":true}")
+        );
     }
 }

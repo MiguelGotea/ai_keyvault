@@ -18,12 +18,21 @@
  * No hay formulario manual. No hay campos de email/password/token.
  * El switch ("Usar en esta PC") está solo en el Dashboard.
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
 import type { AccountInfo } from "../types/api";
 
 type ProviderType = "agy" | "codex";
+
+interface AccountCredentials {
+  id: string;
+  alias: string;
+  email: string;
+  password: string | null;
+  notes: string | null;
+  details: string | null;
+}
 
 export default function AccountsPage() {
   const [showModal, setShowModal] = useState(false);
@@ -34,7 +43,25 @@ export default function AccountsPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
+  // Edición de credenciales y notas (Fase 20)
+  const [editingAccount, setEditingAccount] = useState<AccountCredentials | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [clipboardCountdown, setClipboardCountdown] = useState<number | null>(null);
+
   const accounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
+
+  useEffect(() => {
+    if (clipboardCountdown === null) return;
+    if (clipboardCountdown <= 0) {
+      setClipboardCountdown(null);
+      setActionMsg("🧹 Portapapeles limpiado automáticamente.");
+      return;
+    }
+    const t = setTimeout(() => setClipboardCountdown(c => (c !== null ? c - 1 : null)), 1000);
+    return () => clearTimeout(t);
+  }, [clipboardCountdown]);
 
   const openModal = () => {
     setShowModal(true);
@@ -96,6 +123,63 @@ export default function AccountsPage() {
       setDeleting(null);
     }
   }, [accounts]);
+
+  const handleCopyField = useCallback(async (account: AccountInfo, field: "email" | "password") => {
+    try {
+      const creds = await invoke<AccountCredentials>("get_account_credentials", {
+        accountUuid: account.id,
+      });
+      const value = field === "email" ? creds.email : creds.password;
+      if (!value) {
+        setActionMsg(`⚠️ '${account.alias}' no tiene contraseña guardada. Usa "Editar" para agregarla.`);
+        return;
+      }
+      await navigator.clipboard.writeText(value);
+      await invoke("schedule_clipboard_clear", { seconds: 30 });
+      setClipboardCountdown(30);
+      setActionMsg(
+        `📋 ${field === "email" ? "Correo" : "Contraseña"} de '${account.alias}' copiado (se limpiará en 30 s).`
+      );
+    } catch (e) {
+      setActionMsg(`❌ Error al copiar: ${String(e)}`);
+    }
+  }, []);
+
+  const openEditModal = useCallback(async (account: AccountInfo) => {
+    setEditError(null);
+    setShowPassword(false);
+    try {
+      const creds = await invoke<AccountCredentials>("get_account_credentials", {
+        accountUuid: account.id,
+      });
+      setEditingAccount(creds);
+    } catch (e) {
+      setActionMsg(`❌ No se pudieron leer las credenciales: ${String(e)}`);
+    }
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editingAccount) return;
+    setSavingEdit(true);
+    setEditError(null);
+    try {
+      await invoke("update_vault_account", {
+        accountUuid: editingAccount.id,
+        alias: editingAccount.alias,
+        email: editingAccount.email,
+        password: editingAccount.password || null,
+        notes: editingAccount.notes || null,
+        details: editingAccount.details || null,
+      });
+      setEditingAccount(null);
+      accounts.refetch();
+      setActionMsg(`✅ Cuenta '${editingAccount.alias}' actualizada y sincronizada.`);
+    } catch (e) {
+      setEditError(String(e));
+    } finally {
+      setSavingEdit(false);
+    }
+  }, [editingAccount, accounts]);
 
   const handleCancelModal = useCallback(async () => {
     if (importing && selectedProvider === "agy") {
@@ -209,6 +293,27 @@ export default function AccountsPage() {
               </div>
               <div style={styles.cardActions}>
                 <button
+                  style={styles.copyBtn}
+                  onClick={() => handleCopyField(account, "email")}
+                  title="Copiar correo (limpia portapapeles en 30 s)"
+                >
+                  📋 Correo
+                </button>
+                <button
+                  style={styles.copyBtn}
+                  onClick={() => handleCopyField(account, "password")}
+                  title="Copiar contraseña (limpia portapapeles en 30 s)"
+                >
+                  🔑 Clave
+                </button>
+                <button
+                  style={styles.copyBtn}
+                  onClick={() => openEditModal(account)}
+                  title="Editar correo, contraseña, notas y detalles"
+                >
+                  ✏️ Editar
+                </button>
+                <button
                   style={styles.deleteBtn}
                   onClick={() => handleDelete(account)}
                   disabled={deleting === account.id}
@@ -219,6 +324,83 @@ export default function AccountsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Modal: Editar credenciales y detalles (Fase 20) */}
+      {editingAccount && (
+        <div
+          style={styles.overlay}
+          onClick={e => { if (e.target === e.currentTarget) setEditingAccount(null); }}
+        >
+          <div style={styles.modal}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>Editar cuenta y credenciales</h3>
+              <button style={styles.closeBtn} onClick={() => setEditingAccount(null)}>✕</button>
+            </div>
+            <div style={styles.modalBody}>
+              <div style={styles.formRow}>
+                <label style={styles.label}>Alias</label>
+                <input
+                  style={styles.input}
+                  value={editingAccount.alias}
+                  onChange={e => setEditingAccount({ ...editingAccount, alias: e.target.value })}
+                />
+              </div>
+              <div style={styles.formRow}>
+                <label style={styles.label}>Correo</label>
+                <input
+                  style={styles.input}
+                  value={editingAccount.email}
+                  onChange={e => setEditingAccount({ ...editingAccount, email: e.target.value })}
+                />
+              </div>
+              <div style={styles.formRow}>
+                <label style={styles.label}>Contraseña (cifrada)</label>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <input
+                    style={{ ...styles.input, flex: 1 }}
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Opcional"
+                    value={editingAccount.password ?? ""}
+                    onChange={e => setEditingAccount({ ...editingAccount, password: e.target.value })}
+                  />
+                  <button
+                    type="button"
+                    style={styles.cancelBtn}
+                    onClick={() => setShowPassword(s => !s)}
+                  >
+                    {showPassword ? "🙈" : "👁️"}
+                  </button>
+                </div>
+              </div>
+              <div style={styles.formRow}>
+                <label style={styles.label}>Detalles (plan, teléfono recuperación, etc.)</label>
+                <input
+                  style={styles.input}
+                  placeholder="Opcional"
+                  value={editingAccount.details ?? ""}
+                  onChange={e => setEditingAccount({ ...editingAccount, details: e.target.value })}
+                />
+              </div>
+              <div style={styles.formRow}>
+                <label style={styles.label}>Notas</label>
+                <textarea
+                  style={{ ...styles.input, minHeight: 70, resize: "vertical" }}
+                  placeholder="Notas adicionales"
+                  value={editingAccount.notes ?? ""}
+                  onChange={e => setEditingAccount({ ...editingAccount, notes: e.target.value })}
+                />
+              </div>
+              {editError && <div style={styles.error}>{editError}</div>}
+            </div>
+            <div style={styles.modalFooter}>
+              <button style={styles.cancelBtn} onClick={() => setEditingAccount(null)}>Cancelar</button>
+              <button style={styles.saveBtn} onClick={handleSaveEdit} disabled={savingEdit}>
+                {savingEdit ? "Guardando…" : "💾 Guardar cambios"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -323,7 +505,8 @@ const styles: Record<string, React.CSSProperties> = {
   cardProvider: { fontSize: 10, fontWeight: 700, color: "var(--color-primary)", textTransform: "uppercase" as const, letterSpacing: "0.06em" },
   cardAlias: { fontSize: 15, fontWeight: 600, color: "var(--color-text)" },
   cardMeta: { fontSize: 11, color: "var(--color-text-disabled)" },
-  cardActions: { display: "flex", gap: 8, flexShrink: 0 },
+  cardActions: { display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" as const },
+  copyBtn: { padding: "7px 10px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg-secondary)", color: "var(--color-text)", fontSize: 12, cursor: "pointer" },
   deleteBtn: { padding: "7px 12px", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", background: "#FEF2F2", color: "#991B1B", fontSize: 12, cursor: "pointer" },
   // Modal
   overlay: { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 },

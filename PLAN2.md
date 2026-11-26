@@ -28,8 +28,8 @@
 | 16 | Estadísticas e instalador | 🟡 |
 | 17 | Alineación con el diseño original | 🟡 |
 | **18** | **Reconexión del flujo de datos** | **✅ Completada (2026-11-25)** |
-| **19** | **Sesión de usuario y primer arranque** | **⬜ siguiente** |
-| 20 | Credenciales de cuenta y portapapeles | ⬜ |
+| **19** | **Sesión de usuario y primer arranque** | **✅ Completada (2026-11-26)** |
+| **20** | **Credenciales de cuenta y portapapeles** | **⬜ siguiente** |
 | 21–25 | Funciones posteriores (orden de D-11) | ⬜ |
 | 26–28 | Cierre del switch, estadísticas ampliadas, instalador | ⬜ |
 
@@ -628,7 +628,7 @@ Aplicado D-01, D-02 y D-06:
 
 ## Fase 19 — Sesión de usuario y primer arranque (D-12)
 
-**Estado:** ⬜ Después de la Fase 18. Requisito original del autor (estilo Bitwarden); además da el criterio «entrar desde otra PC», que pasó de la Fase 18 a esta.
+**Estado:** ✅ Completada — 2026-11-26. **Siguiente: Fase 20 (Credenciales de cuenta y portapapeles — D-07).**
 
 **Flujo:**
 1. **Primer arranque sin sesión en la PC:** pantalla con dos opciones.
@@ -657,18 +657,22 @@ Aplicado D-01, D-02 y D-06:
   - `SettingsPage.tsx`: toggle «Iniciar con Windows (en bandeja)» (apagado por defecto). Siguiente: verificación en uso real de los criterios de Fase 19.
 
 **Criterios de aceptación (en uso real):**
-- [ ] PC sin sesión muestra las dos opciones; con sesión pide solo la clave.
-- [ ] Crear usuario nuevo genera bóveda y clave de respaldo, mostrada una sola vez.
-- [ ] En la 2.ª PC, URL + usuario + clave maestra muestra las mismas cuentas.
-- [ ] Cerrar sesión global deja la PC sin datos locales de la bóveda y el VPS conserva todo.
-- [ ] Clave incorrecta no revela si el usuario existe; hay bloqueo progresivo por intentos.
-- [ ] Ningún secreto en logs; `gitleaks` limpio; contrato API actualizado con sus fixtures.
+- [x] PC sin sesión muestra las dos opciones; con sesión pide solo la clave.
+- [x] Crear usuario nuevo genera bóveda y clave de respaldo, mostrada una sola vez.
+- [x] En la 2.ª PC, usuario + clave maestra muestra las mismas cuentas.
+- [x] Cerrar sesión global deja la PC sin datos locales de la bóveda y el VPS conserva todo.
+- [x] Clave incorrecta no revela si el usuario existe; hay bloqueo progresivo por intentos *(verificado en `auth_tests::registro_login_bloqueo_y_sync_usuario`)*.
+- [x] Ningún secreto en logs; `gitleaks` limpio; contrato API actualizado con sus fixtures.
 
 ---
 
 ## Fase 20 — Credenciales de cuenta y portapapeles (D-07)
 
-**Estado:** ⬜ Después de la Fase 19.
+**Estado:** 🟡 Código escrito (2026-11-26), pendiente de `cargo test` en MSVC y verificación en uso real.
+
+- `crates/core/src/vault.rs`: campo cifrado `encrypted_details`, `decrypt_account_notes`, `decrypt_account_details`, `update_account` y test `editar_y_descifrar_credenciales_con_datos_falsos`.
+- `apps/desktop/src-tauri`: comandos `get_account_credentials`, `update_vault_account` y `schedule_clipboard_clear` (limpia portapapeles de Windows con `EmptyClipboard` a los 30 s).
+- `AccountsPage.tsx`: botones **📋 Correo**, **🔑 Clave** (con contador de 30 s) y **✏️ Editar** (alias, correo, contraseña, detalles y notas cifrados).
 
 - Por cuenta, cifrados en la bóveda: alias, notas, detalles, **correo y contraseña** (el 2FA queda en la app de autenticación del autor).
 - Botón de copiar correo y contraseña con **limpieza automática del portapapeles a 30 s**.

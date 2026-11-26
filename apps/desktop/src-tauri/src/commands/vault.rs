@@ -710,8 +710,147 @@ pub async fn recover_vault(
     }
 }
 
-// ── Nuevos comandos: agregar / eliminar / leer cuentas de la bóveda ─────────
+// ── Credenciales y limpieza de portapapeles (Fase 20, D-07) ─────────────────
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AccountCredentials {
+    pub id: String,
+    pub alias: String,
+    pub email: String,
+    pub password: Option<String>,
+    pub notes: Option<String>,
+    pub details: Option<String>,
+}
+
+/// Descifra credenciales, notas y detalles de una cuenta (solo si bóveda desbloqueada).
+#[command]
+pub async fn get_account_credentials(
+    vault_state: State<'_, VaultState>,
+    account_uuid: String,
+) -> Result<AccountCredentials, String> {
+    use uuid::Uuid;
+    let uid = Uuid::parse_str(&account_uuid).map_err(|_| "UUID inválido".to_string())?;
+    let guard = vault_state.vault.lock().unwrap();
+    match &*guard {
+        Some(vault) if vault.is_unlocked() => {
+            let alias = vault
+                .state()
+                .accounts
+                .iter()
+                .find(|a| a.id == uid)
+                .map(|a| a.alias.clone())
+                .ok_or_else(|| "Cuenta no encontrada en la bóveda".to_string())?;
+            let email = vault
+                .decrypt_account_email(uid)
+                .map_err(|e| e.to_string())?;
+            let password = vault
+                .decrypt_account_password(uid)
+                .map_err(|e| e.to_string())?;
+            let notes = vault
+                .decrypt_account_notes(uid)
+                .map_err(|e| e.to_string())?;
+            let details = vault
+                .decrypt_account_details(uid)
+                .map_err(|e| e.to_string())?;
+            Ok(AccountCredentials {
+                id: account_uuid,
+                alias,
+                email,
+                password,
+                notes,
+                details,
+            })
+        }
+        _ => Err("Bóveda bloqueada o no cargada".into()),
+    }
+}
+
+/// Actualiza alias, correo, contraseña, notas y detalles cifrados de una cuenta (Fase 20).
+#[command]
+pub async fn update_vault_account(
+    app: AppHandle,
+    vault_state: State<'_, VaultState>,
+    account_uuid: String,
+    alias: String,
+    email: String,
+    password: Option<String>,
+    notes: Option<String>,
+    details: Option<String>,
+) -> Result<(), String> {
+    use uuid::Uuid;
+    let uid = Uuid::parse_str(&account_uuid).map_err(|_| "UUID inválido".to_string())?;
+    let clean_alias = alias.trim().to_string();
+    let clean_email = email.trim().to_string();
+    if clean_alias.is_empty() || clean_email.is_empty() {
+        return Err("El alias y el correo son obligatorios.".into());
+    }
+
+    {
+        let mut guard = vault_state.vault.lock().unwrap();
+        match &mut *guard {
+            Some(vault) if vault.is_unlocked() => {
+                let duplicate = vault
+                    .state()
+                    .accounts
+                    .iter()
+                    .any(|a| a.id != uid && a.alias == clean_alias);
+                if duplicate {
+                    return Err(format!(
+                        "Ya existe otra cuenta con el alias '{clean_alias}'."
+                    ));
+                }
+                vault
+                    .update_account(
+                        uid,
+                        &clean_alias,
+                        &clean_email,
+                        password.as_deref(),
+                        notes.as_deref(),
+                        details.as_deref(),
+                    )
+                    .map_err(|e| format!("Error actualizando cuenta: {e}"))?;
+                save_vault_state(&app, vault.state())?;
+                sync_identity_map(&app, vault)?;
+            }
+            _ => return Err("La bóveda está bloqueada".into()),
+        }
+    }
+
+    crate::commands::security::sync_vault_to_vps(&app).await?;
+    Ok(())
+}
+
+static CLIPBOARD_CLEAR_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Programa la limpieza automática del portapapeles de Windows tras `seconds` segundos (D-07).
+#[command]
+pub async fn schedule_clipboard_clear(seconds: u64) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    let secs = seconds.max(1).min(300);
+    let my_gen = CLIPBOARD_CLEAR_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+
+    tokio::spawn(async move {
+        tokio::time::sleep(tokio::time::Duration::from_secs(secs)).await;
+        if CLIPBOARD_CLEAR_GEN.load(Ordering::SeqCst) == my_gen {
+            #[cfg(target_os = "windows")]
+            {
+                use windows_sys::Win32::System::DataExchange::{
+                    CloseClipboard, EmptyClipboard, OpenClipboard,
+                };
+                unsafe {
+                    if OpenClipboard(0) != 0 {
+                        let _ = EmptyClipboard();
+                        let _ = CloseClipboard();
+                    }
+                }
+            }
+        }
+    });
+
+    Ok(())
+}
+
+// ── Credenciales y limpieza de portapapeles (Fase 20, D-07) ─────────────────
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AddAccountResult {
     pub success: bool,
