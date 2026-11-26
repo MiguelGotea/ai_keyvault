@@ -1,0 +1,11 @@
+[
+  {
+    "account_id": "00000000-0000-0000-0000-000000000001",
+    "provider": "agy",
+    "pool": "gemini-weekly",
+    "percent_used": 0.0,
+    "needs_ping": true,
+    "last_read_at": "2026-11-25T18:00:00Z",
+    "reset_time": null
+  }
+]

@@ -51,7 +51,8 @@ export default function UnlockPage() {
       } else {
         setMode("create");
       }
-    } catch {
+    } catch (e) {
+      setErrorMsg(`No se pudo consultar la bóveda en la nube: ${String(e)}`);
       setMode("create");
     } finally {
       setCheckingCloud(false);
@@ -97,13 +98,24 @@ export default function UnlockPage() {
     try {
       const result = await invoke<UnlockResult>("unlock_vault", { password });
       if (result.success) {
-        // Fase 14: iniciar timer de autobloqueo (15 min por defecto — opt-in en Settings)
+        // Fase 14: iniciar timer de autobloqueo (0 = desactivado por defecto)
         const autolockMinutes = parseInt(localStorage.getItem("autolock_minutes") ?? "0");
         if (autolockMinutes > 0) {
-          invoke("start_autolock_timer", { minutes: autolockMinutes }).catch(() => {});
+          try {
+            await invoke("start_autolock_timer", { minutes: autolockMinutes });
+          } catch (e) {
+            setErrorMsg(`Bóveda desbloqueada, pero falló el timer de autobloqueo: ${String(e)}`);
+          }
         }
-        // Fase 14: intentar descargar la bóveda del VPS (sincronización silenciosa)
-        invoke("download_vault_sync").catch(() => {}); // silencioso — no bloquea la navegación
+        // Sincronizar bóveda del VPS antes de entrar al dashboard
+        try {
+          const syncRes = await invoke<{ success: boolean; error: string | null }>("download_vault_sync");
+          if (!syncRes.success && syncRes.error) {
+            setCloudNotice(`Aviso de sincronización: ${syncRes.error}`);
+          }
+        } catch (e) {
+          setCloudNotice(`No se pudo sincronizar con el VPS: ${String(e)}`);
+        }
         navigate("/dashboard");
       } else {
         setErrorMsg(result.error ?? "Clave incorrecta.");

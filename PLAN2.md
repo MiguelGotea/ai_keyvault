@@ -586,17 +586,33 @@ Entregable creado: `docs/research/06-diagnostico-fase18.md` con tabla «esperado
 ### 18.1 Decisiones — ✅ Cerrado (2026-11-25)
 Ya cerradas en «Decisiones cerradas» (D-01 a D-13). El diagnóstico `18.0` no contradice ninguna decisión cerrada; por el contrario, confirma que aplicar D-01 y D-02 resuelve la desconexión principal. Siguiente paso: `18.2`.
 
-### 18.2 Reparar identidad y cruce
-Aplicar D-01, D-02 y D-06 con el cambio mínimo posible. Cambios en el backend solo **aditivos**; cualquier eliminación se lista y se aprueba antes.
+### 18.2 Reparar identidad y cruce — 🟡 Código escrito (2026-11-25), pendiente de verificación
+Aplicado D-01, D-02 y D-06:
+- `crates/core/src/identity_map.rs`: mapa local cifrado `"{provider}:{email}" → UUID` con `XChaCha20-Poly1305` (sin correos en texto plano).
+- `crates/poller/src/collector.rs`: resuelve el correo activo del SO contra `IdentityMap`; si no está registrado, omite la subida sin enviar correos al VPS.
+- `apps/desktop/src-tauri/src/commands/vault.rs`: regenera `identity-map.enc` al crear/desbloquear/recuperar/modificar cuentas.
+- `apps/desktop/src-tauri/src/commands/poller.rs`: pasa `AKYV_IDENTITY_MAP_PATH`, `AKYV_SERVER_URL` y `AKYV_POLL_INTERVAL=600` al sidecar.
+- `apps/desktop/src-tauri/src/commands/switch_cmd.rs`: eliminado fallback sintético `_akv_switch` en `switch_codex`.
+- Frontend (`DashboardPage`, `AlertsPage`, `PingPage`, `ChatsPage`, `StatsPage`): cruce y consulta por `account.id` (UUID), mostrando `account.alias`.
+- **Estado de verificación:** `cargo test -p ai-keyvault-core -p ai-keyvault-poller`, `cargo check` (MSVC en `apps/desktop/src-tauri`), `tsc --noEmit` + `vitest` en verde; sidecar MSVC reconstruido y copiado. Queda 🟡 hasta la verificación en uso real (`18.6`). Siguiente sub-paso: `18.3`.
 
-### 18.3 Contrato API con tests
-Crear `docs/contrato-api.md` y fixtures JSON **con datos falsos** de cada endpoint que consume la app. Tests Rust que deserialicen cada fixture (incluidos los booleanos 0/1). Motivo: el error «decoding response body» apareció en F16 y de nuevo en F17.
+### 18.3 Contrato API con tests — ✅ Completado (2026-11-25)
+- Creado `docs/contrato-api.md` con el contrato exacto VPS ↔ Rust ↔ TypeScript.
+- Creados 8 fixtures JSON con datos falsos en `apps/desktop/src-tauri/tests/fixtures/` (incluyendo booleanos `0`/`1` y `true`/`false`).
+- Corregidas desalineaciones en `api_client.rs`, `commands/api.rs`, `src/types/api.ts`, `StatsPage.tsx` (`hour`, `delta_percent`) y `AlertsPage.tsx` (`critical`/`crit`).
+- Verificado: `cargo test` (`deserializa_fixtures_contrato_vps` ok), `tsc --noEmit` y `vitest` (`3 passed`). Siguiente sub-paso: `18.4`.
 
-### 18.4 Errores visibles
-El dashboard muestra el estado del poller (corriendo / pausado / error + último envío) y, por cuenta, «última lectura hace X» o «sin lecturas». Prohibido `.catch(() => {})` en flujos críticos.
+### 18.4 Errores visibles — ✅ Compilado y tests en verde (2026-11-25; verificación en uso real en `18.6`)
+- `commands/poller.rs`: escucha el canal `rx` del sidecar para actualizar `last_poll_at` y capturar `Stderr`/`Error`/`Terminated` en `PollerStatus`.
+- `DashboardPage.tsx`: barra de estado del poller (estado + último envío), errores de `start_poller` / `get_stats_compare` / `reset_autolock_timer` visibles, y etiqueta por cuenta «Última lectura: hace X» / «Sin lecturas».
+- `UnlockPage.tsx` y `PollerStatusBadge.tsx`: eliminados `.catch(() => {})` en flujos críticos; errores visibles en español.
+- Verificado: `cargo test` (`apps/desktop/src-tauri`, `1 passed`), `tsc --noEmit` y `vitest` (`3 passed`). Siguiente sub-paso: `18.5`.
 
-### 18.5 Respaldo
-Implementar D-04: dump cifrado, restauración real probada y fecha del último backup en Ajustes.
+### 18.5 Respaldo — 🟡 Código y workflow escritos (2026-11-25), pendiente de `cargo test` y ejecución real de `backup.yml`
+- `.github/workflows/backup.yml`: cifra `keyvault.db` con AES-256-CBC (`BACKUP_ENCRYPTION_KEY`) antes de subir `*.db.enc` y verifica la restauración real descifrando y abriendo las tablas en el mismo workflow.
+- `commands/security.rs` + `main.rs` + `SettingsPage.tsx`: comando `get_last_backup_info` y componente `LastBackupStatus` para mostrar la fecha del último respaldo en Ajustes.
+- `docs/operaciones.md` §22: documentado el procedimiento manual de restauración.
+- **Pendiente:** configurar secret `BACKUP_ENCRYPTION_KEY` en GitHub, ejecutar `cargo test` en `apps/desktop/src-tauri` y disparar `backup.yml` (`workflow_dispatch`). Siguiente sub-paso: `18.6` (verificación en uso real).
 
 ### 18.6 Criterios de aceptación (todos en uso real)
 - [ ] Partiendo de cero (bóveda nueva, VPS vacío), con 2 cuentas en la bóveda, la cuenta activa muestra % y reinicio con antigüedad < 15 min.

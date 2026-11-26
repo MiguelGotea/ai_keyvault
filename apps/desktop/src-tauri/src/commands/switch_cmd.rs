@@ -349,14 +349,16 @@ async fn switch_codex(account_id: &str, tokens_json: Option<&str>, _password: Op
         let _ = std::fs::copy(&auth_path, parent.join("auth.json.akvault-backup"));
     }
 
-    // Construir el nuevo auth.json
+    // Usar el blob completo descifrado de la bóveda (nunca JSON sintético)
     let new_content = match tokens_json {
         Some(tokens) => tokens.to_string(),
-        None => serde_json::json!({
-            "account_id": account_id,
-            "_akv_switch": true,
-            "_note": "Credencial escrita por AI KeyVault. El token completo se requiere para operacion normal."
-        }).to_string(),
+        None => {
+            return Err(format!(
+                "La cuenta '{}' no tiene credenciales de Codex guardadas en la bóveda. \
+                 Ve a Mis Cuentas e importa auth.json de nuevo.",
+                account_id
+            ));
+        }
     };
 
     // Escribir atómicamente (temp → rename)

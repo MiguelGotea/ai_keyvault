@@ -46,12 +46,12 @@ export interface CreateVaultResult {
 // ── Quota ────────────────────────────────────────────────────────────────────
 
 export interface QuotaReading {
-  id: number;
   account_id: string;
   provider: string;
   pool: string;
+  tokens_used: number;
+  tokens_limit: number;
   percent_used: number;
-  percent_remaining: number;
   reset_time: string | null;
   source: string;
   read_at: string;
@@ -77,9 +77,11 @@ export interface PoolSummary {
 // ── Stats ────────────────────────────────────────────────────────────────────
 
 export interface HeatmapCell {
-  weekday: number;   // 0=lunes … 6=domingo
-  hour_utc: number;  // 0–23
-  total_delta: number;
+  weekday: number;       // 0=lunes … 6=domingo
+  weekday_name: string;
+  hour: number;          // 0–23 UTC
+  delta_percent: number;
+  samples: number;
 }
 
 // ── Chats ────────────────────────────────────────────────────────────────────
@@ -97,7 +99,7 @@ export interface ChatSession {
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
 
-export type AlertLevel = "warn" | "crit";  // minúscula en el VPS
+export type AlertLevel = "warn" | "critical" | "crit";
 
 export interface AlertRecord {
   id: number;

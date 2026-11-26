@@ -36,12 +36,12 @@ pub fn http_client() -> &'static Client {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct QuotaReading {
-    pub id: i64,
     pub account_id: String,
     pub provider: String,
     pub pool: String,
+    pub tokens_used: i64,
+    pub tokens_limit: i64,
     pub percent_used: f64,
-    pub percent_remaining: f64,
     pub reset_time: Option<String>,
     pub source: String,
     pub read_at: String,
@@ -70,9 +70,11 @@ pub struct PoolSummary {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HeatmapCell {
-    pub weekday: u8,  // 0=lunes … 6=domingo
-    pub hour_utc: u8, // 0-23
-    pub total_delta: f64,
+    pub weekday: u8,          // 0=lunes … 6=domingo
+    pub weekday_name: String, // "Lun", "Mar", ...
+    pub hour: u8,             // 0-23 UTC
+    pub delta_percent: f64,
+    pub samples: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -149,6 +151,7 @@ pub struct HealthResponse {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DeviceRegistration {
     pub device_id: String,
+    pub device_name: String,
     pub public_key_hex: String,
 }
 
@@ -201,4 +204,57 @@ pub struct SwitchRecord {
     pub success: bool,
     pub reason: Option<String>,
     pub switched_at: String,
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+
+    #[test]
+    fn deserializa_fixtures_contrato_vps() {
+        let quota: Vec<QuotaReading> =
+            serde_json::from_str(include_str!("../tests/fixtures/quota_readings.json"))
+                .expect("quota_readings.json");
+        assert_eq!(quota.len(), 1);
+        assert_eq!(quota[0].tokens_limit, 1_000_000);
+
+        let summary: Vec<PoolSummary> =
+            serde_json::from_str(include_str!("../tests/fixtures/pool_summary.json"))
+                .expect("pool_summary.json");
+        assert_eq!(summary.len(), 1);
+
+        let heatmap: Vec<HeatmapCell> =
+            serde_json::from_str(include_str!("../tests/fixtures/heatmap.json"))
+                .expect("heatmap.json");
+        assert_eq!(heatmap[0].hour, 18);
+
+        let chats: Vec<ChatSession> =
+            serde_json::from_str(include_str!("../tests/fixtures/chats.json"))
+                .expect("chats.json");
+        assert!(!chats[0].archived);
+        assert!(chats[1].archived);
+
+        let alerts: Vec<AlertRecord> =
+            serde_json::from_str(include_str!("../tests/fixtures/alerts.json"))
+                .expect("alerts.json");
+        assert!(alerts[0].notified_toast);
+        assert!(!alerts[0].notified_ntfy);
+        assert!(alerts[1].notified_toast);
+
+        let switches: Vec<SwitchRecord> =
+            serde_json::from_str(include_str!("../tests/fixtures/switch_history.json"))
+                .expect("switch_history.json");
+        assert!(switches[0].success);
+
+        let needs: Vec<PingNeedItem> =
+            serde_json::from_str(include_str!("../tests/fixtures/pings_needs.json"))
+                .expect("pings_needs.json");
+        assert!(needs[0].needs_ping);
+
+        let pings: Vec<PingRecord> =
+            serde_json::from_str(include_str!("../tests/fixtures/pings.json"))
+                .expect("pings.json");
+        assert!(pings[0].success);
+        assert!(pings[0].is_manual);
+    }
 }

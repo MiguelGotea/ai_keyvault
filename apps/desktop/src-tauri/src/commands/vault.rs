@@ -66,6 +66,32 @@ pub fn vault_path(app: &AppHandle) -> PathBuf {
         .join("vault.json")
 }
 
+/// Ruta del mapa local cifrado correo → UUID (D-02) usado por el poller.
+pub fn identity_map_path(app: &AppHandle) -> PathBuf {
+    app.path()
+        .app_data_dir()
+        .expect("No se pudo obtener AppData dir")
+        .join("identity-map.enc")
+}
+
+/// Regenera el mapa local cifrado correo → UUID a partir de la bóveda desbloqueada.
+pub fn sync_identity_map(app: &AppHandle, vault: &Vault) -> Result<(), String> {
+    use ai_keyvault_core::IdentityMap;
+
+    if !vault.is_unlocked() {
+        return Ok(());
+    }
+    let mut map = IdentityMap::new();
+    for acc in &vault.state().accounts {
+        let email = vault
+            .decrypt_account_email(acc.id)
+            .map_err(|e| format!("Error descifrando correo para mapa de identidad: {e}"))?;
+        map.insert(&acc.provider, &email, &acc.id.to_string());
+    }
+    map.save_encrypted(&identity_map_path(app))
+        .map_err(|e| format!("Error guardando mapa de identidad local: {e}"))
+}
+
 fn vault_exists(app: &AppHandle) -> bool {
     vault_path(app).exists()
 }
@@ -135,6 +161,7 @@ pub async fn create_vault(
         Ok((vault, recovery)) => {
             // Persistir el estado cifrado en disco
             save_vault_state(&app, vault.state())?;
+            sync_identity_map(&app, &vault)?;
 
             // Guardar la bóveda desbloqueada en memoria
             {
@@ -179,6 +206,7 @@ pub async fn unlock_vault(
 
     match vault.unlock_with_password(&password) {
         Ok(_) => {
+            sync_identity_map(&app, &vault)?;
             let count = vault.state().accounts.len();
             let mut guard = vault_state.vault.lock().unwrap();
             *guard = Some(vault);
@@ -235,6 +263,7 @@ pub async fn recover_vault(
         Ok(()) => {
             // Guardar bóveda re-cifrada con nueva contraseña
             save_vault_state(&app, vault.state())?;
+            sync_identity_map(&app, &vault)?;
             let count = vault.state().accounts.len();
             {
                 let mut guard = vault_state.vault.lock().unwrap();
@@ -290,6 +319,7 @@ pub async fn add_vault_account(
                 ) {
                     Ok(uuid) => {
                         save_vault_state(&app, vault.state())?;
+                        sync_identity_map(&app, vault)?;
                         Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
                     }
                     Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
@@ -325,6 +355,7 @@ pub async fn delete_vault_account(
                 let removed = vault.state().accounts.len() < before;
                 if removed {
                     save_vault_state(&app, vault.state())?;
+                    sync_identity_map(&app, vault)?;
                 }
                 Ok(removed)
             }
@@ -551,6 +582,7 @@ pub async fn add_agy_account_oauth(
                     match vault.add_account("agy", &alias_final, &new_email, None, Some(&new_cred_json), None) {
                         Ok(uuid) => {
                             save_vault_state(&app, vault.state())?;
+                            sync_identity_map(&app, vault)?;
                             Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
                         }
                         Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
@@ -654,6 +686,7 @@ pub async fn import_current_codex_credential(
                     ) {
                         Ok(uuid) => {
                             save_vault_state(&app, vault.state())?;
+                            sync_identity_map(&app, vault)?;
                             Ok(AddAccountResult {
                                 success: true,
                                 id: Some(uuid.to_string()),

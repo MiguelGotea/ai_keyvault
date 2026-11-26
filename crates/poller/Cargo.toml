@@ -15,6 +15,9 @@ name = "ai_keyvault_poller"
 path = "src/lib.rs"
 
 [dependencies]
+# Núcleo seguro (mapa local cifrado correo -> UUID)
+ai-keyvault-core = { path = "../core" }
+
 # Providers de cuota
 ai-keyvault-provider-agy = { path = "../../providers/agy" }
 ai-keyvault-provider-codex = { path = "../../providers/codex" }

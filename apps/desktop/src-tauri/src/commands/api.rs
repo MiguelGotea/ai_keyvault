@@ -291,10 +291,12 @@ pub async fn post_ping(
 #[command]
 pub async fn register_device(
     device_id: String,
+    device_name: String,
     public_key_hex: String,
 ) -> Result<(), String> {
     let payload = DeviceRegistration {
         device_id,
+        device_name,
         public_key_hex,
     };
     http_client()

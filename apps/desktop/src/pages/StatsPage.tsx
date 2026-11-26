@@ -1,7 +1,7 @@
 /** StatsPage — Fase 15: Estadísticas avanzadas (heatmap, comparativa, semanal). */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useCommand } from "../hooks/useCommand";
-import type { HeatmapCell, PoolSummary } from "../types/api";
+import type { AccountInfo, HeatmapCell, PoolSummary } from "../types/api";
 import es from "../i18n/es.json";
 
 const DAYS_OPTIONS = [7, 14, 30];
@@ -10,19 +10,31 @@ const DAYS_COLS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 export default function StatsPage() {
   const [days, setDays] = useState(7);
-  const [account] = useState("test@agy");
+  const [selectedIdx, setSelectedIdx] = useState(0);
+
+  const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
+  const accounts = vaultAccounts.data ?? [];
+  const selectedAccount = accounts[selectedIdx];
+  const accountById = useMemo(
+    () => new Map(accounts.map(a => [a.id, a])),
+    [accounts]
+  );
 
   const compare = useCommand<PoolSummary[]>("get_stats_compare", { days });
-  const heatmap = useCommand<HeatmapCell[]>("get_stats_heatmap", { accountId: account, days });
+  const heatmap = useCommand<HeatmapCell[]>(
+    "get_stats_heatmap",
+    { accountId: selectedAccount?.id ?? "", days },
+    { enabled: !!selectedAccount?.id }
+  );
 
   // Construir grilla 24h × 7d para el heatmap
   const heatGrid: number[][] = Array.from({ length: 24 }, () => Array(7).fill(0));
   heatmap.data?.forEach(cell => {
-    if (cell.weekday >= 0 && cell.weekday < 7 && cell.hour_utc >= 0 && cell.hour_utc < 24) {
-      heatGrid[cell.hour_utc][cell.weekday] = cell.total_delta;
+    if (cell.weekday >= 0 && cell.weekday < 7 && cell.hour >= 0 && cell.hour < 24) {
+      heatGrid[cell.hour][cell.weekday] = cell.delta_percent;
     }
   });
-  const maxVal = Math.max(...heatmap.data?.map(c => c.total_delta) ?? [1], 1);
+  const maxVal = Math.max(...heatmap.data?.map(c => c.delta_percent) ?? [1], 1);
 
   return (
     <div style={styles.page}>
@@ -52,7 +64,9 @@ export default function StatsPage() {
               const color = pct >= 95 ? "var(--color-danger)" : pct >= 80 ? "var(--color-warning)" : "var(--color-success)";
               return (
                 <div key={`${pool.account_id}-${pool.pool}`} style={styles.compareCard}>
-                  <div style={styles.compareAccount}>{pool.account_id}</div>
+                  <div style={styles.compareAccount}>
+                    {accountById.get(pool.account_id)?.alias ?? pool.account_id}
+                  </div>
                   <div style={styles.comparePool}>{pool.provider} / {pool.pool}</div>
                   <div style={{ ...styles.comparePct, color }}>{pct.toFixed(1)}%</div>
                   <div style={styles.barTrack}>
@@ -70,7 +84,24 @@ export default function StatsPage() {
 
       {/* Heatmap */}
       <section style={styles.section}>
-        <h3 style={styles.sectionTitle}>Heatmap de uso — {account}</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <h3 style={styles.sectionTitle}>
+            Heatmap de uso — {selectedAccount?.alias ?? "sin cuenta"}
+          </h3>
+          {accounts.length > 0 && (
+            <select
+              value={selectedIdx}
+              onChange={e => setSelectedIdx(Number(e.target.value))}
+              style={{ padding: "5px 10px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: 12 }}
+            >
+              {accounts.map((a, i) => (
+                <option key={a.id} value={i}>
+                  {a.provider === "agy" ? "Antigravity" : "Codex"}: {a.alias}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
         <div style={styles.heatmapGrid}>
           {/* Headers días */}
           <div style={styles.heatCell} /> {/* corner */}

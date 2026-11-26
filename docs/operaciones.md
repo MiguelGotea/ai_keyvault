@@ -1233,3 +1233,25 @@ El desktop cruza: `account.alias == pool.account_id` para mostrar cuota de cada 
 | `switch_account(account_id, provider, device_id)` | Switch real desde bóveda |
 | `list_vault_accounts()` | Lista cuentas descifradas (alias + provider, sin credenciales) |
 | `upload_vault_sync / download_vault_sync` | Sync cifrado de bóveda al VPS (conocimiento cero) |
+
+---
+
+## 22. Respaldo cifrado en `ai_keyvault_data` y restauración (D-04)
+
+- El workflow `.github/workflows/backup.yml` cifra `keyvault.db` con **AES-256-CBC + PBKDF2 (600 000 iteraciones)** usando el secret `BACKUP_ENCRYPTION_KEY` antes de subir `backups/keyvault_<timestamp>.db.enc` a `ai_keyvault_data`.
+- En el mismo workflow se verifica la restauración descifrando el `.db.enc` a un archivo temporal y comprobando que SQLite abre las tablas.
+
+### Restaurar manualmente en el VPS
+
+```bash
+# 1. Descifrar el snapshot elegido
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+  -in keyvault_YYYYMMDD_HHMMSS.db.enc \
+  -out keyvault_restored.db
+
+# 2. Detener servicio, reemplazar BD y reiniciar
+sudo systemctl stop ai-keyvault
+sudo cp keyvault_restored.db /opt/ai-keyvault/data/keyvault.db
+sudo chown ai-keyvault:ai-keyvault /opt/ai-keyvault/data/keyvault.db
+sudo systemctl start ai-keyvault
+```

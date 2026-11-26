@@ -13,11 +13,25 @@ import { useEffect, useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
 import QuotaCard from "../components/QuotaCard";
-import type { PoolSummary, AccountInfo, SwitchResult } from "../types/api";
+import type { PoolSummary, AccountInfo, PollerStatus, SwitchResult } from "../types/api";
+
+function formatRelativeAge(isoDate: string | null | undefined): string {
+  if (!isoDate) return "sin lecturas";
+  const ts = new Date(isoDate).getTime();
+  if (Number.isNaN(ts)) return "fecha inválida";
+  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (diffSec < 60) return `hace ${diffSec} s`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `hace ${diffMin} min`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `hace ${diffHr} h`;
+  return `hace ${Math.floor(diffHr / 24)} d`;
+}
 
 export default function DashboardPage() {
   const [pollerStarted, setPollerStarted] = useState(false);
   const [pollerError, setPollerError] = useState<string | null>(null);
+  const [autolockError, setAutolockError] = useState<string | null>(null);
   const [switchingAccount, setSwitchingAccount] = useState<string | null>(null);
   const [switchMsg, setSwitchMsg] = useState<string | null>(null);
 
@@ -27,19 +41,29 @@ export default function DashboardPage() {
   // 2. Datos de cuota del VPS (todos los pools)
   const quota = useCommand<PoolSummary[]>("get_stats_compare", { days: 7 });
 
-  // Lanzar poller al abrir
+  // 3. Estado del poller (IPC)
+  const pollerStatus = useCommand<PollerStatus>("get_poller_status", {});
+
+  // Lanzar poller al abrir (sin silenciar ningún error)
   useEffect(() => {
     if (!pollerStarted) {
       invoke("start_poller")
-        .then(() => setPollerStarted(true))
+        .then(() => {
+          setPollerStarted(true);
+          setPollerError(null);
+          pollerStatus.refetch();
+        })
         .catch((e: unknown) => {
-          const msg = String(e);
-          if (msg.includes("sidecar") || msg.includes("No such")) {
-            setPollerError("Poller no compilado — el monitoreo automático no está activo.");
-          }
+          setPollerError(`No se pudo iniciar el poller: ${String(e)}`);
+          pollerStatus.refetch();
         });
     }
-  }, [pollerStarted]);
+  }, [pollerStarted, pollerStatus.refetch]);
+
+  useEffect(() => {
+    const timer = setInterval(() => pollerStatus.refetch(), 15_000);
+    return () => clearInterval(timer);
+  }, [pollerStatus.refetch]);
 
   // Autobloqueo: reset en cada interacción
   const throttleRef = { ts: 0 };
@@ -49,7 +73,9 @@ export default function DashboardPage() {
     throttleRef.ts = now;
     const minutes = parseInt(localStorage.getItem("autolock_minutes") ?? "0");
     if (minutes > 0) {
-      invoke("reset_autolock_timer", { minutes }).catch(() => {});
+      invoke("reset_autolock_timer", { minutes }).catch((e: unknown) => {
+        setAutolockError(`Error al reiniciar autobloqueo: ${String(e)}`);
+      });
     }
   }, []);
 
@@ -113,10 +139,40 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Banner de poller */}
-      {pollerError && (
+      {/* Estado del poller y errores visibles */}
+      <div style={styles.pollerBar}>
+        <span>
+          <strong>Poller:</strong>{" "}
+          {pollerStatus.data
+            ? pollerStatus.data.state === "running"
+              ? "Corriendo"
+              : pollerStatus.data.state === "paused"
+              ? "Pausado"
+              : pollerStatus.data.state === "error"
+              ? "Error"
+              : "Detenido"
+            : "Consultando…"}
+          {" · "}
+          Último envío: {formatRelativeAge(pollerStatus.data?.last_poll_at)}
+        </span>
+      </div>
+
+      {(pollerError || pollerStatus.error || pollerStatus.data?.error) && (
         <div style={styles.warningBanner}>
-          ⚠️ {pollerError}
+          ⚠️ {pollerError ?? pollerStatus.error ?? pollerStatus.data?.error}
+        </div>
+      )}
+
+      {quota.error && (
+        <div style={styles.errorBox}>
+          <strong>Error al consultar cuota del VPS:</strong> {quota.error}
+          <button onClick={() => quota.refetch()} style={styles.retryBtn}>Reintentar</button>
+        </div>
+      )}
+
+      {autolockError && (
+        <div style={styles.warningBanner}>
+          ⚠️ {autolockError}
         </div>
       )}
 
@@ -154,10 +210,14 @@ export default function DashboardPage() {
 
       {/* Tarjetas de cuentas de la bóveda */}
       {vaultList.map(account => {
-        // Buscar pools del VPS que correspondan a esta cuenta (por alias)
-        const pools = poolsByVpsId[account.alias] ?? [];
+        // D-02: cruzar pools del VPS por UUID opaco de la bóveda (nunca por alias)
+        const pools = poolsByVpsId[account.id] ?? [];
         const hasAlert = pools.some(p => p.current_percent_used >= 80);
         const isSwitching = switchingAccount === account.id;
+        const latestRead = pools.reduce<string | null>((latest, p) => {
+          if (!latest) return p.last_read_at;
+          return new Date(p.last_read_at) > new Date(latest) ? p.last_read_at : latest;
+        }, null);
 
         return (
           <section key={account.id} style={styles.accountSection}>
@@ -167,6 +227,9 @@ export default function DashboardPage() {
                   {account.provider === "agy" ? "ANTIGRAVITY" : "CODEX"}
                 </span>
                 <span style={styles.accountAlias}>{account.alias}</span>
+                <span style={styles.lastReadTag}>
+                  {latestRead ? ` · Última lectura: ${formatRelativeAge(latestRead)}` : " · Sin lecturas"}
+                </span>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 {hasAlert && <span style={styles.alertDot}>⚠️</span>}
@@ -208,6 +271,8 @@ const styles: Record<string, React.CSSProperties> = {
   headerActions: { display: "flex", gap: 8 },
   refreshBtn: { padding: "7px 14px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" },
   warningBanner: { padding: "10px 16px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "var(--radius-md)", fontSize: 12, color: "#92400E" },
+  pollerBar: { padding: "8px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 12, color: "var(--color-text-secondary)" },
+  lastReadTag: { fontSize: 11, color: "var(--color-text-disabled)", marginLeft: 4 },
   infoBar: { padding: "10px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 },
   closeMsgBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--color-text-disabled)", padding: "0 2px" },
   errorBox: { padding: "12px 16px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", fontSize: 13, color: "#991B1B", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" as const },

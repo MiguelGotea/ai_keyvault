@@ -201,7 +201,7 @@ export default function SettingsPage() {
       <section style={styles.section}>
         <h3 style={styles.sectionTitle}>{es.ajustes.seccion_respaldo}</h3>
         <Row label={es.ajustes.ultimo_respaldo}>
-          <span style={styles.hint}>Ver en GitHub: ai_keyvault_data</span>
+          <LastBackupStatus />
         </Row>
         <Row label="Sincronizar bóveda con VPS">
           <VaultSyncButtons />
@@ -223,6 +223,47 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div style={rowStyles.row}>
       <label style={rowStyles.label}>{label}</label>
       <div style={rowStyles.control}>{children}</div>
+    </div>
+  );
+}
+
+/** Muestra la fecha del último backup cifrado en ai_keyvault_data (D-04). */
+function LastBackupStatus() {
+  const [status, setStatus] = useState<string>("Consultando…");
+  const [loading, setLoading] = useState(false);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      const info = await invoke<{ available: boolean; last_backup_at: string | null; message: string }>(
+        "get_last_backup_info"
+      );
+      if (info.available && info.last_backup_at) {
+        setStatus(`${new Date(info.last_backup_at).toLocaleString("es-MX")} (${info.message})`);
+      } else {
+        setStatus(info.message);
+      }
+    } catch (e) {
+      setStatus(`Error: ${String(e)}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <span style={styles.hint}>{status}</span>
+      <button
+        onClick={refresh}
+        disabled={loading}
+        style={{ padding: "4px 8px", fontSize: 11, border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-bg-secondary)", color: "var(--color-text)", cursor: "pointer" }}
+      >
+        {loading ? "⏳" : "↻"}
+      </button>
     </div>
   );
 }

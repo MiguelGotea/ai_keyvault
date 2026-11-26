@@ -9,8 +9,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
-use tauri::{command, AppHandle, State};
-use tauri_plugin_shell::process::CommandChild;
+use tauri::{command, AppHandle, Manager, State};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 use tracing::{info, warn};
 
@@ -106,24 +106,81 @@ pub async fn start_poller(
 
     info!("🚀 Lanzando sidecar del poller...");
 
-    // Lanzar el sidecar via tauri-plugin-shell
+    // Lanzar el sidecar via tauri-plugin-shell con mapa de identidad y configuración (D-02, D-06)
     // El binario se llama "ai-keyvault-poller" sin sufijo (Tauri agrega el triple)
+    let map_path = crate::commands::vault::identity_map_path(&app);
     let result = app.shell()
         .sidecar("ai-keyvault-poller")
         .map_err(|e| format!("No se encontró el sidecar: {e}"))?
+        .env("AKYV_IDENTITY_MAP_PATH", map_path.to_string_lossy().as_ref())
+        .env("AKYV_SERVER_URL", crate::api_client::SERVER_URL)
+        .env("AKYV_POLL_INTERVAL", "600")
         .spawn();
 
     match result {
-        Ok((_rx, child)) => {
+        Ok((mut rx, child)) => {
             let pid = child.pid();
             info!("✅ Poller iniciado con PID {pid}");
             if let Ok(mut child_guard) = poller.child.lock() {
                 *child_guard = Some(child);
             }
-            let mut guard = poller.status.lock().unwrap();
-            guard.state = PollerState::Running;
-            guard.pid = Some(pid);
-            guard.error = None;
+            {
+                let mut guard = poller.status.lock().unwrap();
+                guard.state = PollerState::Running;
+                guard.pid = Some(pid);
+                guard.error = None;
+            }
+
+            let app_handle = app.clone();
+            tauri::async_runtime::spawn(async move {
+                while let Some(event) = rx.recv().await {
+                    let manager = app_handle.state::<PollerManager>();
+                    match event {
+                        CommandEvent::Stdout(bytes) => {
+                            let line = String::from_utf8_lossy(&bytes);
+                            if line.contains("Ciclo completado") || line.contains("Lectura subida") {
+                                if let Ok(mut guard) = manager.status.lock() {
+                                    guard.last_poll_at = Some(chrono::Utc::now().to_rfc3339());
+                                    guard.error = None;
+                                }
+                            } else if line.contains("ERROR") || line.contains("Error al") {
+                                if let Ok(mut guard) = manager.status.lock() {
+                                    guard.error = Some(line.trim().to_string());
+                                }
+                            }
+                        }
+                        CommandEvent::Stderr(bytes) => {
+                            let line = String::from_utf8_lossy(&bytes).trim().to_string();
+                            if !line.is_empty() {
+                                warn!("Poller stderr: {line}");
+                                if let Ok(mut guard) = manager.status.lock() {
+                                    guard.error = Some(line);
+                                }
+                            }
+                        }
+                        CommandEvent::Error(err) => {
+                            warn!("Error de proceso del poller: {err}");
+                            if let Ok(mut guard) = manager.status.lock() {
+                                guard.state = PollerState::Error;
+                                guard.error = Some(format!("Error del poller: {err}"));
+                            }
+                        }
+                        CommandEvent::Terminated(payload) => {
+                            if let Ok(mut guard) = manager.status.lock() {
+                                if guard.state != PollerState::Stopped {
+                                    let code = payload.code.map_or_else(|| "desconocido".into(), |c| c.to_string());
+                                    guard.state = PollerState::Error;
+                                    guard.pid = None;
+                                    guard.error = Some(format!("El poller terminó inesperadamente (código {code})."));
+                                }
+                            }
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+            });
+
             Ok(())
         }
         Err(e) => {

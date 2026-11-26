@@ -1,0 +1,13 @@
+[
+  {
+    "account_id": "00000000-0000-0000-0000-000000000001",
+    "provider": "agy",
+    "pool": "gemini-weekly",
+    "tokens_used": 250000,
+    "tokens_limit": 1000000,
+    "percent_used": 25.0,
+    "reset_time": "2026-12-01T19:19:00Z",
+    "source": "test-fake-pc",
+    "read_at": "2026-11-25T18:00:00Z"
+  }
+]

@@ -12,15 +12,15 @@ export default function AlertsPage() {
   const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
   const alerts = useCommand<AlertRecord[]>("get_alerts", {});
 
-  // Filtrar alertas por cuentas que están en la bóveda
-  const vaultAliases = useMemo(
-    () => new Set((vaultAccounts.data ?? []).map(a => a.alias)),
+  // D-02: filtrar alertas por UUID de bóveda y mostrar su alias
+  const accountById = useMemo(
+    () => new Map((vaultAccounts.data ?? []).map(a => [a.id, a])),
     [vaultAccounts.data]
   );
 
   const filteredAlerts = useMemo(
-    () => (alerts.data ?? []).filter(a => vaultAliases.has(a.account_id)),
-    [alerts.data, vaultAliases]
+    () => (alerts.data ?? []).filter(a => accountById.has(a.account_id)),
+    [alerts.data, accountById]
   );
 
   const isLoading = alerts.loading || vaultAccounts.loading;
@@ -58,15 +58,15 @@ export default function AlertsPage() {
               key={alert.id}
               style={{
                 ...styles.alertCard,
-                borderLeft: `4px solid ${alert.level === "crit" ? "var(--color-danger)" : "var(--color-warning)"}`,
+                borderLeft: `4px solid ${alert.level === "critical" || alert.level === "crit" ? "var(--color-danger)" : "var(--color-warning)"}`,
               }}
             >
               <div style={styles.alertTop}>
                 <span style={{
                   ...styles.levelBadge,
-                  background: alert.level === "crit" ? "var(--color-danger)" : "var(--color-warning)",
+                  background: alert.level === "critical" || alert.level === "crit" ? "var(--color-danger)" : "var(--color-warning)",
                 }}>
-                  {alert.level === "crit" ? es.alertas.nivel_crit : es.alertas.nivel_warn}
+                  {alert.level === "critical" || alert.level === "crit" ? es.alertas.nivel_crit : es.alertas.nivel_warn}
                 </span>
                 <span style={styles.alertProvider}>{alert.provider} / {alert.pool}</span>
                 <span style={styles.alertTime}>
@@ -74,7 +74,7 @@ export default function AlertsPage() {
                 </span>
               </div>
               <div style={styles.alertBody}>
-                <strong>{alert.account_id}</strong>
+                <strong>{accountById.get(alert.account_id)?.alias ?? alert.account_id}</strong>
                 {" — "}{alert.percent_used.toFixed(1)}% usado
                 {alert.reset_time && (
                   <span style={styles.alertMsg}> · Reinicia: {new Date(alert.reset_time).toLocaleString("es-MX")}</span>

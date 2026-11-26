@@ -30,17 +30,39 @@ jobs:
           ssh-key: ${{ secrets.BACKUP_WRITE_KEY }}
           path: backup_repo
 
-      - name: 💾 Guardar snapshot con timestamp
+      - name: 🔐 Cifrar snapshot y probar restauración (D-04)
+        env:
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
         run: |
+          if [ -z "$BACKUP_ENCRYPTION_KEY" ]; then
+            echo "❌ BACKUP_ENCRYPTION_KEY no está configurado. Abortando para no subir datos sin cifrar."
+            exit 1
+          fi
+
           TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
           mkdir -p backup_repo/backups
-          cp keyvault_backup.db backup_repo/backups/keyvault_${TIMESTAMP}.db
-          echo "Snapshot: keyvault_${TIMESTAMP}.db"
+          OUT_ENC="backup_repo/backups/keyvault_${TIMESTAMP}.db.enc"
 
-          # Retener solo los últimos 30 backups
-          BACKUP_COUNT=$(ls backup_repo/backups/keyvault_*.db 2>/dev/null | wc -l)
+          openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt \
+            -in keyvault_backup.db \
+            -out "$OUT_ENC" \
+            -pass env:BACKUP_ENCRYPTION_KEY
+
+          # Probar restauración real antes de subir
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+            -in "$OUT_ENC" \
+            -out ./verify_restore.db \
+            -pass env:BACKUP_ENCRYPTION_KEY
+
+          python3 -c "import sqlite3; c=sqlite3.connect('./verify_restore.db'); t=[r[0] for r in c.execute(\"SELECT name FROM sqlite_master WHERE type='table'\")]; assert 'devices' in t and 'vault_snapshots' in t, f'Tablas incompletas: {t}'; print('✅ Restauración verificada, tablas:', len(t))"
+
+          rm -f ./verify_restore.db ./keyvault_backup.db
+          echo "Snapshot cifrado: keyvault_${TIMESTAMP}.db.enc"
+
+          # Retener solo los últimos 30 backups cifrados
+          BACKUP_COUNT=$(ls backup_repo/backups/keyvault_*.db.enc 2>/dev/null | wc -l)
           if [ "$BACKUP_COUNT" -gt 30 ]; then
-            ls -t backup_repo/backups/keyvault_*.db | tail -n +31 | xargs rm -f
+            ls -t backup_repo/backups/keyvault_*.db.enc | tail -n +31 | xargs rm -f
             echo "🧹 Backups antiguos eliminados (reteniendo últimos 30)"
           fi
 

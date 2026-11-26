@@ -13,8 +13,8 @@ export default function ChatsPage() {
 
   const chats = useCommand<ChatSession[]>(
     "get_chats",
-    { accountId: selected?.alias ?? "" },
-    { enabled: !!selected?.alias }
+    { accountId: selected?.id ?? "" },
+    { enabled: !!selected?.id }
   );
 
   return (

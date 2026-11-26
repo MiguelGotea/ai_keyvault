@@ -1,0 +1,13 @@
+[
+  {
+    "id": 1,
+    "account_id": "00000000-0000-0000-0000-000000000001",
+    "provider": "agy",
+    "device_id": "test-fake-pc",
+    "success": 1,
+    "error": null,
+    "duration_ms": 420,
+    "is_manual": 1,
+    "pinged_at": "2026-11-25T18:00:00Z"
+  }
+]

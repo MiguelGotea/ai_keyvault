@@ -102,6 +102,7 @@ fn main() {
             commands::security::cancel_autolock_timer,
             commands::security::upload_vault_sync,
             commands::security::download_vault_sync,
+            commands::security::get_last_backup_info,
         ])
         .build(tauri::generate_context!())
         .expect("Error al construir la aplicación AI KeyVault")

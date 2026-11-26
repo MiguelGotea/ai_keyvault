@@ -1,0 +1,12 @@
+[
+  {
+    "id": 1,
+    "to_account_id": "00000000-0000-0000-0000-000000000002",
+    "from_account_id": "00000000-0000-0000-0000-000000000001",
+    "provider": "agy",
+    "device_id": "test-fake-pc",
+    "success": 1,
+    "reason": null,
+    "switched_at": "2026-11-25T18:00:00Z"
+  }
+]

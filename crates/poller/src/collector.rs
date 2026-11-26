@@ -1,6 +1,7 @@
 //! Recolector de cuota — llama a providers agy y Codex.
 
 use crate::{models::QuotaSnapshot, PollerError, Result};
+use ai_keyvault_core::{default_identity_map_path, IdentityMap};
 use ai_keyvault_provider_agy::quota::{parse_usage_output, read_account_email, AgyPool};
 use chrono::Utc;
 use tracing::{info, warn};
@@ -36,9 +37,21 @@ pub fn collect_agy(device_id: &str) -> Result<Vec<QuotaSnapshot>> {
     }
 
     let now = Utc::now();
-    // Enriquecer con email de la cuenta — parse_usage_output no lo incluye en el nuevo formato,
-    // lo obtenemos via read_account_email (agy --print /account) con fallback a "agy-unknown".
-    let account_id = read_account_email().unwrap_or_else(|| "agy-unknown".to_string());
+    // D-02: resolver el correo local al UUID opaco de la bóveda (el VPS nunca ve correos).
+    let Some(email) = read_account_email() else {
+        warn!("No se pudo determinar el correo activo de agy — se omite subida");
+        return Ok(vec![]);
+    };
+
+    let map_path = default_identity_map_path();
+    let map = IdentityMap::load_encrypted(&map_path).map_err(|e| {
+        PollerError::AgyError(format!("No se pudo leer el mapa de identidad local: {e}"))
+    })?;
+
+    let Some(account_id) = map.resolve("agy", &email).map(str::to_string) else {
+        warn!("Cuenta activa de agy no está registrada en el mapa de identidad local — se omite subida");
+        return Ok(vec![]);
+    };
 
     info!(
         account_id = %account_id,
@@ -87,10 +100,21 @@ pub fn collect_codex(device_id: &str) -> Result<Vec<QuotaSnapshot>> {
         .map_err(|e| PollerError::CodexError(format!("No se pudo leer auth.json: {e}")))?;
 
     let now = Utc::now();
-    let account_id = auth
-        .email
-        .clone()
-        .unwrap_or_else(|| "codex-unknown".to_string());
+    // D-02: resolver el correo local al UUID opaco de la bóveda (el VPS nunca ve correos).
+    let Some(email) = auth.email.as_deref() else {
+        warn!("auth.json de Codex no contiene correo — se omite subida");
+        return Ok(vec![]);
+    };
+
+    let map_path = default_identity_map_path();
+    let map = IdentityMap::load_encrypted(&map_path).map_err(|e| {
+        PollerError::CodexError(format!("No se pudo leer el mapa de identidad local: {e}"))
+    })?;
+
+    let Some(account_id) = map.resolve("codex", email).map(str::to_string) else {
+        warn!("Cuenta activa de Codex no está registrada en el mapa de identidad local — se omite subida");
+        return Ok(vec![]);
+    };
 
     let (percent_remaining, percent_used) = if auth.is_valid() {
         (100.0_f64, 0.0_f64)

@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1,
+    "account_id": "00000000-0000-0000-0000-000000000001",
+    "provider": "agy",
+    "pool": "claude-gpt-5h",
+    "level": "critical",
+    "percent_used": 96.0,
+    "reset_time": "2026-11-25T23:00:00Z",
+    "notified_toast": 1,
+    "notified_ntfy": 0,
+    "detected_at": "2026-11-25T18:00:00Z"
+  },
+  {
+    "id": 2,
+    "account_id": "00000000-0000-0000-0000-000000000001",
+    "provider": "agy",
+    "pool": "gemini-weekly",
+    "level": "warn",
+    "percent_used": 81.0,
+    "reset_time": null,
+    "notified_toast": true,
+    "notified_ntfy": false,
+    "detected_at": "2026-11-25T17:00:00Z"
+  }
+]

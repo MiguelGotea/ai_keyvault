@@ -16,15 +16,15 @@ export default function PingPage() {
   const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
   const needs = useCommand<PingNeedItem[]>("get_pings_needs", { maxPct: 80 });
 
-  // Filtrar: solo mostrar cuentas en la bóveda
-  const vaultAliases = useMemo(
-    () => new Set((vaultAccounts.data ?? []).map(a => a.alias)),
+  // D-02: filtrar por UUID de bóveda y mostrar alias
+  const accountById = useMemo(
+    () => new Map((vaultAccounts.data ?? []).map(a => [a.id, a])),
     [vaultAccounts.data]
   );
 
   const filteredNeeds = useMemo(
-    () => (needs.data ?? []).filter(item => vaultAliases.has(item.account_id)),
-    [needs.data, vaultAliases]
+    () => (needs.data ?? []).filter(item => accountById.has(item.account_id)),
+    [needs.data, accountById]
   );
 
   async function doPing(item: PingNeedItem) {
@@ -80,7 +80,7 @@ export default function PingPage() {
             return (
               <div key={key} style={styles.row}>
                 <div style={styles.info}>
-                  <span style={styles.accountId}>{item.account_id}</span>
+                  <span style={styles.accountId}>{accountById.get(item.account_id)?.alias ?? item.account_id}</span>
                   <span style={styles.meta}>
                     {item.provider} · {item.pool} · {item.percent_used.toFixed(1)}% usado
                   </span>

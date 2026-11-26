@@ -11,13 +11,25 @@ interface Props {
 }
 
 export default function PollerStatusBadge({ compact = false }: Props) {
-  const { data, refetch } = useCommand<PollerStatus>("get_poller_status");
+  const { data, error, refetch } = useCommand<PollerStatus>("get_poller_status");
 
   // Refresco cada 15 segundos
   useEffect(() => {
     const timer = setInterval(refetch, 15_000);
     return () => clearInterval(timer);
   }, [refetch]);
+
+  if (error) {
+    return (
+      <span
+        style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
+        title={error}
+      >
+        <span style={{ color: "var(--color-danger)", fontSize: 10 }}>✕</span>
+        <span style={{ color: "var(--color-danger)" }}>Poller: error IPC</span>
+      </span>
+    );
+  }
 
   if (!data) return null;
 
@@ -40,10 +52,16 @@ export default function PollerStatusBadge({ compact = false }: Props) {
     error: "Poller error",
   };
 
+  const tooltip = data.error
+    ? data.error
+    : data.last_poll_at
+    ? `${labels[data.state]} · Último envío: ${new Date(data.last_poll_at).toLocaleString("es-MX")}`
+    : labels[data.state];
+
   return (
     <span
       style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12 }}
-      title={data.error ?? labels[data.state]}
+      title={tooltip}
     >
       <span style={{ color: colors[data.state], fontSize: 10 }}>
         {icons[data.state]}

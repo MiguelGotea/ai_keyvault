@@ -209,4 +209,62 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BackupInfo {
+    pub available: bool,
+    pub last_backup_at: Option<String>,
+    pub message: String,
+}
+
+/// Consulta la fecha del último respaldo en `MiguelGotea/ai_keyvault_data` (D-04).
+#[command]
+pub async fn get_last_backup_info() -> Result<BackupInfo, String> {
+    let url = "https://api.github.com/repos/MiguelGotea/ai_keyvault_data/commits?per_page=1";
+    let resp = http_client()
+        .get(url)
+        .header("Accept", "application/vnd.github+json")
+        .send()
+        .await
+        .map_err(|e| format!("No se pudo consultar GitHub: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Ok(BackupInfo {
+            available: false,
+            last_backup_at: None,
+            message: format!(
+                "Repo privado o no disponible (HTTP {}). Ver en GitHub: ai_keyvault_data.",
+                resp.status().as_u16()
+            ),
+        });
+    }
+
+    let commits: Vec<serde_json::Value> = resp
+        .json()
+        .await
+        .map_err(|e| format!("Respuesta inválida de GitHub: {e}"))?;
+
+    if let Some(first) = commits.first() {
+        let date = first
+            .pointer("/commit/committer/date")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+        let msg = first
+            .pointer("/commit/message")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Respaldo")
+            .to_string();
+        return Ok(BackupInfo {
+            available: date.is_some(),
+            last_backup_at: date,
+            message: msg,
+        });
+    }
+
+    Ok(BackupInfo {
+        available: false,
+        last_backup_at: None,
+        message: "Sin commits de respaldo aún en ai_keyvault_data.".into(),
+    })
+}
+
 
