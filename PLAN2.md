@@ -689,8 +689,8 @@ Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fi
 | Fase | Contenido |
 |------|-----------|
 | 21 | Alertas con **sugerencia de cuenta alternativa** y botón «Cambiar a esa cuenta» *(✅ Completada 2026-11-26)* |
-| 22 | **Silenciar alertas** por X horas, alertas de **fin de suscripción** (7 y 1 día) y de **login vencido** o consulta fallando *(🟡 Código escrito 2026-11-26)* |
-| 23 | Paleta de comandos **`Ctrl+K`** |
+| 22 | **Silenciar alertas** por X horas, alertas de **fin de suscripción** (7 y 1 día) y de **login vencido** o consulta fallando *(✅ Completada 2026-11-26)* |
+| 23 | Paleta de comandos **`Ctrl+K`** *(🟡 Código escrito 2026-11-26)* |
 | 24 | **Detalle de cuenta con pestañas** (Resumen, Cuota y cooldown, Estadísticas, Chat, Credenciales, Historial) |
 | 25 | **Tema claro/oscuro** y pantalla **«Mis dispositivos»** (revocar acceso) |
 | 26 | Cierre del switch: botón «Deshacer», aviso de reinicio de herramientas, detección de procesos sin cerrarlos, «sin agente en esta PC» |

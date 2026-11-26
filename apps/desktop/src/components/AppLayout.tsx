@@ -2,10 +2,12 @@
  * AppLayout — Layout principal de la app con sidebar de navegación.
  * Se usa en Dashboard y todas las páginas internas.
  */
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import ServerStatusBadge from "./ServerStatusBadge";
 import PollerStatusBadge from "./PollerStatusBadge";
+import CommandPalette from "./CommandPalette";
 import { useServerHealth } from "../hooks/useServerHealth";
 import es from "../i18n/es.json";
 
@@ -22,6 +24,18 @@ const NAV_ITEMS = [
 export default function AppLayout() {
   const navigate = useNavigate();
   const health = useServerHealth();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen(o => !o);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   async function handleLock() {
     await invoke("lock_vault");
@@ -61,6 +75,13 @@ export default function AppLayout() {
             <ServerStatusBadge health={health} compact />
           </div>
           <PollerStatusBadge compact />
+          <button
+            style={{ ...styles.lockBtn, marginTop: 8, background: "transparent", color: "var(--color-text-secondary)", borderColor: "var(--color-border)" }}
+            onClick={() => setPaletteOpen(true)}
+            title="Abrir paleta de comandos (Ctrl+K)"
+          >
+            ⌘ Comandos (Ctrl+K)
+          </button>
           <button style={styles.lockBtn} onClick={handleLock}>
             🔒 {es.vault.bloquear}
           </button>
@@ -71,6 +92,8 @@ export default function AppLayout() {
       <main style={styles.main}>
         <Outlet />
       </main>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }
