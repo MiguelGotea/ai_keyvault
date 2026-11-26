@@ -24,11 +24,7 @@ fn req_err(e: reqwest::Error) -> String {
 #[command]
 pub async fn check_server_health() -> Result<bool, String> {
     let url = format!("{SERVER_URL}/health");
-    let resp = http_client()
-        .get(&url)
-        .send()
-        .await
-        .map_err(req_err)?;
+    let resp = http_client().get(&url).send().await.map_err(req_err)?;
     Ok(resp.status().is_success())
 }
 
@@ -38,7 +34,10 @@ pub async fn check_server_health() -> Result<bool, String> {
 /// Mapea: GET /api/quota/readings/:account_id
 #[command]
 pub async fn get_quota(account_id: String) -> Result<Vec<QuotaReading>, String> {
-    let url = format!("{SERVER_URL}/api/quota/readings/{}", urlencoding(&account_id));
+    let url = format!(
+        "{SERVER_URL}/api/quota/readings/{}",
+        urlencoding(&account_id)
+    );
     let readings = http_client()
         .get(&url)
         .send()
@@ -53,10 +52,7 @@ pub async fn get_quota(account_id: String) -> Result<Vec<QuotaReading>, String> 
 /// Resumen de cuota con burn rate y proyección.
 /// Mapea: GET /api/stats/summary/:account_id?days=N
 #[command]
-pub async fn get_stats_summary(
-    account_id: String,
-    days: u32,
-) -> Result<Vec<PoolSummary>, String> {
+pub async fn get_stats_summary(account_id: String, days: u32) -> Result<Vec<PoolSummary>, String> {
     let url = format!(
         "{SERVER_URL}/api/stats/summary/{}?days={days}",
         urlencoding(&account_id)
@@ -75,10 +71,7 @@ pub async fn get_stats_summary(
 /// Heatmap de uso (hora del día × día de la semana).
 /// Mapea: GET /api/stats/heatmap/:account_id?days=N
 #[command]
-pub async fn get_stats_heatmap(
-    account_id: String,
-    days: u32,
-) -> Result<Vec<HeatmapCell>, String> {
+pub async fn get_stats_heatmap(account_id: String, days: u32) -> Result<Vec<HeatmapCell>, String> {
     let url = format!(
         "{SERVER_URL}/api/stats/heatmap/{}?days={days}",
         urlencoding(&account_id)
@@ -113,10 +106,7 @@ pub async fn get_stats_compare(days: u32) -> Result<Vec<PoolSummary>, String> {
 /// Estadísticas semanales de una cuenta.
 /// Mapea: GET /api/stats/weekly/:account_id?days=N
 #[command]
-pub async fn get_stats_weekly(
-    account_id: String,
-    days: u32,
-) -> Result<serde_json::Value, String> {
+pub async fn get_stats_weekly(account_id: String, days: u32) -> Result<serde_json::Value, String> {
     let url = format!(
         "{SERVER_URL}/api/stats/weekly/{}?days={days}",
         urlencoding(&account_id)
@@ -315,7 +305,7 @@ fn urlencoding(s: &str) -> String {
     // Reemplaza caracteres especiales comunes en account_ids
     // Para producción usar el crate `urlencoding` si se necesitan más casos
     s.replace(' ', "%20")
-     .replace('@', "%40")
-     .replace('#', "%23")
-     .replace('&', "%26")
+        .replace('@', "%40")
+        .replace('#', "%23")
+        .replace('&', "%26")
 }

@@ -103,9 +103,15 @@ where
         fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             write!(f, "bool or integer 0/1")
         }
-        fn visit_bool<E: de::Error>(self, v: bool) -> Result<bool, E> { Ok(v) }
-        fn visit_i64<E: de::Error>(self, v: i64) -> Result<bool, E> { Ok(v != 0) }
-        fn visit_u64<E: de::Error>(self, v: u64) -> Result<bool, E> { Ok(v != 0) }
+        fn visit_bool<E: de::Error>(self, v: bool) -> Result<bool, E> {
+            Ok(v)
+        }
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<bool, E> {
+            Ok(v != 0)
+        }
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<bool, E> {
+            Ok(v != 0)
+        }
     }
     d.deserialize_any(BoolOrInt)
 }
@@ -116,7 +122,7 @@ pub struct AlertRecord {
     pub account_id: String,
     pub provider: String,
     pub pool: String,
-    pub level: String,       // "warn" | "crit" (minúscula en el VPS)
+    pub level: String, // "warn" | "crit" (minúscula en el VPS)
     pub percent_used: f64,
     pub reset_time: Option<String>,
     #[serde(deserialize_with = "de_bool_or_int")]
@@ -229,8 +235,7 @@ mod contract_tests {
         assert_eq!(heatmap[0].hour, 18);
 
         let chats: Vec<ChatSession> =
-            serde_json::from_str(include_str!("../tests/fixtures/chats.json"))
-                .expect("chats.json");
+            serde_json::from_str(include_str!("../tests/fixtures/chats.json")).expect("chats.json");
         assert!(!chats[0].archived);
         assert!(chats[1].archived);
 
@@ -252,8 +257,7 @@ mod contract_tests {
         assert!(needs[0].needs_ping);
 
         let pings: Vec<PingRecord> =
-            serde_json::from_str(include_str!("../tests/fixtures/pings.json"))
-                .expect("pings.json");
+            serde_json::from_str(include_str!("../tests/fixtures/pings.json")).expect("pings.json");
         assert!(pings[0].success);
         assert!(pings[0].is_manual);
     }

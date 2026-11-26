@@ -81,9 +81,7 @@ pub fn kill_poller_process(poller: &PollerManager) {
 /// Devuelve el estado actual del poller (running / paused / stopped / error).
 /// Solo expone estado operativo — NUNCA credenciales.
 #[command]
-pub async fn get_poller_status(
-    poller: State<'_, PollerManager>,
-) -> Result<PollerStatus, String> {
+pub async fn get_poller_status(poller: State<'_, PollerManager>) -> Result<PollerStatus, String> {
     let guard = poller.status.lock().unwrap();
     Ok(guard.clone())
 }
@@ -92,10 +90,7 @@ pub async fn get_poller_status(
 /// Se llama desde el frontend después del desbloqueo de la bóveda.
 /// El poller NO necesita la bóveda — lee del SO directamente.
 #[command]
-pub async fn start_poller(
-    app: AppHandle,
-    poller: State<'_, PollerManager>,
-) -> Result<(), String> {
+pub async fn start_poller(app: AppHandle, poller: State<'_, PollerManager>) -> Result<(), String> {
     {
         let guard = poller.status.lock().unwrap();
         if guard.state == PollerState::Running {
@@ -109,10 +104,14 @@ pub async fn start_poller(
     // Lanzar el sidecar via tauri-plugin-shell con mapa de identidad y configuración (D-02, D-06)
     // El binario se llama "ai-keyvault-poller" sin sufijo (Tauri agrega el triple)
     let map_path = crate::commands::vault::identity_map_path(&app);
-    let result = app.shell()
+    let result = app
+        .shell()
         .sidecar("ai-keyvault-poller")
         .map_err(|e| format!("No se encontró el sidecar: {e}"))?
-        .env("AKYV_IDENTITY_MAP_PATH", map_path.to_string_lossy().as_ref())
+        .env(
+            "AKYV_IDENTITY_MAP_PATH",
+            map_path.to_string_lossy().as_ref(),
+        )
         .env("AKYV_SERVER_URL", crate::api_client::SERVER_URL)
         .env("AKYV_POLL_INTERVAL", "600")
         .spawn();
@@ -138,7 +137,8 @@ pub async fn start_poller(
                     match event {
                         CommandEvent::Stdout(bytes) => {
                             let line = String::from_utf8_lossy(&bytes);
-                            if line.contains("Ciclo completado") || line.contains("Lectura subida") {
+                            if line.contains("Ciclo completado") || line.contains("Lectura subida")
+                            {
                                 if let Ok(mut guard) = manager.status.lock() {
                                     guard.last_poll_at = Some(chrono::Utc::now().to_rfc3339());
                                     guard.error = None;
@@ -168,10 +168,14 @@ pub async fn start_poller(
                         CommandEvent::Terminated(payload) => {
                             if let Ok(mut guard) = manager.status.lock() {
                                 if guard.state != PollerState::Stopped {
-                                    let code = payload.code.map_or_else(|| "desconocido".into(), |c| c.to_string());
+                                    let code = payload
+                                        .code
+                                        .map_or_else(|| "desconocido".into(), |c| c.to_string());
                                     guard.state = PollerState::Error;
                                     guard.pid = None;
-                                    guard.error = Some(format!("El poller terminó inesperadamente (código {code})."));
+                                    guard.error = Some(format!(
+                                        "El poller terminó inesperadamente (código {code})."
+                                    ));
                                 }
                             }
                             break;

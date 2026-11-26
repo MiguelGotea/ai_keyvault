@@ -40,8 +40,10 @@ impl IdentityMap {
         if email.trim().is_empty() || account_uuid.trim().is_empty() {
             return;
         }
-        self.entries
-            .insert(Self::make_key(provider, email), account_uuid.trim().to_string());
+        self.entries.insert(
+            Self::make_key(provider, email),
+            account_uuid.trim().to_string(),
+        );
     }
 
     /// Resuelve el UUID de bóveda para un `(provider, email)`.
@@ -72,8 +74,9 @@ impl IdentityMap {
         let json = serde_json::to_vec(self)
             .map_err(|e| VaultError::EncryptionFailed(format!("Error serializando mapa: {e}")))?;
         let encrypted = key.encrypt_field(&json, IDENTITY_MAP_AAD)?;
-        let out = serde_json::to_vec_pretty(&encrypted)
-            .map_err(|e| VaultError::EncryptionFailed(format!("Error serializando cifrado: {e}")))?;
+        let out = serde_json::to_vec_pretty(&encrypted).map_err(|e| {
+            VaultError::EncryptionFailed(format!("Error serializando cifrado: {e}"))
+        })?;
 
         std::fs::write(map_path, out).map_err(|e| {
             VaultError::EncryptionFailed(format!("No se pudo escribir mapa cifrado: {e}"))

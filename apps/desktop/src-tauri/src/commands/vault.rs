@@ -36,9 +36,9 @@ impl Default for VaultState {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VaultStatusResponse {
-    pub initialized: bool,  // ¿existe vault.json en disco?
-    pub locked: bool,       // ¿tiene VaultKey en memoria?
-    pub version: String,    // versión del binario
+    pub initialized: bool, // ¿existe vault.json en disco?
+    pub locked: bool,      // ¿tiene VaultKey en memoria?
+    pub version: String,   // versión del binario
     pub accounts_count: usize,
 }
 
@@ -52,7 +52,7 @@ pub struct UnlockResult {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CreateVaultResult {
     pub success: bool,
-    pub recovery_key: Option<String>,  // AKVR-XXXX-... mostrar una sola vez
+    pub recovery_key: Option<String>, // AKVR-XXXX-... mostrar una sola vez
     pub error: Option<String>,
 }
 
@@ -112,8 +112,8 @@ fn save_vault_state(app: &AppHandle, state: &EncryptedVaultState) -> Result<(), 
 
 fn load_vault_state(app: &AppHandle) -> Result<EncryptedVaultState, String> {
     let path = vault_path(app);
-    let json = std::fs::read_to_string(&path)
-        .map_err(|e| format!("No se pudo leer vault.json: {e}"))?;
+    let json =
+        std::fs::read_to_string(&path).map_err(|e| format!("No se pudo leer vault.json: {e}"))?;
     serde_json::from_str::<EncryptedVaultState>(&json)
         .map_err(|e| format!("vault.json corrupto o formato inválido: {e}"))
 }
@@ -153,7 +153,10 @@ pub async fn create_vault(
         return Ok(CreateVaultResult {
             success: false,
             recovery_key: None,
-            error: Some("Ya existe una bóveda en este dispositivo. Para resetear, elimina vault.json.".into()),
+            error: Some(
+                "Ya existe una bóveda en este dispositivo. Para resetear, elimina vault.json."
+                    .into(),
+            ),
         });
     }
 
@@ -320,9 +323,17 @@ pub async fn add_vault_account(
                     Ok(uuid) => {
                         save_vault_state(&app, vault.state())?;
                         sync_identity_map(&app, vault)?;
-                        Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
+                        Ok(AddAccountResult {
+                            success: true,
+                            id: Some(uuid.to_string()),
+                            error: None,
+                        })
                     }
-                    Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
+                    Err(e) => Ok(AddAccountResult {
+                        success: false,
+                        id: None,
+                        error: Some(e.to_string()),
+                    }),
                 }
             }
             Some(_) => Err("La bóveda está bloqueada".to_string()),
@@ -380,9 +391,9 @@ pub async fn get_account_email(
     let uid = Uuid::parse_str(&account_uuid).map_err(|_| "UUID inválido".to_string())?;
     let guard = vault_state.vault.lock().unwrap();
     match &*guard {
-        Some(vault) if vault.is_unlocked() => vault
-            .decrypt_account_email(uid)
-            .map_err(|e| e.to_string()),
+        Some(vault) if vault.is_unlocked() => {
+            vault.decrypt_account_email(uid).map_err(|e| e.to_string())
+        }
         _ => Err("Bóveda bloqueada o no cargada".into()),
     }
 }
@@ -489,8 +500,8 @@ pub async fn add_agy_account_oauth(
 
     OAUTH_CANCELLED.store(false, Ordering::Relaxed);
 
-    let agy_bin = find_agy_binary()
-        .ok_or_else(|| "No se encontró agy.exe en el sistema.".to_string())?;
+    let agy_bin =
+        find_agy_binary().ok_or_else(|| "No se encontró agy.exe en el sistema.".to_string())?;
 
     // 1. Respaldar credencial actual y limpiar Credential Manager para forzar login OAuth
     let backup = backup_and_clear_agy_credential();
@@ -571,21 +582,42 @@ pub async fn add_agy_account_oauth(
         let mut guard = vault_state.vault.lock().unwrap();
         match &mut *guard {
             Some(vault) if vault.is_unlocked() => {
-                let already_exists = vault.state().accounts.iter().any(|a| a.alias == alias_final);
+                let already_exists = vault
+                    .state()
+                    .accounts
+                    .iter()
+                    .any(|a| a.alias == alias_final);
                 if already_exists {
                     Ok(AddAccountResult {
                         success: false,
                         id: None,
-                        error: Some(format!("Ya existe una cuenta con el alias '{alias_final}'. Usa otro alias.")),
+                        error: Some(format!(
+                            "Ya existe una cuenta con el alias '{alias_final}'. Usa otro alias."
+                        )),
                     })
                 } else {
-                    match vault.add_account("agy", &alias_final, &new_email, None, Some(&new_cred_json), None) {
+                    match vault.add_account(
+                        "agy",
+                        &alias_final,
+                        &new_email,
+                        None,
+                        Some(&new_cred_json),
+                        None,
+                    ) {
                         Ok(uuid) => {
                             save_vault_state(&app, vault.state())?;
                             sync_identity_map(&app, vault)?;
-                            Ok(AddAccountResult { success: true, id: Some(uuid.to_string()), error: None })
+                            Ok(AddAccountResult {
+                                success: true,
+                                id: Some(uuid.to_string()),
+                                error: None,
+                            })
                         }
-                        Err(e) => Ok(AddAccountResult { success: false, id: None, error: Some(e.to_string()) }),
+                        Err(e) => Ok(AddAccountResult {
+                            success: false,
+                            id: None,
+                            error: Some(e.to_string()),
+                        }),
                     }
                 }
             }

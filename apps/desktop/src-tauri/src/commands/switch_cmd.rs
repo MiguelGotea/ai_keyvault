@@ -38,13 +38,18 @@ mod credman {
     use std::os::windows::ffi::OsStrExt;
 
     fn to_wide(s: &str) -> Vec<u16> {
-        OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+        OsStr::new(s)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
     }
 
     /// Lee el blob crudo de una credencial del Credential Manager de Windows.
     pub fn read_credential_raw(target: &str) -> Option<Vec<u8>> {
-        use windows_sys::Win32::Security::Credentials::{CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC};
         use windows_sys::Win32::Foundation::TRUE;
+        use windows_sys::Win32::Security::Credentials::{
+            CredFree, CredReadW, CREDENTIALW, CRED_TYPE_GENERIC,
+        };
 
         let target_w = to_wide(target);
         let mut pcred = std::ptr::null_mut::<CREDENTIALW>();
@@ -63,8 +68,10 @@ mod credman {
 
     /// Escribe un blob en el Credential Manager de Windows.
     pub fn write_credential_raw(target: &str, username: &str, blob: &[u8]) -> Result<(), String> {
-        use windows_sys::Win32::Security::Credentials::{CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC};
         use windows_sys::Win32::Foundation::{GetLastError, TRUE};
+        use windows_sys::Win32::Security::Credentials::{
+            CredWriteW, CREDENTIALW, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC,
+        };
 
         let target_w = to_wide(target);
         let username_w = to_wide(username);
@@ -90,7 +97,9 @@ mod credman {
             Ok(())
         } else {
             let err = unsafe { GetLastError() };
-            Err(format!("CredWriteW falló (código {err}). Verifica permisos."))
+            Err(format!(
+                "CredWriteW falló (código {err}). Verifica permisos."
+            ))
         }
     }
 
@@ -170,7 +179,8 @@ pub async fn get_active_account(provider: String) -> Result<Option<String>, Stri
                 if let Some(bytes) = credman::read_credential_raw("gemini:antigravity") {
                     if let Ok(text) = String::from_utf8(bytes) {
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                            let email = json.get("id_token_email")
+                            let email = json
+                                .get("id_token_email")
                                 .or_else(|| json.get("email"))
                                 .and_then(|v| v.as_str())
                                 .map(|s| s.to_string());
@@ -188,7 +198,8 @@ pub async fn get_active_account(provider: String) -> Result<Option<String>, Stri
             if path.exists() {
                 if let Ok(text) = std::fs::read_to_string(&path) {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
-                        let email = json.pointer("/user/email")
+                        let email = json
+                            .pointer("/user/email")
                             .or_else(|| json.get("account_id"))
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string());
@@ -218,17 +229,17 @@ pub async fn switch_account(
             Some(vault) if vault.is_unlocked() => {
                 // Buscar la cuenta: por UUID, por alias, o por email
                 let accounts = &vault.state().accounts;
-                let found_id = accounts.iter().find(|a| {
-                    a.id.to_string() == account_id
-                        || a.alias == account_id
-                }).map(|a| a.id);
+                let found_id = accounts
+                    .iter()
+                    .find(|a| a.id.to_string() == account_id || a.alias == account_id)
+                    .map(|a| a.id);
 
                 match found_id {
                     Some(uid) => {
-                        let email = vault.decrypt_account_email(uid)
+                        let email = vault
+                            .decrypt_account_email(uid)
                             .map_err(|e| format!("Error descifrando email: {e}"))?;
-                        let pass = vault.decrypt_account_password(uid)
-                            .unwrap_or(None);
+                        let pass = vault.decrypt_account_password(uid).unwrap_or(None);
                         // tokens: descifrar el blob completo del Credential Manager
                         let tokens = vault.decrypt_account_tokens(uid).unwrap_or(None);
                         (email, pass, tokens)
@@ -261,7 +272,10 @@ pub async fn switch_account(
 
     let (success, error_msg) = match result {
         Ok(()) => (true, None),
-        Err(e) => { warn!("Switch fallido: {e}"); (false, Some(e)) }
+        Err(e) => {
+            warn!("Switch fallido: {e}");
+            (false, Some(e))
+        }
     };
 
     // Registrar en VPS (best-effort) — usando los campos reales del VPS
@@ -289,7 +303,10 @@ pub async fn switch_account(
         provider: provider.clone(),
         restart_notice: if success {
             Some(match provider.as_str() {
-                "agy" => "Reinicia las ventanas de Antigravity (agy) para aplicar el cambio de cuenta.".into(),
+                "agy" => {
+                    "Reinicia las ventanas de Antigravity (agy) para aplicar el cambio de cuenta."
+                        .into()
+                }
                 "codex" => "Cierra y vuelve a abrir Codex para usar la nueva cuenta.".into(),
                 _ => "Reinicia el agente para aplicar el cambio.".into(),
             })
@@ -301,7 +318,11 @@ pub async fn switch_account(
 
 // ── Implementaciones por proveedor ───────────────────────────────────────────
 
-async fn switch_agy(account_id: &str, email: &str, credential_json: Option<&str>) -> Result<(), String> {
+async fn switch_agy(
+    account_id: &str,
+    email: &str,
+    credential_json: Option<&str>,
+) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         let backup = credman::read_credential_raw("gemini:antigravity");
@@ -320,14 +341,13 @@ async fn switch_agy(account_id: &str, email: &str, credential_json: Option<&str>
             }
         };
 
-        credman::write_credential_raw("gemini:antigravity", email, &blob_bytes)
-            .map_err(|e| {
-                // Restaurar si falla
-                if let Some(blob) = &backup {
-                    let _ = credman::write_credential_raw("gemini:antigravity", "restore", blob);
-                }
-                e
-            })?;
+        credman::write_credential_raw("gemini:antigravity", email, &blob_bytes).map_err(|e| {
+            // Restaurar si falla
+            if let Some(blob) = &backup {
+                let _ = credman::write_credential_raw("gemini:antigravity", "restore", blob);
+            }
+            e
+        })?;
 
         info!("Credential Manager actualizado para agy: {email}");
         Ok(())
@@ -339,9 +359,15 @@ async fn switch_agy(account_id: &str, email: &str, credential_json: Option<&str>
     }
 }
 
-async fn switch_codex(account_id: &str, tokens_json: Option<&str>, _password: Option<&str>) -> Result<(), String> {
+async fn switch_codex(
+    account_id: &str,
+    tokens_json: Option<&str>,
+    _password: Option<&str>,
+) -> Result<(), String> {
     let auth_path = codex_auth_path();
-    let parent = auth_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let parent = auth_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
     std::fs::create_dir_all(parent).map_err(|e| format!("No se pudo crear ~/.codex/: {e}"))?;
 
     // Respaldar auth.json actual

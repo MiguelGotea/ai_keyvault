@@ -25,7 +25,10 @@ fn main() {
         )
         .init();
 
-    info!("🔐 Iniciando AI KeyVault Desktop v{}", env!("CARGO_PKG_VERSION"));
+    info!(
+        "🔐 Iniciando AI KeyVault Desktop v{}",
+        env!("CARGO_PKG_VERSION")
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

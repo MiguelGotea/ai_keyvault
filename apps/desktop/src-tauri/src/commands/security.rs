@@ -26,10 +26,7 @@ static AUTOLOCK_RUNNING: AtomicBool = AtomicBool::new(false);
 /// Se llama al desbloquear la bóveda.
 /// Si ya hay un timer corriendo, lo reemplaza (cancela el anterior vía flag).
 #[command]
-pub async fn start_autolock_timer(
-    app: AppHandle,
-    minutes: u32,
-) -> Result<(), String> {
+pub async fn start_autolock_timer(app: AppHandle, minutes: u32) -> Result<(), String> {
     let minutes = minutes.max(1).min(120);
     info!("⏱ Iniciando timer de autobloqueo: {minutes} min");
 
@@ -57,10 +54,7 @@ pub async fn start_autolock_timer(
 /// Reinicia el timer de autobloqueo (llamar en cada interacción del usuario).
 /// El frontend llama esto en onMouseMove / onKeyDown del Tauri window.
 #[command]
-pub async fn reset_autolock_timer(
-    app: AppHandle,
-    minutes: u32,
-) -> Result<(), String> {
+pub async fn reset_autolock_timer(app: AppHandle, minutes: u32) -> Result<(), String> {
     // Reiniciar simplemente vuelve a iniciar — cancela el anterior automáticamente
     start_autolock_timer(app, minutes).await
 }
@@ -92,8 +86,8 @@ pub async fn sync_vault_to_vps(app: &AppHandle) -> Result<(), String> {
         return Err("No hay bóveda local para subir".into());
     }
 
-    let vault_str = std::fs::read_to_string(&path)
-        .map_err(|e| format!("No se pudo leer vault.json: {e}"))?;
+    let vault_str =
+        std::fs::read_to_string(&path).map_err(|e| format!("No se pudo leer vault.json: {e}"))?;
 
     let device_id = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "desktop-win".to_string());
     let payload = serde_json::json!({
@@ -112,7 +106,10 @@ pub async fn sync_vault_to_vps(app: &AppHandle) -> Result<(), String> {
         info!("☁️ Bóveda sincronizada con VPS");
         Ok(())
     } else {
-        Err(format!("Error del servidor al sincronizar: {}", resp.status()))
+        Err(format!(
+            "Error del servidor al sincronizar: {}",
+            resp.status()
+        ))
     }
 }
 
@@ -187,7 +184,10 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
         std::fs::write(&path, encrypted_payload.as_bytes())
             .map_err(|e| format!("Error guardando bóveda descargada: {e}"))?;
 
-        info!("⬇️ Bóveda descargada del VPS ({} bytes)", encrypted_payload.len());
+        info!(
+            "⬇️ Bóveda descargada del VPS ({} bytes)",
+            encrypted_payload.len()
+        );
         Ok(VaultSyncResult {
             success: true,
             direction: "download".into(),
@@ -266,5 +266,3 @@ pub async fn get_last_backup_info() -> Result<BackupInfo, String> {
         message: "Sin commits de respaldo aún en ai_keyvault_data.".into(),
     })
 }
-
-
