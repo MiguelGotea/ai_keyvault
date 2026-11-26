@@ -124,6 +124,8 @@ fn main() {
             commands::security::get_last_backup_info,
             commands::security::get_autostart_enabled,
             commands::security::set_autostart_enabled,
+            commands::security::set_alerts_muted_hours,
+            commands::security::get_alerts_muted_until,
         ])
         .build(tauri::generate_context!())
         .expect("Error al construir la aplicación AI KeyVault")

@@ -104,6 +104,7 @@ pub async fn start_poller(app: AppHandle, poller: State<'_, PollerManager>) -> R
     // Lanzar el sidecar via tauri-plugin-shell con mapa de identidad y configuración (D-02, D-06)
     // El binario se llama "ai-keyvault-poller" sin sufijo (Tauri agrega el triple)
     let map_path = crate::commands::vault::identity_map_path(&app);
+    let mute_path = crate::commands::security::alerts_mute_file_path(&app);
     let result = app
         .shell()
         .sidecar("ai-keyvault-poller")
@@ -112,6 +113,11 @@ pub async fn start_poller(app: AppHandle, poller: State<'_, PollerManager>) -> R
             "AKYV_IDENTITY_MAP_PATH",
             map_path.to_string_lossy().as_ref(),
         )
+        .env(
+            "AKYV_ALERTS_MUTE_FILE",
+            mute_path.to_string_lossy().as_ref(),
+        )
+        .env("AKYV_ALERTS_MUTE_FILE", mute_path.to_string_lossy().as_ref())
         .env("AKYV_SERVER_URL", crate::api_client::SERVER_URL)
         .env("AKYV_POLL_INTERVAL", "600")
         .spawn();

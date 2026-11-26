@@ -13,8 +13,8 @@ use std::time::Duration;
 /// cambiar aquí y actualizar el Caddyfile.
 pub const SERVER_URL: &str = "http://198.211.97.243:3010";
 
-/// Timeout estándar para peticiones al VPS (5 segundos).
-const TIMEOUT_SECS: u64 = 5;
+/// Timeout estándar para peticiones al VPS (15 segundos).
+const TIMEOUT_SECS: u64 = 15;
 
 /// Singleton del cliente HTTP — reutiliza conexiones TCP.
 static CLIENT: OnceLock<Client> = OnceLock::new();

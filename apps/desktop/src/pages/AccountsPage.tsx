@@ -32,6 +32,7 @@ interface AccountCredentials {
   password: string | null;
   notes: string | null;
   details: string | null;
+  subscription_ends_at: string | null;
 }
 
 export default function AccountsPage() {
@@ -170,6 +171,7 @@ export default function AccountsPage() {
         password: editingAccount.password || null,
         notes: editingAccount.notes || null,
         details: editingAccount.details || null,
+        subscriptionEndsAt: editingAccount.subscription_ends_at || null,
       });
       setEditingAccount(null);
       accounts.refetch();
@@ -381,6 +383,15 @@ export default function AccountsPage() {
                   placeholder="Opcional"
                   value={editingAccount.details ?? ""}
                   onChange={e => setEditingAccount({ ...editingAccount, details: e.target.value })}
+                />
+              </div>
+              <div style={styles.formRow}>
+                <label style={styles.label}>Fin de suscripción (YYYY-MM-DD)</label>
+                <input
+                  style={styles.input}
+                  type="date"
+                  value={editingAccount.subscription_ends_at ?? ""}
+                  onChange={e => setEditingAccount({ ...editingAccount, subscription_ends_at: e.target.value || null })}
                 />
               </div>
               <div style={styles.formRow}>

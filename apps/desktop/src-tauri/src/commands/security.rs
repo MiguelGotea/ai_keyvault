@@ -408,3 +408,52 @@ pub async fn set_autostart_enabled(enabled: bool) -> Result<(), String> {
         Err("Iniciar con Windows solo está disponible en Windows.".into())
     }
 }
+
+/// Ruta del archivo de silencio temporal de alertas (Fase 22).
+pub fn alerts_mute_file_path(app: &AppHandle) -> std::path::PathBuf {
+    app.path()
+        .app_data_dir()
+        .expect("No se pudo obtener AppData dir")
+        .join("alerts-muted-until.txt")
+}
+
+/// Silencia notificaciones de alerta por `hours` horas (0 = reactivar de inmediato).
+#[command]
+pub async fn set_alerts_muted_hours(app: AppHandle, hours: u32) -> Result<Option<String>, String> {
+    let path = alerts_mute_file_path(&app);
+    if hours == 0 {
+        if path.exists() {
+            std::fs::remove_file(&path)
+                .map_err(|e| format!("No se pudo reactivar alertas: {e}"))?;
+        }
+        return Ok(None);
+    }
+
+    let clamped = hours.min(168);
+    let until = (chrono::Utc::now() + chrono::Duration::hours(clamped as i64)).to_rfc3339();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("No se pudo crear directorio de datos: {e}"))?;
+    }
+    std::fs::write(&path, &until)
+        .map_err(|e| format!("No se pudo guardar silencio de alertas: {e}"))?;
+    Ok(Some(until))
+}
+
+/// Devuelve el timestamp RFC 3339 hasta el cual las alertas están silenciadas, o None.
+#[command]
+pub async fn get_alerts_muted_until(app: AppHandle) -> Result<Option<String>, String> {
+    let path = alerts_mute_file_path(&app);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(&path)
+        .map_err(|e| format!("No se pudo leer estado de silencio: {e}"))?;
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw.trim()) {
+        if dt.with_timezone(&chrono::Utc) > chrono::Utc::now() {
+            return Ok(Some(raw.trim().to_string()));
+        }
+    }
+    let _ = std::fs::remove_file(&path);
+    Ok(None)
+}

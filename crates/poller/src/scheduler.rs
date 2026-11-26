@@ -87,7 +87,12 @@ async fn run_cycle(
             reset_time: s.reset_time.clone(),
         })
         .collect();
-    alert_manager.check_and_notify(&alert_readings);
+    let muted = alerts_are_muted();
+    if muted {
+        info!("🔕 Alertas silenciadas temporalmente por el usuario");
+    } else {
+        alert_manager.check_and_notify(&alert_readings);
+    }
 
     // 4. Agrupar por account_id
     let mut by_account: HashMap<String, Vec<_>> = HashMap::new();
@@ -140,7 +145,9 @@ async fn run_cycle(
     // 7. Upload de alertas disparadas al servidor (Fase D)
     //    Re-evalúa las readings para saber cuáles superaron el umbral
     //    y las sube como registro histórico.
-    upload_alerts_to_server(client, config, &alert_readings).await;
+    if !muted {
+        upload_alerts_to_server(client, config, &alert_readings).await;
+    }
 
     // 8. Ping automático (Fase 8) — solo si AKYV_PING_ENABLED=true y es la hora configurada
     pinger::maybe_ping_auto(client, config, &snapshots).await;
@@ -184,4 +191,18 @@ async fn upload_alerts_to_server(
             warn!(error = %e, "⚠️ Error al registrar alerta en servidor");
         }
     }
+}
+
+/// Comprueba si `AKYV_ALERTS_MUTE_FILE` contiene un timestamp RFC 3339 futuro.
+fn alerts_are_muted() -> bool {
+    let Ok(path) = std::env::var("AKYV_ALERTS_MUTE_FILE") else {
+        return false;
+    };
+    let Ok(raw) = std::fs::read_to_string(path.trim()) else {
+        return false;
+    };
+    let Ok(until) = chrono::DateTime::parse_from_rfc3339(raw.trim()) else {
+        return false;
+    };
+    until.with_timezone(&chrono::Utc) > chrono::Utc::now()
 }

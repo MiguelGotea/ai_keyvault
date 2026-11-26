@@ -2,10 +2,10 @@
  * AlertsPage — Log de alertas del VPS con sugerencia de cuenta alternativa (Fase 21).
  * Solo muestra alertas de cuentas que están en la bóveda.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
-import type { AlertRecord, AccountInfo, PoolSummary, SwitchResult } from "../types/api";
+import type { AlertRecord, AccountInfo, PollerStatus, PoolSummary, SwitchResult } from "../types/api";
 import es from "../i18n/es.json";
 
 interface AlternativeCandidate {
@@ -16,11 +16,47 @@ interface AlternativeCandidate {
 export default function AlertsPage() {
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [switchMsg, setSwitchMsg] = useState<string | null>(null);
+  const [mutedUntil, setMutedUntil] = useState<string | null>(null);
+  const [muteError, setMuteError] = useState<string | null>(null);
 
   // Cuentas de la bóveda (fuente de verdad)
   const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
   const alerts = useCommand<AlertRecord[]>("get_alerts", {});
   const compare = useCommand<PoolSummary[]>("get_stats_compare", { days: 7 });
+  const pollerStatus = useCommand<PollerStatus>("get_poller_status", {});
+
+  useEffect(() => {
+    invoke<string | null>("get_alerts_muted_until")
+      .then(setMutedUntil)
+      .catch(e => setMuteError(`No se pudo leer estado de silencio: ${String(e)}`));
+  }, []);
+
+  async function setMuteHours(hours: number) {
+    setMuteError(null);
+    try {
+      const until = await invoke<string | null>("set_alerts_muted_hours", { hours });
+      setMutedUntil(until);
+    } catch (e) {
+      setMuteError(String(e));
+    }
+  }
+
+  // Alertas de fin de suscripción (7 y 1 día)
+  const subscriptionWarnings = useMemo(() => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const out: { account: AccountInfo; daysLeft: number; dateStr: string }[] = [];
+    for (const acc of vaultAccounts.data ?? []) {
+      if (!acc.subscription_ends_at) continue;
+      const target = new Date(`${acc.subscription_ends_at}T00:00:00`).getTime();
+      if (Number.isNaN(target)) continue;
+      const daysLeft = Math.ceil((target - today) / 86_400_000);
+      if (daysLeft <= 7) {
+        out.push({ account: acc, daysLeft, dateStr: acc.subscription_ends_at });
+      }
+    }
+    return out;
+  }, [vaultAccounts.data]);
 
   // D-02: filtrar alertas por UUID de bóveda y mostrar su alias
   const accountById = useMemo(
@@ -104,6 +140,70 @@ export default function AlertsPage() {
       {isLoading && <div style={styles.hint}>Cargando alertas…</div>}
       {alerts.error && <div style={styles.error}>{alerts.error}</div>}
       {compare.error && <div style={styles.error}>No se pudo consultar cuota para sugerencias: {compare.error}</div>}
+      {muteError && <div style={styles.error}>⚠️ {muteError}</div>}
+
+      {/* Controles para silenciar alertas por X horas (Fase 22) */}
+      <div style={styles.muteBar}>
+        <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+          {mutedUntil
+            ? `🔕 Alertas silenciadas hasta ${new Date(mutedUntil).toLocaleString("es-MX")}`
+            : "🔔 Notificaciones de alerta activas"}
+        </span>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {[1, 4, 8, 24].map(h => (
+            <button key={h} style={styles.muteBtn} onClick={() => setMuteHours(h)}>
+              Silenciar {h} h
+            </button>
+          ))}
+          {mutedUntil && (
+            <button style={{ ...styles.muteBtn, borderColor: "var(--color-primary)", color: "var(--color-primary)" }} onClick={() => setMuteHours(0)}>
+              Reactivar
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Alerta de consulta fallando / login vencido */}
+      {(pollerStatus.data?.state === "error" || pollerStatus.data?.error) && (
+        <div style={{ ...styles.alertCard, borderLeft: "4px solid var(--color-danger)" }}>
+          <div style={styles.alertTop}>
+            <span style={{ ...styles.levelBadge, background: "var(--color-danger)" }}>CONSULTA / LOGIN</span>
+            <span style={styles.alertProvider}>poller</span>
+          </div>
+          <div style={styles.alertBody}>
+            <strong>Consulta fallando o sesión vencida:</strong>{" "}
+            {pollerStatus.data.error ?? "El poller reportó un error."}
+          </div>
+        </div>
+      )}
+
+      {/* Alertas de fin de suscripción (7 y 1 día) */}
+      {subscriptionWarnings.map(w => (
+        <div
+          key={`sub-${w.account.id}`}
+          style={{
+            ...styles.alertCard,
+            borderLeft: `4px solid ${w.daysLeft <= 1 ? "var(--color-danger)" : "var(--color-warning)"}`,
+          }}
+        >
+          <div style={styles.alertTop}>
+            <span style={{ ...styles.levelBadge, background: w.daysLeft <= 1 ? "var(--color-danger)" : "var(--color-warning)" }}>
+              {w.daysLeft <= 1 ? "CRÍTICO" : "SUSCRIPCIÓN"}
+            </span>
+            <span style={styles.alertProvider}>{w.account.provider} · {w.dateStr}</span>
+          </div>
+          <div style={styles.alertBody}>
+            <strong>{w.account.alias}</strong>
+            {w.daysLeft < 0
+              ? ` — Suscripción vencida hace ${Math.abs(w.daysLeft)} día(s).`
+              : w.daysLeft === 0
+              ? " — Suscripción vence hoy."
+              : w.daysLeft === 1
+              ? " — Suscripción vence mañana (1 día)."
+              : ` — Suscripción vence en ${w.daysLeft} días.`}
+          </div>
+        </div>
+      ))}
 
       {switchMsg && (
         <div style={{
@@ -208,4 +308,6 @@ const styles: Record<string, React.CSSProperties> = {
   altRow: { marginTop: 6, paddingTop: 8, borderTop: "1px solid var(--color-border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" as const },
   altText: { fontSize: 12, color: "var(--color-text-secondary)" },
   switchBtn: { padding: "5px 12px", border: "none", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600 },
+  muteBar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", flexWrap: "wrap" as const },
+  muteBtn: { padding: "4px 10px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)", fontSize: 11, cursor: "pointer" },
 };

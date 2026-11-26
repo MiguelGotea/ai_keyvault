@@ -19,6 +19,8 @@ pub struct VaultAccount {
     pub encrypted_notes: Option<EncryptedField>,
     #[serde(default)]
     pub encrypted_details: Option<EncryptedField>,
+    #[serde(default)]
+    pub subscription_ends_at: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -186,6 +188,7 @@ impl Vault {
             encrypted_tokens: enc_tokens,
             encrypted_notes: enc_notes,
             encrypted_details: None,
+            subscription_ends_at: None,
             created_at: now,
             updated_at: now,
         };
@@ -289,6 +292,7 @@ impl Vault {
         password: Option<&str>,
         notes: Option<&str>,
         details: Option<&str>,
+        subscription_ends_at: Option<&str>,
     ) -> Result<()> {
         let vk = self.unlocked_key.as_ref().ok_or(VaultError::VaultLocked)?;
         let now = Utc::now();
@@ -319,6 +323,10 @@ impl Vault {
         };
 
         acc.alias = alias.to_string();
+        acc.subscription_ends_at = subscription_ends_at
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
         acc.updated_at = now;
         self.state.updated_at = now;
         Ok(())
@@ -351,6 +359,7 @@ mod tests {
                 Some("FakePass123!"),
                 Some("Nota falsa"),
                 Some("Detalle falso"),
+                Some("2026-12-31"),
             )
             .expect("update");
 

@@ -720,6 +720,7 @@ pub struct AccountCredentials {
     pub password: Option<String>,
     pub notes: Option<String>,
     pub details: Option<String>,
+    pub subscription_ends_at: Option<String>,
 }
 
 /// Descifra credenciales, notas y detalles de una cuenta (solo si bóveda desbloqueada).
@@ -733,13 +734,14 @@ pub async fn get_account_credentials(
     let guard = vault_state.vault.lock().unwrap();
     match &*guard {
         Some(vault) if vault.is_unlocked() => {
-            let alias = vault
+            let acc_ref = vault
                 .state()
                 .accounts
                 .iter()
                 .find(|a| a.id == uid)
-                .map(|a| a.alias.clone())
                 .ok_or_else(|| "Cuenta no encontrada en la bóveda".to_string())?;
+            let alias = acc_ref.alias.clone();
+            let subscription_ends_at = acc_ref.subscription_ends_at.clone();
             let email = vault
                 .decrypt_account_email(uid)
                 .map_err(|e| e.to_string())?;
@@ -759,6 +761,7 @@ pub async fn get_account_credentials(
                 password,
                 notes,
                 details,
+                subscription_ends_at,
             })
         }
         _ => Err("Bóveda bloqueada o no cargada".into()),
@@ -776,6 +779,7 @@ pub async fn update_vault_account(
     password: Option<String>,
     notes: Option<String>,
     details: Option<String>,
+    subscription_ends_at: Option<String>,
 ) -> Result<(), String> {
     use uuid::Uuid;
     let uid = Uuid::parse_str(&account_uuid).map_err(|_| "UUID inválido".to_string())?;
@@ -807,6 +811,7 @@ pub async fn update_vault_account(
                         password.as_deref(),
                         notes.as_deref(),
                         details.as_deref(),
+                        subscription_ends_at.as_deref(),
                     )
                     .map_err(|e| format!("Error actualizando cuenta: {e}"))?;
                 save_vault_state(&app, vault.state())?;
@@ -968,6 +973,7 @@ pub struct AccountInfo {
     pub provider: String,
     pub alias: String,
     pub email: Option<String>,
+    pub subscription_ends_at: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -988,6 +994,7 @@ pub async fn list_vault_accounts(
                     provider: a.provider.clone(),
                     alias: a.alias.clone(),
                     email: vault.decrypt_account_email(a.id).ok(),
+                    subscription_ends_at: a.subscription_ends_at.clone(),
                     created_at: a.created_at.to_rfc3339(),
                     updated_at: a.updated_at.to_rfc3339(),
                 })
