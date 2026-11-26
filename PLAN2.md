@@ -694,8 +694,8 @@ Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fi
 | 24 | **Detalle de cuenta con pestañas** (Resumen, Cuota y cooldown, Estadísticas, Chat, Credenciales, Historial) *(🟡 Código escrito 2026-11-26)* |
 | 25 | **Tema claro/oscuro** y pantalla **«Mis dispositivos»** (revocar acceso) *(✅ Completada 2026-11-26)* |
 | 26 | Cierre del switch: botón «Deshacer», aviso de reinicio de herramientas, detección de procesos sin cerrarlos, «sin agente en esta PC» *(✅ Completada 2026-11-26)* |
-| 27 | Estadísticas ampliadas (tokens por modelo, eficiencia, cuota desperdiciada) y pantalla «Experimento de cooldown» *(🟡 Código escrito 2026-11-26)* |
-| 28 | Instalador firmado y versión portable |
+| 27 | Estadísticas ampliadas (tokens por modelo, eficiencia, cuota desperdiciada) y pantalla «Experimento de cooldown» *(✅ Completada 2026-11-26)* |
+| 28 | Instalador firmado y versión portable *(🟡 Código escrito 2026-11-26)* |
 
 ---
 

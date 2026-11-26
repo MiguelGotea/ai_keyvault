@@ -177,18 +177,72 @@ jobs:
         run: pnpm tauri build
         working-directory: apps/desktop
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ""  # Sin firma de código por ahora (SmartScreen warning documentado)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: 📤 Subir instalador como artifact
+      - name: 🔐 Firmar binarios e instaladores (si hay certificado configurado)
+        shell: pwsh
+        env:
+          CERT_B64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          CERT_PASS: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CERT_B64) -or [string]::IsNullOrWhiteSpace($env:CERT_PASS)) {
+            Write-Host "[INFO] Sin secrets WINDOWS_CERT_PFX_BASE64 / WINDOWS_CERT_PASSWORD — continuando sin firma Authenticode."
+            exit 0
+          }
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe" -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) {
+            Write-Error "No se encontró signtool.exe en el runner."
+            exit 1
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "akv-signing.pfx"
+          try {
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CERT_B64))
+            $targets = @()
+            $targets += Get-Item "apps/desktop/src-tauri/target/release/ai-keyvault-desktop.exe" -ErrorAction SilentlyContinue
+            $targets += Get-Item "target/x86_64-pc-windows-msvc/release/ai-keyvault-poller.exe" -ErrorAction SilentlyContinue
+            $targets += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue
+            $targets += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/msi/*.msi" -ErrorAction SilentlyContinue
+            foreach ($file in $targets) {
+              & $signtool.FullName sign /f $pfxPath /p $env:CERT_PASS /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $file.FullName
+              if ($LASTEXITCODE -ne 0) { throw "signtool falló en $($file.Name)" }
+            }
+            Write-Host "[OK] Firma Authenticode aplicada a $($targets.Count) archivo(s)."
+          } finally {
+            if (Test-Path $pfxPath) { Remove-Item -Force $pfxPath }
+          }
+
+      - name: 📦 Empaquetar versión portable (.zip)
+        shell: pwsh
+        run: |
+          $ver = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          $portableDir = "apps/desktop/src-tauri/target/release/bundle/portable"
+          $stagingDir = "$portableDir/AI-KeyVault-portable"
+          New-Item -ItemType Directory -Force -Path $stagingDir | Out-Null
+          Copy-Item "apps/desktop/src-tauri/target/release/ai-keyvault-desktop.exe" "$stagingDir/AI KeyVault.exe" -Force
+          Copy-Item "target/x86_64-pc-windows-msvc/release/ai-keyvault-poller.exe" "$stagingDir/ai-keyvault-poller.exe" -Force
+          @"
+AI KeyVault v$ver — Edición Portable (Windows x64)
+===================================================
+1. Extrae esta carpeta en cualquier ubicación.
+2. Ejecuta "AI KeyVault.exe" (mantén "ai-keyvault-poller.exe" en la misma carpeta).
+3. Tu bóveda local se almacena cifrada en %APPDATA%\com.miguelgotea.ai-keyvault\.
+"@ | Set-Content -Path "$stagingDir/LEEME-PORTABLE.txt" -Encoding UTF8
+          $zipPath = "$portableDir/AI-KeyVault-portable-v$ver-win-x64.zip"
+          Compress-Archive -Path "$stagingDir/*" -DestinationPath $zipPath -Force
+          Remove-Item -Recurse -Force $stagingDir
+          Write-Host "[OK] Portable creado: $zipPath"
+
+      - name: 📤 Subir instalador y portable como artifact
         uses: actions/upload-artifact@v4
         with:
           name: ai-keyvault-installer-${{ github.sha }}
           path: |
             apps/desktop/src-tauri/target/release/bundle/msi/*.msi
             apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            apps/desktop/src-tauri/target/release/bundle/portable/*.zip
           retention-days: 30
 
-      - name: 🚀 Publicar instalador en GitHub Releases
+      - name: 🚀 Publicar instalador y portable en GitHub Releases
         if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -200,4 +254,5 @@ jobs:
           $files = @()
           $files += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
           $files += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/msi/*.msi" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
-          gh release create $tag @files --title "AI KeyVault v$ver ($short)" --notes "Instalador generado automáticamente desde main ($short)." --latest
+          $files += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/portable/*.zip" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+          gh release create $tag @files --title "AI KeyVault v$ver ($short)" --notes "Instalador y versión portable generados automáticamente desde main ($short)." --latest
