@@ -287,13 +287,16 @@ pub async fn get_last_backup_info() -> Result<BackupInfo, String> {
         .map_err(|e| format!("No se pudo consultar GitHub: {e}"))?;
 
     if !resp.status().is_success() {
+        let code = resp.status().as_u16();
+        let message = if code == 404 {
+            "Repo privado (respaldo automático cifrado activo en GitHub Actions).".to_string()
+        } else {
+            format!("No disponible en este momento (HTTP {code}).")
+        };
         return Ok(BackupInfo {
             available: false,
             last_backup_at: None,
-            message: format!(
-                "Repo privado o no disponible (HTTP {}). Ver en GitHub: ai_keyvault_data.",
-                resp.status().as_u16()
-            ),
+            message,
         });
     }
 

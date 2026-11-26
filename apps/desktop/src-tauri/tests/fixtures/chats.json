@@ -1,17 +1,14 @@
 [
   {
     "id": "00000000-0000-0000-0000-000000000099",
-    "account_id": "00000000-0000-0000-0000-000000000001",
     "provider": "agy",
     "title": "Chat de prueba falso",
     "created_at": "2026-11-25T10:00:00Z",
     "updated_at": "2026-11-25T18:00:00Z",
-    "device_id": "test-fake-pc",
     "archived": 0
   },
   {
     "id": "00000000-0000-0000-0000-000000000098",
-    "account_id": "00000000-0000-0000-0000-000000000001",
     "provider": "codex",
     "title": null,
     "created_at": "2026-11-25T09:00:00Z",

@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const [autolockError, setAutolockError] = useState<string | null>(null);
   const [switchingAccount, setSwitchingAccount] = useState<string | null>(null);
   const [switchMsg, setSwitchMsg] = useState<string | null>(null);
+  const [detailAccount, setDetailAccount] = useState<AccountInfo | null>(null);
 
   // 1. Cuentas de la bóveda (fuente de verdad)
   const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
@@ -208,58 +209,116 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Tarjetas de cuentas de la bóveda */}
-      {vaultList.map(account => {
-        // D-02: cruzar pools del VPS por UUID opaco de la bóveda (nunca por alias)
-        const pools = poolsByVpsId[account.id] ?? [];
-        const hasAlert = pools.some(p => p.current_percent_used >= 80);
-        const isSwitching = switchingAccount === account.id;
+      {/* Lista compacta de cuentas en una sola línea */}
+      {vaultList.length > 0 && (
+        <div style={styles.compactList}>
+          {vaultList.map(account => {
+            // D-02: cruzar pools del VPS por UUID opaco de la bóveda (nunca por alias)
+            const pools = poolsByVpsId[account.id] ?? [];
+            const primaryPool = pools.reduce<PoolSummary | null>(
+              (max, p) => (!max || p.current_percent_used > max.current_percent_used ? p : max),
+              null
+            );
+            const pct = primaryPool ? Math.round(primaryPool.current_percent_used) : null;
+            const pctColor =
+              pct === null
+                ? "var(--color-text-disabled)"
+                : pct >= 95
+                ? "var(--color-danger)"
+                : pct >= 80
+                ? "var(--color-warning)"
+                : "var(--color-success)";
+            const nextReset = primaryPool?.reset_time
+              ? new Date(primaryPool.reset_time).toLocaleString("es-MX", {
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "—";
+            const isSwitching = switchingAccount === account.id;
+
+            return (
+              <div key={account.id} style={styles.compactRow}>
+                <span style={styles.accountProvider}>
+                  {account.provider === "agy" ? "AGY" : "CODEX"}
+                </span>
+                <div style={styles.identityCol}>
+                  <span style={styles.accountAlias}>{account.alias}</span>
+                  {account.email && <span style={styles.accountEmail}>{account.email}</span>}
+                </div>
+                <span style={{ ...styles.pctPill, color: pctColor, borderColor: pctColor }}>
+                  {pct !== null ? `${pct}% usado` : "Sin datos"}
+                </span>
+                <span style={styles.resetCol} title="Próximo reinicio">
+                  ↻ {nextReset}
+                </span>
+                <div style={styles.rowActions}>
+                  <button
+                    style={styles.detailBtn}
+                    onClick={() => setDetailAccount(account)}
+                    title="Ver detalle de pools, burn rate y última lectura"
+                  >
+                    Detalles
+                  </button>
+                  <button
+                    style={styles.switchBtn}
+                    onClick={() => handleSwitch(account)}
+                    disabled={isSwitching}
+                    title="Escribir esta credencial en esta PC"
+                  >
+                    {isSwitching ? "Cambiando…" : "⚡ Usar"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal de detalle moderno por cuenta */}
+      {detailAccount && (() => {
+        const pools = poolsByVpsId[detailAccount.id] ?? [];
         const latestRead = pools.reduce<string | null>((latest, p) => {
           if (!latest) return p.last_read_at;
           return new Date(p.last_read_at) > new Date(latest) ? p.last_read_at : latest;
         }, null);
-
         return (
-          <section key={account.id} style={styles.accountSection}>
-            <div style={styles.accountHeader}>
-              <div>
-                <span style={styles.accountProvider}>
-                  {account.provider === "agy" ? "ANTIGRAVITY" : "CODEX"}
-                </span>
-                <span style={styles.accountAlias}>{account.alias}</span>
-                <span style={styles.lastReadTag}>
-                  {latestRead ? ` · Última lectura: ${formatRelativeAge(latestRead)}` : " · Sin lecturas"}
-                </span>
+          <div
+            style={styles.modalOverlay}
+            onClick={e => { if (e.target === e.currentTarget) setDetailAccount(null); }}
+          >
+            <div style={styles.modal}>
+              <div style={styles.modalHeader}>
+                <div>
+                  <span style={styles.accountProvider}>
+                    {detailAccount.provider === "agy" ? "ANTIGRAVITY" : "CODEX"}
+                  </span>
+                  <strong style={{ fontSize: 16, color: "var(--color-text)" }}>{detailAccount.alias}</strong>
+                  {detailAccount.email && (
+                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 2 }}>
+                      {detailAccount.email} · {latestRead ? `Última lectura: ${formatRelativeAge(latestRead)}` : "Sin lecturas"}
+                    </div>
+                  )}
+                </div>
+                <button style={styles.closeMsgBtn} onClick={() => setDetailAccount(null)}>✕</button>
               </div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {hasAlert && <span style={styles.alertDot}>⚠️</span>}
-                <button
-                  style={styles.switchBtn}
-                  onClick={() => handleSwitch(account)}
-                  disabled={isSwitching}
-                  title="Escribir esta credencial en el Credential Manager de Windows"
-                >
-                  {isSwitching ? "Cambiando…" : "⚡ Usar en esta PC"}
-                </button>
-              </div>
+              {pools.length > 0 ? (
+                <div style={styles.cardGrid}>
+                  {pools.map(pool => (
+                    <QuotaCard key={pool.pool} pool={pool} />
+                  ))}
+                </div>
+              ) : (
+                <div style={styles.noDataMsg}>
+                  <span style={{ fontSize: 20 }}>📡</span>
+                  <span>Sin datos de cuota aún — el poller los recopilará automáticamente.</span>
+                </div>
+              )}
             </div>
-
-            {/* Pools de cuota del VPS */}
-            {pools.length > 0 ? (
-              <div style={styles.cardGrid}>
-                {pools.map(pool => (
-                  <QuotaCard key={pool.pool} pool={pool} />
-                ))}
-              </div>
-            ) : (
-              <div style={styles.noDataMsg}>
-                <span style={{ fontSize: 20 }}>📡</span>
-                <span>Sin datos de cuota aún — el poller los recopilará automáticamente.</span>
-              </div>
-            )}
-          </section>
+          </div>
         );
-      })}
+      })()}
     </div>
   );
 }
@@ -278,10 +337,19 @@ const styles: Record<string, React.CSSProperties> = {
   errorBox: { padding: "12px 16px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", fontSize: 13, color: "#991B1B", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" as const },
   retryBtn: { padding: "5px 10px", border: "1px solid #FECACA", borderRadius: "var(--radius-sm)", background: "white", color: "#991B1B", fontSize: 12, cursor: "pointer" },
   empty: { display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 12, padding: 48, color: "var(--color-text-secondary)", textAlign: "center" },
-  accountSection: { background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: "18px 20px", display: "flex", flexDirection: "column" as const, gap: 14 },
-  accountHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 },
-  accountProvider: { fontSize: 10, fontWeight: 700, color: "var(--color-primary)", textTransform: "uppercase" as const, letterSpacing: "0.08em", marginRight: 10 },
-  accountAlias: { fontSize: 14, color: "var(--color-text-secondary)", fontWeight: 500 },
+  compactList: { display: "flex", flexDirection: "column" as const, gap: 8 },
+  compactRow: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", flexWrap: "wrap" as const },
+  identityCol: { display: "flex", alignItems: "baseline", gap: 8, flex: 1, minWidth: 180 },
+  accountEmail: { fontSize: 12, color: "var(--color-text-disabled)", fontFamily: "var(--font-mono)" },
+  pctPill: { fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, border: "1px solid" },
+  resetCol: { fontSize: 12, color: "var(--color-text-secondary)", minWidth: 120 },
+  rowActions: { display: "flex", gap: 6, marginLeft: "auto" },
+  detailBtn: { padding: "5px 10px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)", fontSize: 12, cursor: "pointer" },
+  modalOverlay: { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 },
+  modal: { background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: 22, width: "min(680px, 92vw)", maxHeight: "85vh", overflowY: "auto" as const, display: "flex", flexDirection: "column" as const, gap: 16 },
+  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  accountProvider: { fontSize: 10, fontWeight: 700, color: "var(--color-primary)", textTransform: "uppercase" as const, letterSpacing: "0.08em", marginRight: 6 },
+  accountAlias: { fontSize: 14, color: "var(--color-text)", fontWeight: 600 },
   alertDot: { fontSize: 14 },
   switchBtn: { padding: "6px 14px", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600 },
   cardGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 },

@@ -24,7 +24,7 @@
 | `GET /api/stats/weekly/:account_id?days=N` | App | `WeeklyReport` (JSON) | |
 | `GET /api/stats/export/:account_id` | *(pendiente UI)* | CSV / JSON | |
 | `POST /api/chats` | Poller | Req: `{ account_id, device_id, chats: [...] }` | |
-| `GET /api/chats/:account_id` | App | `Vec<{ id, account_id, provider, title, created_at, updated_at, device_id?, archived }>` | `archived`: bool o 0/1 |
+| `GET /api/chats/:account_id` | App | `Vec<{ id, provider, title, created_at, updated_at, archived }>` | `archived`: bool o 0/1 (sin `account_id`) |
 | `POST /api/alerts` | Poller | Req: `{ account_id, provider, pool, level, percent_used, reset_time, notified_toast, notified_ntfy }` | `level`: `"warn"` \| `"critical"` |
 | `GET /api/alerts` | App | `Vec<{ id, account_id, provider, pool, level, percent_used, reset_time, notified_toast, notified_ntfy, detected_at }>` | Booleans pueden venir como bool o 0/1 |
 | `POST /api/switch` | App | Req: `{ to_account_id, from_account_id, provider, device_id, success, reason }` | |

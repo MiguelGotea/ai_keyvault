@@ -80,6 +80,7 @@ pub struct HeatmapCell {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ChatSession {
     pub id: String,
+    #[serde(default)]
     pub account_id: String,
     pub provider: String,
     pub title: Option<String>,

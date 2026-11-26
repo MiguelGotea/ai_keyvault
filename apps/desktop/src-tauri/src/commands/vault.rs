@@ -1,4 +1,4 @@
-﻿//! Comandos Tauri para la bóveda local cifrada (Fase 12).
+//! Comandos Tauri para la bóveda local cifrada (Fase 12).
 //! Gestiona el ciclo de vida: crear → desbloquear → autobloquear → recuperar.
 //!
 //! La bóveda se guarda en el directorio de datos de la app:
@@ -967,6 +967,7 @@ pub struct AccountInfo {
     pub id: String,
     pub provider: String,
     pub alias: String,
+    pub email: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -986,6 +987,7 @@ pub async fn list_vault_accounts(
                     id: a.id.to_string(),
                     provider: a.provider.clone(),
                     alias: a.alias.clone(),
+                    email: vault.decrypt_account_email(a.id).ok(),
                     created_at: a.created_at.to_rfc3339(),
                     updated_at: a.updated_at.to_rfc3339(),
                 })

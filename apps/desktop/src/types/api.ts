@@ -27,6 +27,7 @@ export interface AccountInfo {
   id: string;
   provider: string;
   alias: string;
+  email?: string;
   created_at: string;
   updated_at: string;
 }
@@ -88,12 +89,12 @@ export interface HeatmapCell {
 
 export interface ChatSession {
   id: string;
-  account_id: string;
+  account_id?: string;
   provider: string;
   title: string | null;
   created_at: string;
   updated_at: string;
-  device_id: string;
+  device_id?: string;
   archived: boolean;
 }
 
