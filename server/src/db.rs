@@ -145,5 +145,42 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
+    // 9. Tabla de usuarios (Fase 19.1 — autenticación separada de cifrado)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS users (
+            username        TEXT PRIMARY KEY,
+            display_name    TEXT NOT NULL,
+            kdf_salt_hex    TEXT NOT NULL,
+            kdf_memory_kib  INTEGER NOT NULL,
+            kdf_iterations  INTEGER NOT NULL,
+            kdf_parallelism INTEGER NOT NULL,
+            auth_key_hash   TEXT NOT NULL,
+            failed_attempts INTEGER NOT NULL DEFAULT 0,
+            locked_until    TEXT,
+            created_at      TEXT NOT NULL
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    // 10. Tabla de bóvedas cifradas por usuario (Fase 19.1 — conocimiento cero)
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS user_vaults (
+            username          TEXT PRIMARY KEY,
+            version           INTEGER NOT NULL,
+            device_id         TEXT NOT NULL,
+            encrypted_payload TEXT NOT NULL,
+            checksum_sha256   TEXT NOT NULL,
+            updated_at        TEXT NOT NULL,
+            FOREIGN KEY (username) REFERENCES users(username)
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     Ok(())
 }

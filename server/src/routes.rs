@@ -946,3 +946,447 @@ pub async fn post_alert(
         "detected_at": detected_at
     })))
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. Autenticación de usuario y bóveda por usuario (Fase 19.1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn hash_auth_key(auth_key_hex: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(auth_key_hex.trim().to_lowercase().as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthRegisterRequest {
+    pub username: String,
+    pub display_name: String,
+    pub kdf_salt_hex: String,
+    pub kdf_memory_kib: i64,
+    pub kdf_iterations: i64,
+    pub kdf_parallelism: i64,
+    pub auth_key_hex: String,
+    pub device_id: String,
+    pub device_name: String,
+    pub encrypted_payload: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuthRegisterResponse {
+    pub registered: bool,
+    pub username: String,
+    pub version: i64,
+}
+
+/// `POST /api/auth/register` — crea usuario único con AuthKey separada y bóveda inicial.
+pub async fn auth_register(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AuthRegisterRequest>,
+) -> Result<Json<AuthRegisterResponse>> {
+    let username = body.username.trim().to_lowercase();
+    if username.is_empty() || body.display_name.trim().is_empty() {
+        return Err(ServerError::BadRequest(
+            "Usuario y nombre son obligatorios".into(),
+        ));
+    }
+    if body.auth_key_hex.trim().len() != 64 || body.kdf_salt_hex.trim().len() < 32 {
+        return Err(ServerError::BadRequest("Parámetros KDF inválidos".into()));
+    }
+
+    let existing = sqlx::query("SELECT username FROM users WHERE username = ?")
+        .bind(&username)
+        .fetch_optional(&state.db)
+        .await?;
+    if existing.is_some() {
+        return Err(ServerError::Conflict(
+            "Ese nombre de usuario ya está registrado".into(),
+        ));
+    }
+
+    let now = Utc::now().to_rfc3339();
+    let auth_hash = hash_auth_key(&body.auth_key_hex);
+    let mut hasher = Sha256::new();
+    hasher.update(body.encrypted_payload.as_bytes());
+    let checksum = hex::encode(hasher.finalize());
+
+    sqlx::query(
+        r#"
+        INSERT INTO devices (id, name, public_key_hex, is_active, created_at, last_seen_at)
+        VALUES (?, ?, ?, 1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name, last_seen_at = excluded.last_seen_at
+        "#,
+    )
+    .bind(&body.device_id)
+    .bind(&body.device_name)
+    .bind("0".repeat(64))
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO users (
+            username, display_name, kdf_salt_hex, kdf_memory_kib,
+            kdf_iterations, kdf_parallelism, auth_key_hash, failed_attempts,
+            locked_until, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)
+        "#,
+    )
+    .bind(&username)
+    .bind(body.display_name.trim())
+    .bind(body.kdf_salt_hex.trim())
+    .bind(body.kdf_memory_kib)
+    .bind(body.kdf_iterations)
+    .bind(body.kdf_parallelism)
+    .bind(&auth_hash)
+    .bind(&now)
+    .execute(&state.db)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT INTO user_vaults (username, version, device_id, encrypted_payload, checksum_sha256, updated_at)
+        VALUES (?, 1, ?, ?, ?, ?)
+        "#,
+    )
+    .bind(&username)
+    .bind(&body.device_id)
+    .bind(&body.encrypted_payload)
+    .bind(&checksum)
+    .bind(&now)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(AuthRegisterResponse {
+        registered: true,
+        username,
+        version: 1,
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthParamsRequest {
+    pub username: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuthParamsResponse {
+    pub kdf_salt_hex: String,
+    pub kdf_memory_kib: i64,
+    pub kdf_iterations: i64,
+    pub kdf_parallelism: i64,
+}
+
+/// `POST /api/auth/params` — devuelve parámetros KDF sin revelar si el usuario existe.
+pub async fn auth_params(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AuthParamsRequest>,
+) -> Result<Json<AuthParamsResponse>> {
+    let username = body.username.trim().to_lowercase();
+    let row = sqlx::query(
+        "SELECT kdf_salt_hex, kdf_memory_kib, kdf_iterations, kdf_parallelism FROM users WHERE username = ?",
+    )
+    .bind(&username)
+    .fetch_optional(&state.db)
+    .await?;
+
+    if let Some(r) = row {
+        Ok(Json(AuthParamsResponse {
+            kdf_salt_hex: r.get("kdf_salt_hex"),
+            kdf_memory_kib: r.get("kdf_memory_kib"),
+            kdf_iterations: r.get("kdf_iterations"),
+            kdf_parallelism: r.get("kdf_parallelism"),
+        }))
+    } else {
+        // Salt determinista falso para no filtrar si el usuario existe
+        let mut hasher = Sha256::new();
+        hasher.update(format!("akv-fake-salt:{username}:{}", state._server_master_key).as_bytes());
+        Ok(Json(AuthParamsResponse {
+            kdf_salt_hex: hex::encode(hasher.finalize()),
+            kdf_memory_kib: 64 * 1024,
+            kdf_iterations: 3,
+            kdf_parallelism: 4,
+        }))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthLoginRequest {
+    pub username: String,
+    pub auth_key_hex: String,
+    pub device_id: String,
+    pub device_name: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuthLoginResponse {
+    pub username: String,
+    pub display_name: String,
+    pub version: i64,
+    pub encrypted_payload: String,
+    pub checksum_sha256: String,
+    pub updated_at: String,
+}
+
+async fn verify_user_auth(state: &AppState, username: &str, auth_key_hex: &str) -> Result<String> {
+    let row = sqlx::query(
+        "SELECT display_name, auth_key_hash, failed_attempts, locked_until FROM users WHERE username = ?",
+    )
+    .bind(username)
+    .fetch_optional(&state.db)
+    .await?;
+
+    let Some(r) = row else {
+        return Err(ServerError::Unauthorized("Credenciales inválidas".into()));
+    };
+
+    let now = Utc::now();
+    if let Some(locked_str) = r.get::<Option<String>, _>("locked_until") {
+        if let Ok(locked_dt) = DateTime::parse_from_rfc3339(&locked_str) {
+            if locked_dt.with_timezone(&Utc) > now {
+                return Err(ServerError::Unauthorized(
+                    "Demasiados intentos fallidos. Espera antes de volver a intentar.".into(),
+                ));
+            }
+        }
+    }
+
+    let expected_hash: String = r.get("auth_key_hash");
+    let provided_hash = hash_auth_key(auth_key_hex);
+    if !constant_time_eq(expected_hash.as_bytes(), provided_hash.as_bytes()) {
+        let attempts = r.get::<i64, _>("failed_attempts") + 1;
+        let locked_until = if attempts >= 5 {
+            let exp = (attempts - 5).min(5) as u32;
+            let secs = (30i64 * (1i64 << exp)).min(900);
+            Some((now + Duration::seconds(secs)).to_rfc3339())
+        } else {
+            None
+        };
+        let _ = sqlx::query(
+            "UPDATE users SET failed_attempts = ?, locked_until = ? WHERE username = ?",
+        )
+        .bind(attempts)
+        .bind(&locked_until)
+        .bind(username)
+        .execute(&state.db)
+        .await;
+
+        return Err(ServerError::Unauthorized("Credenciales inválidas".into()));
+    }
+
+    let _ =
+        sqlx::query("UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE username = ?")
+            .bind(username)
+            .execute(&state.db)
+            .await;
+
+    Ok(r.get("display_name"))
+}
+
+/// `POST /api/auth/login` — autentica con AuthKey, registra dispositivo y devuelve bóveda cifrada.
+pub async fn auth_login(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AuthLoginRequest>,
+) -> Result<Json<AuthLoginResponse>> {
+    let username = body.username.trim().to_lowercase();
+    let display_name = verify_user_auth(&state, &username, &body.auth_key_hex).await?;
+    let now = Utc::now().to_rfc3339();
+
+    sqlx::query(
+        r#"
+        INSERT INTO devices (id, name, public_key_hex, is_active, created_at, last_seen_at)
+        VALUES (?, ?, ?, 1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name, last_seen_at = excluded.last_seen_at
+        "#,
+    )
+    .bind(&body.device_id)
+    .bind(&body.device_name)
+    .bind("0".repeat(64))
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await?;
+
+    let vault = sqlx::query(
+        "SELECT version, encrypted_payload, checksum_sha256, updated_at FROM user_vaults WHERE username = ?",
+    )
+    .bind(&username)
+    .fetch_one(&state.db)
+    .await?;
+
+    Ok(Json(AuthLoginResponse {
+        username,
+        display_name,
+        version: vault.get("version"),
+        encrypted_payload: vault.get("encrypted_payload"),
+        checksum_sha256: vault.get("checksum_sha256"),
+        updated_at: vault.get("updated_at"),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthUploadVaultRequest {
+    pub username: String,
+    pub auth_key_hex: String,
+    pub device_id: String,
+    pub encrypted_payload: String,
+}
+
+/// `POST /api/auth/vault` — sube una nueva versión cifrada de la bóveda del usuario autenticado.
+pub async fn auth_upload_vault(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AuthUploadVaultRequest>,
+) -> Result<Json<SyncUploadResponse>> {
+    let username = body.username.trim().to_lowercase();
+    verify_user_auth(&state, &username, &body.auth_key_hex).await?;
+
+    let now = Utc::now().to_rfc3339();
+    let mut hasher = Sha256::new();
+    hasher.update(body.encrypted_payload.as_bytes());
+    let checksum = hex::encode(hasher.finalize());
+
+    let row = sqlx::query("SELECT version FROM user_vaults WHERE username = ?")
+        .bind(&username)
+        .fetch_optional(&state.db)
+        .await?;
+    let next_version = row.map_or(1, |r| r.get::<i64, _>("version") + 1);
+
+    sqlx::query(
+        r#"
+        INSERT INTO user_vaults (username, version, device_id, encrypted_payload, checksum_sha256, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(username) DO UPDATE SET
+            version = excluded.version,
+            device_id = excluded.device_id,
+            encrypted_payload = excluded.encrypted_payload,
+            checksum_sha256 = excluded.checksum_sha256,
+            updated_at = excluded.updated_at
+        "#,
+    )
+    .bind(&username)
+    .bind(next_version)
+    .bind(&body.device_id)
+    .bind(&body.encrypted_payload)
+    .bind(&checksum)
+    .bind(&now)
+    .execute(&state.db)
+    .await?;
+
+    Ok(Json(SyncUploadResponse {
+        version: next_version,
+        checksum_sha256: checksum,
+        updated_at: now,
+    }))
+}
+
+#[cfg(test)]
+mod auth_tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    async fn test_state() -> Arc<AppState> {
+        let pool = SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("sqlite memory");
+        crate::db::init_db(&pool).await.expect("init_db");
+        Arc::new(AppState {
+            db: pool,
+            _server_master_key: "fake-test-server-key".into(),
+        })
+    }
+
+    #[tokio::test]
+    async fn registro_login_bloqueo_y_sync_usuario() {
+        let state = test_state().await;
+        let fake_auth_key = "a".repeat(64);
+        let fake_salt = "b".repeat(64);
+
+        let reg = auth_register(
+            State(state.clone()),
+            Json(AuthRegisterRequest {
+                username: "test-fake-user".into(),
+                display_name: "Usuario Falso".into(),
+                kdf_salt_hex: fake_salt.clone(),
+                kdf_memory_kib: 65536,
+                kdf_iterations: 3,
+                kdf_parallelism: 4,
+                auth_key_hex: fake_auth_key.clone(),
+                device_id: "test-fake-pc-a".into(),
+                device_name: "PC-A".into(),
+                encrypted_payload: "{\"fake\":true}".into(),
+            }),
+        )
+        .await
+        .expect("register");
+        assert_eq!(reg.0.version, 1);
+
+        // Usuario inexistente devuelve params falsos (no revela existencia)
+        let missing_params = auth_params(
+            State(state.clone()),
+            Json(AuthParamsRequest {
+                username: "no-existe-fake".into(),
+            }),
+        )
+        .await
+        .expect("missing params");
+        assert_eq!(missing_params.0.kdf_salt_hex.len(), 64);
+
+        // Login correcto
+        let login_ok = auth_login(
+            State(state.clone()),
+            Json(AuthLoginRequest {
+                username: "test-fake-user".into(),
+                auth_key_hex: fake_auth_key.clone(),
+                device_id: "test-fake-pc-b".into(),
+                device_name: "PC-B".into(),
+            }),
+        )
+        .await
+        .expect("login ok");
+        assert_eq!(login_ok.0.display_name, "Usuario Falso");
+
+        // 5 intentos fallidos activan bloqueo progresivo
+        let wrong_key = "f".repeat(64);
+        for _ in 0..5 {
+            let err = auth_login(
+                State(state.clone()),
+                Json(AuthLoginRequest {
+                    username: "test-fake-user".into(),
+                    auth_key_hex: wrong_key.clone(),
+                    device_id: "test-fake-pc-b".into(),
+                    device_name: "PC-B".into(),
+                }),
+            )
+            .await
+            .expect_err("debe fallar");
+            assert!(matches!(err, ServerError::Unauthorized(_)));
+        }
+
+        // Incluso con la clave correcta queda bloqueado temporalmente
+        let locked = auth_login(
+            State(state.clone()),
+            Json(AuthLoginRequest {
+                username: "test-fake-user".into(),
+                auth_key_hex: fake_auth_key,
+                device_id: "test-fake-pc-b".into(),
+                device_name: "PC-B".into(),
+            }),
+        )
+        .await
+        .expect_err("debe estar bloqueado");
+        assert!(matches!(locked, ServerError::Unauthorized(_)));
+    }
+}

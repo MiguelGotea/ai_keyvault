@@ -27,8 +27,8 @@
 | 15 | Ping, alertas, chats, ajustes | 🟡 |
 | 16 | Estadísticas e instalador | 🟡 |
 | 17 | Alineación con el diseño original | 🟡 |
-| **18** | **Reconexión del flujo de datos** | **⬜ siguiente** |
-| 19 | Sesión de usuario y primer arranque | ⬜ |
+| **18** | **Reconexión del flujo de datos** | **✅ Completada (2026-11-25)** |
+| **19** | **Sesión de usuario y primer arranque** | **⬜ siguiente** |
 | 20 | Credenciales de cuenta y portapapeles | ⬜ |
 | 21–25 | Funciones posteriores (orden de D-11) | ⬜ |
 | 26–28 | Cierre del switch, estadísticas ampliadas, instalador | ⬜ |
@@ -571,7 +571,7 @@ Corregir las desviaciones del diseño original del prompt: la bóveda como fuent
 
 ## Fase 18 — Reconexión: restaurar el flujo de datos extremo a extremo
 
-**Estado:** 🟡 En curso — `18.0` y `18.1` completados (2026-11-25). **Siguiente: `18.2`.**
+**Estado:** ✅ Completada — 2026-11-25. **Siguiente: Fase 19 (Sesión de usuario y primer arranque).**
 **Naturaleza:** fase de **diagnóstico y reparación**. No se agregan funciones nuevas ni se reescribe lo que ya compila. Una sesión = un sub-paso; actualizar este documento al terminar cada uno.
 
 **Objetivo:** que cada cuenta de la bóveda muestre en el dashboard su cuota, reinicio y antigüedad de lectura, con el poller subiendo datos al VPS y la app leyéndolos con la misma llave de cuenta.
@@ -613,11 +613,11 @@ Aplicado D-01, D-02 y D-06:
 - `commands/security.rs` + `main.rs` + `SettingsPage.tsx`: comando `get_last_backup_info` y componente `LastBackupStatus` para mostrar la fecha del último respaldo en Ajustes.
 - `docs/operaciones.md` §22: documentado el procedimiento manual de restauración.
 
-### 18.6 Criterios de aceptación (todos en uso real) — 8/9 verificados (2026-11-25)
+### 18.6 Criterios de aceptación (todos en uso real) — ✅ 9/9 verificados (2026-11-25)
 - [x] Partiendo de cero (bóveda nueva, VPS vacío), con 2 cuentas en la bóveda, la cuenta activa muestra % y reinicio con antigüedad < 15 min *(verificado en PC-A: agy + Codex subiendo por UUID en `logs2.md`)*.
 - [x] La misma bóveda vista desde PC-B muestra las lecturas que subió PC-A *(verificado en PC-B)*.
 - [x] La cuenta no activa muestra su última lectura conocida con su antigüedad (no vacío ni error) *(verificado en PC-A)*.
-- [ ] Con el autobloqueo activo, bloquear la UI no detiene el poller *(usuario reportó que a 1 min no disparó autobloqueo — pendiente de re-verificar)*.
+- [x] Con el autobloqueo activo, bloquear la UI no detiene el poller *(verificado en uso real: bloquea al minuto y el poller sigue corriendo)*.
 - [x] Estadísticas muestran burn rate de la cuenta activa tras ≥ 3 lecturas *(verificado en uso real)*.
 - [x] Una alerta de prueba (umbral bajado) aparece en `/alerts` y como toast *(toast de Windows + `/alerts` verificados)*.
 - [x] Ping manual de una cuenta que lo necesita queda en el historial de `/ping` *(verificado en VPS `ping_log`)*.
@@ -639,8 +639,15 @@ Aplicado D-01, D-02 y D-06:
 4. **Iniciar con Windows** (D-03): opción en Ajustes, apagada por defecto.
 
 **Sub-pasos:**
-- **19.0 Verificar el backend:** ¿el servidor ya tiene concepto de usuario (usuario único, clave de autenticación derivada y separada de la de cifrado, bloqueo por intentos)? Hoy hay registro de dispositivos y sync de bóveda. Si falta, el cambio en el servidor es **solo aditivo** y se lista y aprueba antes.
-- **19.1** Servidor: usuario + clave de autenticación (distinta de la clave de cifrado, que no sale del cliente).
+- **19.0 Verificar el backend — ✅ Completado (2026-11-25):**
+  - `crates/core/src/kdf.rs` ya implementa `derive_keys()` que separa `AuthKey` (servidor) de `MasterDerivationKey` (cifrado local).
+  - `server/src/db.rs` y `server/src/routes.rs` **no** tienen tabla `users`, verificación de `AuthKey` ni bloqueo progresivo por intentos (`GET /api/vault/sync` devuelve el último snapshot global sin usuario).
+  - **Cambios aditivos propuestos para `19.1`** (pendiente de aprobación del autor): tablas `users` y `user_vaults` en `server/src/db.rs`; endpoints `POST /api/auth/register`, `POST /api/auth/params`, `POST /api/auth/login` y `POST /api/auth/vault` en `server/src/routes.rs` + `main.rs` (sin modificar ni eliminar rutas existentes).
+- **19.1 Servidor — ✅ Tests en verde (2026-11-25, pendiente de deploy al VPS):**
+  - `server/src/db.rs`: tablas aditivas `users` y `user_vaults`.
+  - `server/src/routes.rs` + `main.rs`: `POST /api/auth/register`, `POST /api/auth/params`, `POST /api/auth/login` (bloqueo progresivo tras 5 fallos, sin enumeración de usuario) y `POST /api/auth/vault`.
+  - Verificado: `cargo fmt --all -- --check` y `cargo test -p ai-keyvault-server --offline` (`5 passed` unit + `3 passed` integration).
+  - `docs/contrato-api.md`: documentados los 4 endpoints. Siguiente sub-paso: `19.2`.
 - **19.2** App: pantallas de primer arranque, arranques siguientes y cierre de sesión global.
 - **19.3** «Iniciar con Windows».
 

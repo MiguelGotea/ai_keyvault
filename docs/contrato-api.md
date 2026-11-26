@@ -32,3 +32,7 @@
 | `GET /api/pings/needs?max_pct=N` | App | `Vec<{ account_id, provider, pool, percent_used, needs_ping, last_read_at, reset_time }>` | |
 | `GET /api/pings/:account_id` | App | `Vec<{ id, account_id, provider, device_id, success, error, duration_ms, is_manual, pinged_at }>` | `success`/`is_manual`: bool o 0/1 |
 | `POST /api/pings` | App / Poller | Req: `{ account_id, provider, device_id, success, error, duration_ms, is_manual }` | |
+| `POST /api/auth/register` | App | Req: `{ username, display_name, kdf_salt_hex, kdf_memory_kib, kdf_iterations, kdf_parallelism, auth_key_hex, device_id, device_name, encrypted_payload }` · Resp: `{ registered, username, version }` | Fase 19 |
+| `POST /api/auth/params` | App | Req: `{ username }` · Resp: `{ kdf_salt_hex, kdf_memory_kib, kdf_iterations, kdf_parallelism }` | No revela si el usuario existe |
+| `POST /api/auth/login` | App | Req: `{ username, auth_key_hex, device_id, device_name }` · Resp: `{ username, display_name, version, encrypted_payload, checksum_sha256, updated_at }` | Bloqueo progresivo tras 5 fallos |
+| `POST /api/auth/vault` | App | Req: `{ username, auth_key_hex, device_id, encrypted_payload }` · Resp: `{ version, checksum_sha256, updated_at }` | Sync autenticado por usuario |
