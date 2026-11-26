@@ -690,8 +690,8 @@ Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fi
 |------|-----------|
 | 21 | Alertas con **sugerencia de cuenta alternativa** y botón «Cambiar a esa cuenta» *(✅ Completada 2026-11-26)* |
 | 22 | **Silenciar alertas** por X horas, alertas de **fin de suscripción** (7 y 1 día) y de **login vencido** o consulta fallando *(✅ Completada 2026-11-26)* |
-| 23 | Paleta de comandos **`Ctrl+K`** *(🟡 Código escrito 2026-11-26)* |
-| 24 | **Detalle de cuenta con pestañas** (Resumen, Cuota y cooldown, Estadísticas, Chat, Credenciales, Historial) |
+| 23 | Paleta de comandos **`Ctrl+K`** *(✅ Completada 2026-11-26)* |
+| 24 | **Detalle de cuenta con pestañas** (Resumen, Cuota y cooldown, Estadísticas, Chat, Credenciales, Historial) *(🟡 Código escrito 2026-11-26)* |
 | 25 | **Tema claro/oscuro** y pantalla **«Mis dispositivos»** (revocar acceso) |
 | 26 | Cierre del switch: botón «Deshacer», aviso de reinicio de herramientas, detección de procesos sin cerrarlos, «sin agente en esta PC» |
 | 27 | Estadísticas ampliadas (tokens por modelo, eficiencia, cuota desperdiciada) y pantalla «Experimento de cooldown» |
@@ -727,7 +727,7 @@ Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fi
 | 11 | Estadísticas: burn rate, heatmap, comparativa, CSV | ✅ backend · 🟡 UI | |
 | 11 | Tokens por modelo, eficiencia, cuota desperdiciada | ⬜ | Fase 27 (`token_usage_record` investigado) |
 | 9.3 | Detalle de cuenta con 6 pestañas | ⬜ | Fase 24 |
-| 9 | Paleta `Ctrl+K` | ⬜ | Fase 23 |
+| 9 | Paleta `Ctrl+K` | ✅ | Fase 23 verificada en uso real. |
 | 9 | Tema claro/oscuro | ⬜ | Fase 25 (hoy solo oscuro) |
 | 7.17 | Pantalla «Mis dispositivos» | ⬜ | Fase 25 (`register_device` existe) |
 | 9 | Pantalla «Experimento de cooldown» | ⬜ | Fase 27 |

@@ -12,7 +12,7 @@
 import { useEffect, useCallback, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
-import QuotaCard from "../components/QuotaCard";
+import AccountDetailModal from "../components/AccountDetailModal";
 import type { PoolSummary, AccountInfo, PollerStatus, SwitchResult } from "../types/api";
 
 function formatRelativeAge(isoDate: string | null | undefined): string {
@@ -276,49 +276,16 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Modal de detalle moderno por cuenta */}
-      {detailAccount && (() => {
-        const pools = poolsByVpsId[detailAccount.id] ?? [];
-        const latestRead = pools.reduce<string | null>((latest, p) => {
-          if (!latest) return p.last_read_at;
-          return new Date(p.last_read_at) > new Date(latest) ? p.last_read_at : latest;
-        }, null);
-        return (
-          <div
-            style={styles.modalOverlay}
-            onClick={e => { if (e.target === e.currentTarget) setDetailAccount(null); }}
-          >
-            <div style={styles.modal}>
-              <div style={styles.modalHeader}>
-                <div>
-                  <span style={styles.accountProvider}>
-                    {detailAccount.provider === "agy" ? "ANTIGRAVITY" : "CODEX"}
-                  </span>
-                  <strong style={{ fontSize: 16, color: "var(--color-text)" }}>{detailAccount.alias}</strong>
-                  {detailAccount.email && (
-                    <div style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 2 }}>
-                      {detailAccount.email} · {latestRead ? `Última lectura: ${formatRelativeAge(latestRead)}` : "Sin lecturas"}
-                    </div>
-                  )}
-                </div>
-                <button style={styles.closeMsgBtn} onClick={() => setDetailAccount(null)}>✕</button>
-              </div>
-              {pools.length > 0 ? (
-                <div style={styles.cardGrid}>
-                  {pools.map(pool => (
-                    <QuotaCard key={pool.pool} pool={pool} />
-                  ))}
-                </div>
-              ) : (
-                <div style={styles.noDataMsg}>
-                  <span style={{ fontSize: 20 }}>📡</span>
-                  <span>Sin datos de cuota aún — el poller los recopilará automáticamente.</span>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
+      {/* Modal de detalle con 6 pestañas (Fase 24) */}
+      {detailAccount && (
+        <AccountDetailModal
+          account={detailAccount}
+          pools={poolsByVpsId[detailAccount.id] ?? []}
+          onClose={() => setDetailAccount(null)}
+          onSwitch={handleSwitch}
+          switching={switchingAccount === detailAccount.id}
+        />
+      )}
     </div>
   );
 }
