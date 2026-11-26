@@ -671,14 +671,27 @@ pub async fn import_current_codex_credential(
     let val: serde_json::Value = serde_json::from_str(&cred_json)
         .map_err(|e| format!("auth.json no es JSON válido: {e}"))?;
 
-    // Extraer email/account_id
+    // Extraer email/account_id (prioridad: JWT tokens.id_token igual que providers/codex)
     let email = val
-        .pointer("/user/email")
-        .or_else(|| val.get("email"))
-        .or_else(|| val.get("account_id"))
+        .pointer("/tokens/id_token")
         .and_then(|v| v.as_str())
-        .unwrap_or("unknown@codex")
-        .to_string();
+        .and_then(decode_jwt_email)
+        .or_else(|| {
+            val.pointer("/user/email")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            val.get("email")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
+        .or_else(|| {
+            val.get("account_id")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "unknown@codex".to_string());
 
     let alias_final = if alias.trim().is_empty() {
         email.clone()
@@ -744,4 +757,36 @@ pub async fn import_current_codex_credential(
     }
 
     Ok(res)
+}
+
+/// Decodifica el payload base64url del JWT (sin verificar firma) y extrae el campo `email`.
+fn decode_jwt_email(jwt: &str) -> Option<String> {
+    let payload_b64 = jwt.split('.').nth(1)?;
+    let standard = payload_b64.replace('-', "+").replace('_', "/");
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut lut = [255u8; 256];
+    for (i, &c) in TABLE.iter().enumerate() {
+        lut[c as usize] = i as u8;
+    }
+    let input = standard.trim_end_matches('=').as_bytes();
+    let mut out = Vec::with_capacity(input.len() * 3 / 4);
+    let mut buf = 0u32;
+    let mut bits = 0u32;
+    for &c in input {
+        let v = lut[c as usize];
+        if v == 255 {
+            continue;
+        }
+        buf = (buf << 6) | v as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    let payload: serde_json::Value = serde_json::from_slice(&out).ok()?;
+    payload
+        .get("email")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
 }

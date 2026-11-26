@@ -9,7 +9,7 @@
  *
  * "Usar en esta PC" → switch_account con el UUID de la bóveda.
  */
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
 import QuotaCard from "../components/QuotaCard";
@@ -66,11 +66,11 @@ export default function DashboardPage() {
   }, [pollerStatus.refetch]);
 
   // Autobloqueo: reset en cada interacción
-  const throttleRef = { ts: 0 };
+  const throttleRef = useRef(0);
   const handleActivity = useCallback(() => {
     const now = Date.now();
-    if (now - throttleRef.ts < 30_000) return;
-    throttleRef.ts = now;
+    if (now - throttleRef.current < 30_000) return;
+    throttleRef.current = now;
     const minutes = parseInt(localStorage.getItem("autolock_minutes") ?? "0");
     if (minutes > 0) {
       invoke("reset_autolock_timer", { minutes }).catch((e: unknown) => {

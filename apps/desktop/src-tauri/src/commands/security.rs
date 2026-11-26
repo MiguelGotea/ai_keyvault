@@ -10,40 +10,34 @@
 //! - La bóveda se sincroniza con el VPS via POST /api/vault/sync (cifrada, conocimiento cero).
 //! - Descarga al abrir y sube al guardar cambios.
 
-use crate::api_client::{http_client, SERVER_URL};
+use crate::api_client::{http_client, DeviceRegistration, SERVER_URL};
 use crate::commands::vault::VaultState;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::{command, AppHandle, Emitter, State};
 use tokio::time::{sleep, Duration};
 use tracing::info;
 
 // ── Autobloqueo ──────────────────────────────────────────────────────────────
 
-static AUTOLOCK_RUNNING: AtomicBool = AtomicBool::new(false);
+static AUTOLOCK_GEN: AtomicU64 = AtomicU64::new(0);
 
 /// Inicia el timer de autobloqueo en background.
 /// Se llama al desbloquear la bóveda.
-/// Si ya hay un timer corriendo, lo reemplaza (cancela el anterior vía flag).
+/// Si ya hay un timer corriendo, lo invalida incrementando la generación.
 #[command]
 pub async fn start_autolock_timer(app: AppHandle, minutes: u32) -> Result<(), String> {
     let minutes = minutes.max(1).min(120);
-    info!("⏱ Iniciando timer de autobloqueo: {minutes} min");
-
-    // Señalizar al timer anterior que se cancele
-    AUTOLOCK_RUNNING.store(false, Ordering::Relaxed);
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    AUTOLOCK_RUNNING.store(true, Ordering::Relaxed);
+    let my_gen = AUTOLOCK_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    info!("⏱ Iniciando timer de autobloqueo: {minutes} min (gen {my_gen})");
 
     let app_handle = app.clone();
     let duration = Duration::from_secs((minutes * 60) as u64);
 
     tokio::spawn(async move {
         sleep(duration).await;
-        if AUTOLOCK_RUNNING.load(Ordering::Relaxed) {
+        if AUTOLOCK_GEN.load(Ordering::SeqCst) == my_gen {
             info!("🔒 Timer de autobloqueo expirado — emitiendo evento autolock");
-            AUTOLOCK_RUNNING.store(false, Ordering::Relaxed);
-            // Emitir evento al frontend
             let _ = app_handle.emit("autolock", ());
         }
     });
@@ -55,14 +49,14 @@ pub async fn start_autolock_timer(app: AppHandle, minutes: u32) -> Result<(), St
 /// El frontend llama esto en onMouseMove / onKeyDown del Tauri window.
 #[command]
 pub async fn reset_autolock_timer(app: AppHandle, minutes: u32) -> Result<(), String> {
-    // Reiniciar simplemente vuelve a iniciar — cancela el anterior automáticamente
+    // Reiniciar simplemente vuelve a iniciar — invalida la generación anterior
     start_autolock_timer(app, minutes).await
 }
 
 /// Cancela el timer de autobloqueo (al bloquear manualmente o al cerrar).
 #[command]
 pub async fn cancel_autolock_timer() -> Result<(), String> {
-    AUTOLOCK_RUNNING.store(false, Ordering::Relaxed);
+    AUTOLOCK_GEN.fetch_add(1, Ordering::SeqCst);
     info!("⏹ Timer de autobloqueo cancelado");
     Ok(())
 }
@@ -90,6 +84,26 @@ pub async fn sync_vault_to_vps(app: &AppHandle) -> Result<(), String> {
         std::fs::read_to_string(&path).map_err(|e| format!("No se pudo leer vault.json: {e}"))?;
 
     let device_id = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "desktop-win".to_string());
+
+    // Asegurar que el dispositivo existe en `devices` (requerido por FK de `vault_snapshots`)
+    let reg_payload = DeviceRegistration {
+        device_id: device_id.clone(),
+        device_name: device_id.clone(),
+        public_key_hex: "0".repeat(64),
+    };
+    let reg_resp = http_client()
+        .post(&format!("{SERVER_URL}/api/devices/register"))
+        .json(&reg_payload)
+        .send()
+        .await
+        .map_err(|e| format!("Error al registrar dispositivo: {e}"))?;
+    if !reg_resp.status().is_success() {
+        return Err(format!(
+            "Error del servidor al registrar dispositivo: {}",
+            reg_resp.status()
+        ));
+    }
+
     let payload = serde_json::json!({
         "device_id": device_id,
         "encrypted_payload": vault_str,

@@ -11,10 +11,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🔑 Configurar SSH para VPS
+      - name: 🔑 Configurar SSH para VPS y repo de respaldo
         uses: webfactory/ssh-agent@v0.8.0
         with:
-          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+          ssh-private-key: |
+            ${{ secrets.VPS_SSH_KEY }}
+            ${{ secrets.BACKUP_WRITE_KEY }}
 
       - name: 📥 Descargar BD del VPS
         run: |
@@ -23,12 +25,11 @@ jobs:
             ./keyvault_backup.db
           echo "✅ BD descargada: $(du -sh keyvault_backup.db | cut -f1)"
 
-      - name: 📦 Checkout repo de respaldo
-        uses: actions/checkout@v4
-        with:
-          repository: MiguelGotea/ai_keyvault_data
-          ssh-key: ${{ secrets.BACKUP_WRITE_KEY }}
-          path: backup_repo
+      - name: 📦 Clonar repo de respaldo por SSH
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          git clone git@github.com:MiguelGotea/ai_keyvault_data.git backup_repo
 
       - name: 🔐 Cifrar snapshot y probar restauración (D-04)
         env:
