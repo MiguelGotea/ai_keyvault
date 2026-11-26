@@ -14,7 +14,7 @@ use crate::api_client::{http_client, DeviceRegistration, SERVER_URL};
 use crate::commands::vault::VaultState;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
-use tauri::{command, AppHandle, Emitter, State};
+use tauri::{command, AppHandle, Emitter, Manager, State};
 use tokio::time::{sleep, Duration};
 use tracing::info;
 
@@ -37,7 +37,15 @@ pub async fn start_autolock_timer(app: AppHandle, minutes: u32) -> Result<(), St
     tokio::spawn(async move {
         sleep(duration).await;
         if AUTOLOCK_GEN.load(Ordering::SeqCst) == my_gen {
-            info!("🔒 Timer de autobloqueo expirado — emitiendo evento autolock");
+            info!(
+                "🔒 Timer de autobloqueo expirado — bloqueando bóveda y emitiendo evento autolock"
+            );
+            let vault_state = app_handle.state::<VaultState>();
+            if let Ok(mut guard) = vault_state.vault.lock() {
+                if let Some(vault) = &mut *guard {
+                    vault.lock();
+                }
+            }
             let _ = app_handle.emit("autolock", ());
         }
     });

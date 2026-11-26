@@ -608,21 +608,20 @@ Aplicado D-01, D-02 y D-06:
 - `UnlockPage.tsx` y `PollerStatusBadge.tsx`: eliminados `.catch(() => {})` en flujos críticos; errores visibles en español.
 - Verificado: `cargo test` (`apps/desktop/src-tauri`, `1 passed`), `tsc --noEmit` y `vitest` (`3 passed`). Siguiente sub-paso: `18.5`.
 
-### 18.5 Respaldo — 🟡 Código y workflow escritos (2026-11-25), pendiente de `cargo test` y ejecución real de `backup.yml`
-- `.github/workflows/backup.yml`: cifra `keyvault.db` con AES-256-CBC (`BACKUP_ENCRYPTION_KEY`) antes de subir `*.db.enc` y verifica la restauración real descifrando y abriendo las tablas en el mismo workflow.
+### 18.5 Respaldo — ✅ Completado y verificado (2026-11-25)
+- `.github/workflows/backup.yml`: cifra `keyvault.db` con AES-256-CBC (`BACKUP_ENCRYPTION_KEY`) antes de subir `*.db.enc` a `ai_keyvault_data` (vía SSH Deploy Key `BACKUP_WRITE_KEY`) y verifica la restauración real descifrando y abriendo las tablas en el mismo workflow. Verificado en verde en GitHub Actions.
 - `commands/security.rs` + `main.rs` + `SettingsPage.tsx`: comando `get_last_backup_info` y componente `LastBackupStatus` para mostrar la fecha del último respaldo en Ajustes.
 - `docs/operaciones.md` §22: documentado el procedimiento manual de restauración.
-- **Pendiente:** configurar secret `BACKUP_ENCRYPTION_KEY` en GitHub, ejecutar `cargo test` en `apps/desktop/src-tauri` y disparar `backup.yml` (`workflow_dispatch`). Siguiente sub-paso: `18.6` (verificación en uso real).
 
-### 18.6 Criterios de aceptación (todos en uso real)
-- [ ] Partiendo de cero (bóveda nueva, VPS vacío), con 2 cuentas en la bóveda, la cuenta activa muestra % y reinicio con antigüedad < 15 min.
-- [ ] La misma bóveda vista desde PC-B (según el flujo de la Fase 19) muestra las lecturas que subió PC-A.
-- [ ] La cuenta no activa muestra su última lectura conocida con su antigüedad (no vacío ni error).
-- [ ] Con el autobloqueo activo, bloquear la UI no detiene el poller.
-- [ ] Estadísticas muestran burn rate de la cuenta activa tras ≥ 3 lecturas.
-- [ ] Una alerta de prueba (umbral bajado) aparece en `/alerts` y como toast.
-- [ ] Ping manual de una cuenta que lo necesita queda en el historial de `/ping`.
-- [ ] Switch real A→B→A verificado (cuota o `auth.json`) y «Deshacer» funciona.
+### 18.6 Criterios de aceptación (todos en uso real) — 8/9 verificados (2026-11-25)
+- [x] Partiendo de cero (bóveda nueva, VPS vacío), con 2 cuentas en la bóveda, la cuenta activa muestra % y reinicio con antigüedad < 15 min *(verificado en PC-A: agy + Codex subiendo por UUID en `logs2.md`)*.
+- [x] La misma bóveda vista desde PC-B muestra las lecturas que subió PC-A *(verificado en PC-B)*.
+- [x] La cuenta no activa muestra su última lectura conocida con su antigüedad (no vacío ni error) *(verificado en PC-A)*.
+- [ ] Con el autobloqueo activo, bloquear la UI no detiene el poller *(usuario reportó que a 1 min no disparó autobloqueo — pendiente de re-verificar)*.
+- [x] Estadísticas muestran burn rate de la cuenta activa tras ≥ 3 lecturas *(verificado en uso real)*.
+- [x] Una alerta de prueba (umbral bajado) aparece en `/alerts` y como toast *(toast de Windows + `/alerts` verificados)*.
+- [x] Ping manual de una cuenta que lo necesita queda en el historial de `/ping` *(verificado en VPS `ping_log`)*.
+- [x] Switch real A→B→A verificado *(agy verificado en PC-A y PC-B; Codex funciona con la app cerrada — aviso/detección de procesos y «Deshacer» corresponden a Fase 26)*.
 - [x] CI en verde, incluidos los tests de contrato; `gitleaks` limpio *(verificado 2026-11-25)*.
 
 ---

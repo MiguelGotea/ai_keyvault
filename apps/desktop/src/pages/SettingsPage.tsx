@@ -31,6 +31,7 @@ export default function SettingsPage() {
     return DEFAULT_SETTINGS;
   });
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showDpapiWarning, setShowDpapiWarning] = useState(false);
 
   // Sincronizar autolockMinutes con la clave que usa UnlockPage y DashboardPage
@@ -56,17 +57,30 @@ export default function SettingsPage() {
     setShowDpapiWarning(false);
   }
 
-  function saveSettings() {
+  async function saveSettings() {
+    setSaveError(null);
+    const cleanAutolock = Number.isFinite(settings.autolockMinutes)
+      ? Math.max(0, Math.min(120, settings.autolockMinutes))
+      : 0;
+    const toSave = { ...settings, autolockMinutes: cleanAutolock };
+    setSettings(toSave);
+
     // Persistir ajustes en localStorage
-    localStorage.setItem("akv_settings", JSON.stringify(settings));
+    localStorage.setItem("akv_settings", JSON.stringify(toSave));
+    localStorage.setItem("autolock_minutes", String(cleanAutolock));
+
     // Aplicar autobloqueo en Rust si está activo
-    if (settings.autolockMinutes > 0) {
-      invoke("start_autolock_timer", { minutes: settings.autolockMinutes }).catch(() => {});
-    } else {
-      invoke("cancel_autolock_timer").catch(() => {});
+    try {
+      if (cleanAutolock > 0) {
+        await invoke("start_autolock_timer", { minutes: cleanAutolock });
+      } else {
+        await invoke("cancel_autolock_timer");
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setSaveError(`No se pudo aplicar el autobloqueo: ${String(e)}`);
     }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
   }
 
   return (
@@ -155,10 +169,13 @@ export default function SettingsPage() {
           <input
             type="number"
             style={{ ...styles.input, width: 80 }}
-            value={settings.autolockMinutes}
-            min={1}
+            value={Number.isFinite(settings.autolockMinutes) ? settings.autolockMinutes : 0}
+            min={0}
             max={120}
-            onChange={e => set("autolockMinutes", parseInt(e.target.value))}
+            onChange={e => {
+              const parsed = parseInt(e.target.value, 10);
+              set("autolockMinutes", Number.isNaN(parsed) ? 0 : parsed);
+            }}
           />
           <span style={styles.hint}>min</span>
         </Row>
@@ -209,6 +226,11 @@ export default function SettingsPage() {
       </section>
 
       {/* Guardar */}
+      {saveError && (
+        <div style={{ padding: "10px 14px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", fontSize: 12, color: "#991B1B" }}>
+          ⚠️ {saveError}
+        </div>
+      )}
       <div style={styles.saveRow}>
         <button style={styles.saveBtn} onClick={saveSettings}>
           {saved ? `✅ ${es.ajustes.guardado_ok}` : es.ajustes.guardar}

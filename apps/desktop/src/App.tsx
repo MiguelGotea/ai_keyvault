@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
-import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import type { VaultStatus } from "./types/api";
 import UnlockPage from "./pages/UnlockPage";
 import DashboardPage from "./pages/DashboardPage";
 import AlertsPage from "./pages/AlertsPage";
@@ -20,28 +21,58 @@ import AppLayout from "./components/AppLayout";
  */
 function App() {
   const navigate = useNavigate();
+  const location = useLocation();
   // Ref para evitar múltiples suscripciones al rerender
   const unlistenRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
+    let active = true;
     // Suscribirse al evento de autobloqueo emitido desde Rust
     listen<void>("autolock", async () => {
       try {
         await invoke("lock_vault");
         await invoke("cancel_autolock_timer");
-      } catch {
-        // Si la bóveda ya estaba bloqueada, no es error
+      } catch (e) {
+        console.error("Error al bloquear tras autolock:", e);
       }
       navigate("/unlock", { replace: true });
-    }).then((unlisten) => {
-      unlistenRef.current = unlisten;
-    });
+    })
+      .then((unlisten) => {
+        if (active) {
+          unlistenRef.current = unlisten;
+        } else {
+          unlisten();
+        }
+      })
+      .catch((e) => {
+        console.error("Error suscribiendo evento autolock:", e);
+      });
+
+    // Al restaurar/enfocar la ventana (si WebView2 estuvo suspendido minimizado),
+    // sincronizar con el estado real de Rust.
+    const checkLockedOnFocus = () => {
+      if (location.pathname === "/unlock") return;
+      invoke<VaultStatus>("get_vault_status")
+        .then((status) => {
+          if (status.locked) {
+            navigate("/unlock", { replace: true });
+          }
+        })
+        .catch((e) => {
+          console.error("Error verificando estado de bóveda al enfocar:", e);
+        });
+    };
+
+    window.addEventListener("focus", checkLockedOnFocus);
+    document.addEventListener("visibilitychange", checkLockedOnFocus);
 
     return () => {
-      // Limpiar la suscripción al desmontar
+      active = false;
       unlistenRef.current?.();
+      window.removeEventListener("focus", checkLockedOnFocus);
+      document.removeEventListener("visibilitychange", checkLockedOnFocus);
     };
-  }, [navigate]);
+  }, [navigate, location.pathname]);
 
   return (
     <Routes>
