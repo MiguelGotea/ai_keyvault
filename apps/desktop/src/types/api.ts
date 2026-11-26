@@ -137,6 +137,8 @@ export interface SwitchResult {
   account_id: string;
   provider: string;
   restart_notice: string | null;
+  can_undo?: boolean;
+  running_processes?: string[];
 }
 
 // ── Pings ────────────────────────────────────────────────────────────────────

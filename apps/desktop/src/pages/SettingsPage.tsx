@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS = {
   autolockMinutes: 0, // 0 = desactivado (opt-in, desactivado por defecto)
   dpapiEnabled: false,
   theme: "dark" as "dark" | "light",
+  noAgentOnPc: false,
 };
 
 type Settings = typeof DEFAULT_SETTINGS;
@@ -82,10 +83,13 @@ export default function SettingsPage() {
       } else {
         await invoke("cancel_autolock_timer");
       }
+      if (toSave.noAgentOnPc) {
+        await invoke("stop_poller");
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
-      setSaveError(`No se pudo aplicar el autobloqueo: ${String(e)}`);
+      setSaveError(`No se pudo aplicar la configuración: ${String(e)}`);
     }
   }
 
@@ -245,6 +249,19 @@ export default function SettingsPage() {
             </button>
           </div>
         </Row>
+        <div style={styles.dpapiRow}>
+          <div>
+            <div style={styles.label}>Sin agente en esta PC (solo consulta)</div>
+            <div style={styles.dpapiDesc}>
+              Actívalo en equipos sin Antigravity/Codex o donde no quieras ejecutar el poller ni cambiar credenciales locales.
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={settings.noAgentOnPc}
+            onChange={e => set("noAgentOnPc", e.target.checked)}
+          />
+        </div>
       </section>
 
       {/* Respaldo */}

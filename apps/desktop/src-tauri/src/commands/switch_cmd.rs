@@ -15,8 +15,24 @@
 use crate::api_client::{http_client, PostSwitchPayload, SERVER_URL};
 use crate::commands::vault::VaultState;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 use tauri::{command, State};
 use tracing::{info, warn};
+
+// ── Estado para Deshacer (Fase 26) ───────────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct PreviousSwitchBackup {
+    pub provider: String,
+    pub agy_blob: Option<Vec<u8>>,
+    pub codex_content: Option<String>,
+    pub previous_label: Option<String>,
+}
+
+#[derive(Default)]
+pub struct SwitchUndoState {
+    pub last: Mutex<Option<PreviousSwitchBackup>>,
+}
 
 // ── Tipos de respuesta ───────────────────────────────────────────────────────
 
@@ -28,6 +44,12 @@ pub struct SwitchResult {
     pub provider: String,
     /// Aviso que el usuario debe reiniciar ventanas del agente.
     pub restart_notice: Option<String>,
+    /// Indica si es posible deshacer este cambio restaurando la credencial previa.
+    #[serde(default)]
+    pub can_undo: bool,
+    /// Procesos de herramientas/agentes detectados abiertos (sin cerrarlos).
+    #[serde(default)]
+    pub running_processes: Vec<String>,
 }
 
 // ── Windows Credential Manager ───────────────────────────────────────────────
@@ -213,10 +235,80 @@ pub async fn get_active_account(provider: String) -> Result<Option<String>, Stri
     }
 }
 
+/// Parsea la salida CSV de `tasklist /FO CSV /NH` e identifica herramientas abiertas sin cerrarlas.
+pub fn parse_running_agent_processes(tasklist_csv: &str) -> Vec<String> {
+    let mut detected = Vec::new();
+    let known = [
+        ("antigravity.exe", "Antigravity"),
+        ("code.exe", "VS Code"),
+        ("codex.exe", "Codex CLI"),
+        ("agy.exe", "Antigravity CLI (agy)"),
+    ];
+    for line in tasklist_csv.lines() {
+        let lower = line.trim().to_ascii_lowercase();
+        for (exe, label) in known {
+            if lower.starts_with(&format!("\"{exe}\"")) || lower.starts_with(exe) {
+                let label_str = label.to_string();
+                if !detected.contains(&label_str) {
+                    detected.push(label_str);
+                }
+            }
+        }
+    }
+    detected
+}
+
+/// Detecta procesos activos de herramientas/agentes en el sistema sin cerrarlos (Fase 26).
+pub fn detect_running_agent_processes() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let output = std::process::Command::new("tasklist")
+            .args(["/FO", "CSV", "/NH"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+        match output {
+            Ok(out) if out.status.success() => {
+                let text = String::from_utf8_lossy(&out.stdout);
+                parse_running_agent_processes(&text)
+            }
+            _ => Vec::new(),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
+}
+
+fn build_restart_notice(provider: &str, running: &[String]) -> String {
+    if !running.is_empty() {
+        return format!(
+            "Procesos abiertos detectados (no se cerraron): {}. Reinicia esas herramientas para aplicar el cambio.",
+            running.join(", ")
+        );
+    }
+    match provider {
+        "agy" => {
+            "Reinicia las ventanas de Antigravity (agy) para aplicar el cambio de cuenta.".into()
+        }
+        "codex" => "Cierra y vuelve a abrir Codex para usar la nueva cuenta.".into(),
+        _ => "Reinicia el agente para aplicar el cambio.".into(),
+    }
+}
+
+/// Devuelve las herramientas/agentes actualmente abiertos sin cerrarlos (Fase 26).
+#[command]
+pub async fn get_running_agent_processes() -> Result<Vec<String>, String> {
+    Ok(detect_running_agent_processes())
+}
+
 /// Switch de cuenta real: lee credenciales de la bóveda y las escribe en el SO.
 #[command]
 pub async fn switch_account(
     vault_state: State<'_, VaultState>,
+    undo_state: State<'_, SwitchUndoState>,
     account_id: String,
     provider: String,
     device_id: String,
@@ -254,6 +346,8 @@ pub async fn switch_account(
                             account_id,
                             provider,
                             restart_notice: None,
+                            can_undo: false,
+                            running_processes: Vec::new(),
                         });
                     }
                 }
@@ -261,6 +355,26 @@ pub async fn switch_account(
             Some(_) => return Err("La bóveda está bloqueada. Desbloquea primero.".into()),
             None => return Err("No hay bóveda cargada.".into()),
         }
+    };
+
+    // Capturar credencial previa para permitir «Deshacer» (Fase 26)
+    let previous_label = get_active_account(provider.clone()).await.ok().flatten();
+    let prev_agy_blob = if provider == "agy" {
+        #[cfg(target_os = "windows")]
+        {
+            credman::read_credential_raw("gemini:antigravity")
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            None
+        }
+    } else {
+        None
+    };
+    let prev_codex_content = if provider == "codex" {
+        std::fs::read_to_string(codex_auth_path()).ok()
+    } else {
+        None
     };
 
     // Realizar switch según proveedor
@@ -278,6 +392,22 @@ pub async fn switch_account(
         }
     };
 
+    let can_undo = if success && (prev_agy_blob.is_some() || prev_codex_content.is_some()) {
+        if let Ok(mut guard) = undo_state.last.lock() {
+            *guard = Some(PreviousSwitchBackup {
+                provider: provider.clone(),
+                agy_blob: prev_agy_blob,
+                codex_content: prev_codex_content,
+                previous_label,
+            });
+            true
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     // Registrar en VPS (best-effort) — usando los campos reales del VPS
     let _ = http_client()
         .post(&format!("{SERVER_URL}/api/switch"))
@@ -292,9 +422,12 @@ pub async fn switch_account(
         .send()
         .await;
 
-    if success {
+    let running_processes = if success {
         info!("Switch OK: {} ({})", account_id, provider);
-    }
+        detect_running_agent_processes()
+    } else {
+        Vec::new()
+    };
 
     Ok(SwitchResult {
         success,
@@ -302,17 +435,83 @@ pub async fn switch_account(
         account_id,
         provider: provider.clone(),
         restart_notice: if success {
-            Some(match provider.as_str() {
-                "agy" => {
-                    "Reinicia las ventanas de Antigravity (agy) para aplicar el cambio de cuenta."
-                        .into()
-                }
-                "codex" => "Cierra y vuelve a abrir Codex para usar la nueva cuenta.".into(),
-                _ => "Reinicia el agente para aplicar el cambio.".into(),
-            })
+            Some(build_restart_notice(&provider, &running_processes))
         } else {
             None
         },
+        can_undo,
+        running_processes,
+    })
+}
+
+/// Deshace el último switch restaurando la credencial previa en el SO (Fase 26).
+#[command]
+pub async fn undo_last_switch(
+    undo_state: State<'_, SwitchUndoState>,
+    device_id: String,
+) -> Result<SwitchResult, String> {
+    let backup = {
+        let mut guard = undo_state.last.lock().unwrap();
+        guard.take()
+    };
+
+    let Some(prev) = backup else {
+        return Err("No hay un cambio reciente para deshacer.".into());
+    };
+
+    let restore_res: Result<(), String> = match prev.provider.as_str() {
+        "agy" => {
+            #[cfg(target_os = "windows")]
+            {
+                match &prev.agy_blob {
+                    Some(blob) => {
+                        let user = prev.previous_label.as_deref().unwrap_or("antigravity");
+                        credman::write_credential_raw("gemini:antigravity", user, blob)
+                    }
+                    None => Err("No había credencial previa de Antigravity para restaurar.".into()),
+                }
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                Err("Deshacer agy solo disponible en Windows".into())
+            }
+        }
+        "codex" => match &prev.codex_content {
+            Some(content) => switch_codex("undo", Some(content), None).await,
+            None => Err("No había auth.json previo de Codex para restaurar.".into()),
+        },
+        other => Err(format!("Proveedor '{}' no soportado", other)),
+    };
+
+    restore_res?;
+
+    let target_label = prev
+        .previous_label
+        .unwrap_or_else(|| "cuenta-anterior".into());
+    let _ = http_client()
+        .post(&format!("{SERVER_URL}/api/switch"))
+        .json(&PostSwitchPayload {
+            to_account_id: target_label.clone(),
+            from_account_id: None,
+            provider: prev.provider.clone(),
+            device_id,
+            success: true,
+            reason: Some("Deshacer cambio anterior".into()),
+        })
+        .send()
+        .await;
+
+    let running_processes = detect_running_agent_processes();
+    let restart_notice = Some(build_restart_notice(&prev.provider, &running_processes));
+
+    Ok(SwitchResult {
+        success: true,
+        error: None,
+        account_id: target_label,
+        provider: prev.provider,
+        restart_notice,
+        can_undo: false,
+        running_processes,
     })
 }
 
@@ -396,4 +595,19 @@ async fn switch_codex(
 
     info!("auth.json de Codex actualizado para {account_id}");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_running_agent_processes;
+
+    #[test]
+    fn detecta_procesos_sin_duplicados() {
+        let csv = "\"Code.exe\",\"1234\",\"Console\",\"1\",\"100,000 K\"\n\
+                   \"Code.exe\",\"5678\",\"Console\",\"1\",\"80,000 K\"\n\
+                   \"Antigravity.exe\",\"9012\",\"Console\",\"1\",\"120,000 K\"\n\
+                   \"notepad.exe\",\"1111\",\"Console\",\"1\",\"10,000 K\"\n";
+        let found = parse_running_agent_processes(csv);
+        assert_eq!(found, vec!["VS Code", "Antigravity"]);
+    }
 }

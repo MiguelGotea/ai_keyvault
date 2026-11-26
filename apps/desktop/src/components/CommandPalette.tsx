@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { isNoAgentOnPc } from "../utils/settings";
 import type { AccountInfo, SwitchResult } from "../types/api";
 import es from "../i18n/es.json";
 
@@ -48,24 +49,33 @@ export default function CommandPalette({ open, onClose }: Props) {
       { id: "nav-settings", label: es.nav.settings, category: "Ir a", run: () => { navigate("/settings"); onClose(); } },
     ];
 
+    const noAgent = isNoAgentOnPc();
     const accountActions: PaletteCommand[] = accounts.flatMap(acc => [
-      {
-        id: `switch-${acc.id}`,
-        label: `⚡ Usar en esta PC: ${acc.alias} (${acc.provider})`,
-        category: "Cambiar cuenta",
-        run: async () => {
-          const res = await invoke<SwitchResult>("switch_account", {
-            accountId: acc.id,
-            provider: acc.provider,
-            deviceId: "desktop-win",
-          });
-          if (!res.success) {
-            setFeedback(`❌ ${res.error ?? "Error al cambiar de cuenta"}`);
-            return;
-          }
-          onClose();
-        },
-      },
+      ...(noAgent
+        ? []
+        : [
+            {
+              id: `switch-${acc.id}`,
+              label: `⚡ Usar en esta PC: ${acc.alias} (${acc.provider})`,
+              category: "Cambiar cuenta",
+              run: async () => {
+                const res = await invoke<SwitchResult>("switch_account", {
+                  accountId: acc.id,
+                  provider: acc.provider,
+                  deviceId: "desktop-win",
+                });
+                if (!res.success) {
+                  setFeedback(`❌ ${res.error ?? "Error al cambiar de cuenta"}`);
+                  return;
+                }
+                if (res.running_processes?.length) {
+                  setFeedback(`✅ Cambiado a ${acc.alias}. ${res.restart_notice ?? ""}`);
+                  return;
+                }
+                onClose();
+              },
+            },
+          ]),
       {
         id: `copy-email-${acc.id}`,
         label: `📋 Copiar correo de ${acc.alias}`,

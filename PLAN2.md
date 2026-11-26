@@ -692,8 +692,8 @@ Cada una se detalla en su propio momento, con una sesión por sub-paso. Orden fi
 | 22 | **Silenciar alertas** por X horas, alertas de **fin de suscripción** (7 y 1 día) y de **login vencido** o consulta fallando *(✅ Completada 2026-11-26)* |
 | 23 | Paleta de comandos **`Ctrl+K`** *(✅ Completada 2026-11-26)* |
 | 24 | **Detalle de cuenta con pestañas** (Resumen, Cuota y cooldown, Estadísticas, Chat, Credenciales, Historial) *(🟡 Código escrito 2026-11-26)* |
-| 25 | **Tema claro/oscuro** y pantalla **«Mis dispositivos»** (revocar acceso) *(🟡 Código escrito 2026-11-26)* |
-| 26 | Cierre del switch: botón «Deshacer», aviso de reinicio de herramientas, detección de procesos sin cerrarlos, «sin agente en esta PC» |
+| 25 | **Tema claro/oscuro** y pantalla **«Mis dispositivos»** (revocar acceso) *(✅ Completada 2026-11-26)* |
+| 26 | Cierre del switch: botón «Deshacer», aviso de reinicio de herramientas, detección de procesos sin cerrarlos, «sin agente en esta PC» *(🟡 Código escrito 2026-11-26)* |
 | 27 | Estadísticas ampliadas (tokens por modelo, eficiencia, cuota desperdiciada) y pantalla «Experimento de cooldown» |
 | 28 | Instalador firmado y versión portable |
 

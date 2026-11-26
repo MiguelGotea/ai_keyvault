@@ -13,6 +13,7 @@ import { useEffect, useCallback, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
 import AccountDetailModal from "../components/AccountDetailModal";
+import { isNoAgentOnPc } from "../utils/settings";
 import type { PoolSummary, AccountInfo, PollerStatus, SwitchResult } from "../types/api";
 
 function formatRelativeAge(isoDate: string | null | undefined): string {
@@ -34,7 +35,10 @@ export default function DashboardPage() {
   const [autolockError, setAutolockError] = useState<string | null>(null);
   const [switchingAccount, setSwitchingAccount] = useState<string | null>(null);
   const [switchMsg, setSwitchMsg] = useState<string | null>(null);
+  const [canUndoSwitch, setCanUndoSwitch] = useState(false);
+  const [undoingSwitch, setUndoingSwitch] = useState(false);
   const [detailAccount, setDetailAccount] = useState<AccountInfo | null>(null);
+  const noAgentOnPc = isNoAgentOnPc();
 
   // 1. Cuentas de la bóveda (fuente de verdad)
   const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
@@ -45,8 +49,9 @@ export default function DashboardPage() {
   // 3. Estado del poller (IPC)
   const pollerStatus = useCommand<PollerStatus>("get_poller_status", {});
 
-  // Lanzar poller al abrir (sin silenciar ningún error)
+  // Lanzar poller al abrir salvo que esté activo "Sin agente en esta PC" (Fase 26)
   useEffect(() => {
+    if (noAgentOnPc) return;
     if (!pollerStarted) {
       invoke("start_poller")
         .then(() => {
@@ -59,7 +64,7 @@ export default function DashboardPage() {
           pollerStatus.refetch();
         });
     }
-  }, [pollerStarted, pollerStatus.refetch]);
+  }, [noAgentOnPc, pollerStarted, pollerStatus.refetch]);
 
   useEffect(() => {
     const timer = setInterval(() => pollerStatus.refetch(), 15_000);
@@ -101,8 +106,10 @@ export default function DashboardPage() {
   }, {});
 
   async function handleSwitch(account: AccountInfo) {
+    if (noAgentOnPc) return;
     setSwitchingAccount(account.id);
     setSwitchMsg(null);
+    setCanUndoSwitch(false);
     try {
       const result = await invoke<SwitchResult>("switch_account", {
         accountId: account.id,
@@ -111,6 +118,7 @@ export default function DashboardPage() {
       });
       if (result.success) {
         setSwitchMsg(`✅ Cambiado a '${account.alias}'. ${result.restart_notice ?? ""}`);
+        setCanUndoSwitch(Boolean(result.can_undo));
       } else {
         setSwitchMsg(`❌ ${result.error ?? "Error desconocido al cambiar de cuenta."}`);
       }
@@ -118,6 +126,21 @@ export default function DashboardPage() {
       setSwitchMsg(`❌ Error: ${String(e)}`);
     } finally {
       setSwitchingAccount(null);
+    }
+  }
+
+  async function handleUndoSwitch() {
+    setUndoingSwitch(true);
+    try {
+      const result = await invoke<SwitchResult>("undo_last_switch", {
+        deviceId: "desktop-dev",
+      });
+      setCanUndoSwitch(false);
+      setSwitchMsg(`↩ Cambio deshecho (restaurado '${result.account_id}'). ${result.restart_notice ?? ""}`);
+    } catch (e) {
+      setSwitchMsg(`❌ No se pudo deshacer: ${String(e)}`);
+    } finally {
+      setUndoingSwitch(false);
     }
   }
 
@@ -144,7 +167,9 @@ export default function DashboardPage() {
       <div style={styles.pollerBar}>
         <span>
           <strong>Poller:</strong>{" "}
-          {pollerStatus.data
+          {noAgentOnPc
+            ? "Desactivado (sin agente en esta PC)"
+            : pollerStatus.data
             ? pollerStatus.data.state === "running"
               ? "Corriendo"
               : pollerStatus.data.state === "paused"
@@ -181,10 +206,19 @@ export default function DashboardPage() {
       {switchMsg && (
         <div style={{
           ...styles.infoBar,
-          color: switchMsg.startsWith("✅") ? "var(--color-success)" : "var(--color-danger)"
+          color: switchMsg.startsWith("❌") ? "var(--color-danger)" : "var(--color-success)"
         }}>
-          {switchMsg}
-          <button style={styles.closeMsgBtn} onClick={() => setSwitchMsg(null)}>✕</button>
+          <span style={{ flex: 1 }}>{switchMsg}</span>
+          {canUndoSwitch && (
+            <button
+              style={{ ...styles.detailBtn, marginRight: 8 }}
+              onClick={handleUndoSwitch}
+              disabled={undoingSwitch}
+            >
+              {undoingSwitch ? "Deshaciendo…" : "↩ Deshacer"}
+            </button>
+          )}
+          <button style={styles.closeMsgBtn} onClick={() => { setSwitchMsg(null); setCanUndoSwitch(false); }}>✕</button>
         </div>
       )}
 
@@ -262,10 +296,14 @@ export default function DashboardPage() {
                     Detalles
                   </button>
                   <button
-                    style={styles.switchBtn}
+                    style={{
+                      ...styles.switchBtn,
+                      opacity: noAgentOnPc ? 0.5 : 1,
+                      cursor: noAgentOnPc ? "not-allowed" : "pointer",
+                    }}
                     onClick={() => handleSwitch(account)}
-                    disabled={isSwitching}
-                    title="Escribir esta credencial en esta PC"
+                    disabled={isSwitching || noAgentOnPc}
+                    title={noAgentOnPc ? "Modo sin agente en esta PC activo (solo consulta)" : "Escribir esta credencial en esta PC"}
                   >
                     {isSwitching ? "Cambiando…" : "⚡ Usar"}
                   </button>

@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
+import { isNoAgentOnPc } from "../utils/settings";
 import type { AlertRecord, AccountInfo, PollerStatus, PoolSummary, SwitchResult } from "../types/api";
 import es from "../i18n/es.json";
 
@@ -16,8 +17,11 @@ interface AlternativeCandidate {
 export default function AlertsPage() {
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [switchMsg, setSwitchMsg] = useState<string | null>(null);
+  const [canUndoSwitch, setCanUndoSwitch] = useState(false);
+  const [undoingSwitch, setUndoingSwitch] = useState(false);
   const [mutedUntil, setMutedUntil] = useState<string | null>(null);
   const [muteError, setMuteError] = useState<string | null>(null);
+  const noAgentOnPc = isNoAgentOnPc();
 
   // Cuentas de la bóveda (fuente de verdad)
   const vaultAccounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
@@ -102,8 +106,10 @@ export default function AlertsPage() {
   }
 
   async function handleSwitchAlternative(account: AccountInfo) {
+    if (noAgentOnPc) return;
     setSwitchingId(account.id);
     setSwitchMsg(null);
+    setCanUndoSwitch(false);
     try {
       const result = await invoke<SwitchResult>("switch_account", {
         accountId: account.id,
@@ -112,6 +118,7 @@ export default function AlertsPage() {
       });
       if (result.success) {
         setSwitchMsg(`✅ Cambiado a '${account.alias}'. ${result.restart_notice ?? ""}`);
+        setCanUndoSwitch(Boolean(result.can_undo));
       } else {
         setSwitchMsg(`❌ ${result.error ?? "Error desconocido al cambiar de cuenta."}`);
       }
@@ -119,6 +126,21 @@ export default function AlertsPage() {
       setSwitchMsg(`❌ Error: ${String(e)}`);
     } finally {
       setSwitchingId(null);
+    }
+  }
+
+  async function handleUndoSwitch() {
+    setUndoingSwitch(true);
+    try {
+      const result = await invoke<SwitchResult>("undo_last_switch", {
+        deviceId: "desktop-win",
+      });
+      setCanUndoSwitch(false);
+      setSwitchMsg(`↩ Cambio deshecho (restaurado '${result.account_id}'). ${result.restart_notice ?? ""}`);
+    } catch (e) {
+      setSwitchMsg(`❌ No se pudo deshacer: ${String(e)}`);
+    } finally {
+      setUndoingSwitch(false);
     }
   }
 
@@ -208,10 +230,19 @@ export default function AlertsPage() {
       {switchMsg && (
         <div style={{
           ...styles.switchBanner,
-          color: switchMsg.startsWith("✅") ? "var(--color-success)" : "var(--color-danger)",
+          color: switchMsg.startsWith("❌") ? "var(--color-danger)" : "var(--color-success)",
         }}>
-          <span>{switchMsg}</span>
-          <button style={styles.closeBtn} onClick={() => setSwitchMsg(null)}>✕</button>
+          <span style={{ flex: 1 }}>{switchMsg}</span>
+          {canUndoSwitch && (
+            <button
+              style={{ ...styles.muteBtn, marginRight: 8 }}
+              onClick={handleUndoSwitch}
+              disabled={undoingSwitch}
+            >
+              {undoingSwitch ? "Deshaciendo…" : "↩ Deshacer"}
+            </button>
+          )}
+          <button style={styles.closeBtn} onClick={() => { setSwitchMsg(null); setCanUndoSwitch(false); }}>✕</button>
         </div>
       )}
 
@@ -269,8 +300,13 @@ export default function AlertsPage() {
                     {alt.percentUsed !== null ? ` (${alt.percentUsed.toFixed(1)}% usado)` : " (sin lecturas recientes)"}
                   </span>
                   <button
-                    style={styles.switchBtn}
-                    disabled={switchingId === alt.account.id}
+                    style={{
+                      ...styles.switchBtn,
+                      opacity: noAgentOnPc ? 0.5 : 1,
+                      cursor: noAgentOnPc ? "not-allowed" : "pointer",
+                    }}
+                    disabled={switchingId === alt.account.id || noAgentOnPc}
+                    title={noAgentOnPc ? "Modo sin agente en esta PC activo" : "Cambiar a esta cuenta en esta PC"}
                     onClick={() => handleSwitchAlternative(alt.account)}
                   >
                     {switchingId === alt.account.id ? "Cambiando…" : "⚡ Cambiar a esa cuenta"}

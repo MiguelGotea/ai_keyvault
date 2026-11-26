@@ -40,6 +40,8 @@ fn main() {
         .manage(SessionAuthState::default())
         // Estado global del poller (Mutex<PollerStatus>)
         .manage(PollerManager::default())
+        // Estado para deshacer último switch (Fase 26)
+        .manage(commands::switch_cmd::SwitchUndoState::default())
         .setup(|app| {
             // Configurar el icono de la bandeja del sistema
             tray::setup_tray(app)?;
@@ -114,8 +116,10 @@ fn main() {
             commands::poller::pause_poller,
             commands::poller::resume_poller,
             commands::poller::stop_poller,
-            // Switch de cuenta (Fase 13)
+            // Switch de cuenta (Fase 13 / Fase 26)
             commands::switch_cmd::switch_account,
+            commands::switch_cmd::undo_last_switch,
+            commands::switch_cmd::get_running_agent_processes,
             commands::switch_cmd::get_active_account,
             // Autobloqueo y sincronización vault (Fase 14/15)
             commands::security::start_autolock_timer,
