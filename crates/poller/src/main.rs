@@ -57,6 +57,12 @@ async fn main() {
 
     let config = PollerConfig::new(server_url, device_id).with_interval(poll_interval);
 
+    if std::env::args().any(|a| a == "--once") {
+        info!("⚡ Ejecutando ciclo único de poller (--once)");
+        ai_keyvault_poller::scheduler::run_once(&config).await;
+        return;
+    }
+
     // Iniciar el poller en background
     let _handle = PollerHandle::start(config);
 

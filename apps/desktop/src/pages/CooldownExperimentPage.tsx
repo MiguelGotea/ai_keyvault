@@ -245,7 +245,7 @@ const styles: Record<string, React.CSSProperties> = {
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" },
   title: { fontSize: 20, fontWeight: 700, color: "var(--color-text)", margin: 0 },
   subtitle: { fontSize: 12, color: "var(--color-text-secondary)", margin: "4px 0 0" },
-  refreshBtn: { padding: "6px 12px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text)", fontSize: 12, cursor: "pointer" },
+  refreshBtn: { padding: "6px 12px", border: "1px solid var(--color-btn-border)", borderRadius: "var(--radius-md)", background: "var(--color-btn-bg)", color: "var(--color-btn-text)", fontSize: 12, cursor: "pointer" },
   kpiGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12 },
   kpiCard: { background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4 },
   kpiLabel: { fontSize: 11, color: "var(--color-text-secondary)" },
@@ -260,7 +260,7 @@ const styles: Record<string, React.CSSProperties> = {
   list: { display: "flex", flexDirection: "column", gap: 8 },
   obsRow: { display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", flexWrap: "wrap" },
   finishBtn: { padding: "5px 10px", background: "var(--color-success)", color: "#fff", border: "none", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
-  deleteBtn: { padding: "5px 8px", background: "transparent", color: "var(--color-text-secondary)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 12, cursor: "pointer" },
+  deleteBtn: { padding: "5px 8px", background: "var(--color-danger-bg)", color: "var(--color-danger-text)", border: "1px solid var(--color-danger-border)", borderRadius: "var(--radius-md)", fontSize: 12, cursor: "pointer", fontWeight: 600 },
   hint: { fontSize: 13, color: "var(--color-text-secondary)" },
   error: { padding: 10, background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", color: "#991B1B", fontSize: 12 },
 };

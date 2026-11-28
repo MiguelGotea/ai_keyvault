@@ -9,7 +9,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { useServerHealth } from "../hooks/useServerHealth";
 import { useCommand } from "../hooks/useCommand";
 import ServerStatusBadge from "../components/ServerStatusBadge";
-import logoIconText from "../assets/ai-keyvault-icon-text.svg";
+import { useTheme } from "../hooks/useTheme";
+import logoIconTextLight from "../assets/ai-keyvault-icon-text.svg";
+import logoIconTextDark from "../assets/ai-keyvault-icon-text-dark.svg";
 import es from "../i18n/es.json";
 
 type ScreenMode = "login" | "register" | "unlock" | "recovery" | "show_recovery_key";
@@ -27,6 +29,7 @@ interface CreateVaultResult { success: boolean; recovery_key: string | null; err
 export default function UnlockPage() {
   const navigate = useNavigate();
   const health = useServerHealth();
+  const theme = useTheme();
 
   const [mode, setMode] = useState<ScreenMode>("login");
   const [serverUrl, setServerUrl] = useState("http://198.211.97.243:3010");
@@ -193,7 +196,11 @@ export default function UnlockPage() {
       <div style={styles.card}>
         {/* Header */}
         <div style={styles.header}>
-          <img src={logoIconText} alt={es.app.nombre} style={styles.logo} />
+          <img
+            src={theme === "dark" ? logoIconTextDark : logoIconTextLight}
+            alt={es.app.nombre}
+            style={styles.logo}
+          />
           <p style={styles.subtitle}>
             {mode === "login" && "Inicia sesión para traer tu bóveda"}
             {mode === "register" && "Crea tu usuario y bóveda nueva"}
@@ -534,9 +541,9 @@ const styles: Record<string, React.CSSProperties> = {
   btn: {
     padding: "11px 16px",
     borderRadius: "var(--radius-md)",
-    border: "1px solid var(--color-border)",
-    background: "var(--color-bg-secondary)",
-    color: "var(--color-text)",
+    border: "1px solid var(--color-btn-border)",
+    background: "var(--color-btn-bg)",
+    color: "var(--color-btn-text)",
     fontSize: 14,
     cursor: "pointer",
     fontWeight: 500,

@@ -207,7 +207,11 @@ export default function StatsPage() {
                     style={{
                       ...styles.heatCell,
                       background: intensity > 0
-                        ? `rgba(16,185,129,${0.1 + intensity * 0.9})`
+                        ? intensity >= 0.75
+                          ? "var(--color-primary)"
+                          : intensity >= 0.4
+                          ? "var(--color-primary-500)"
+                          : "var(--color-primary-300)"
                         : "var(--color-bg-tertiary)",
                     }}
                     title={`${DAYS_COLS[d]} ${h}h: ${val.toFixed(1)}%`}

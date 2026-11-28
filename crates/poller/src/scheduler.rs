@@ -36,8 +36,6 @@ async fn run_loop(config: Arc<PollerConfig>) {
         .expect("No se pudo crear el cliente HTTP");
 
     let mut ticker = interval(Duration::from_secs(config.poll_interval_secs));
-    // La primera iteración se dispara de inmediato
-    ticker.tick().await;
 
     // AlertManager se crea una vez y mantiene estado de cooldown
     let alert_config = AlertConfig::from_env();
@@ -56,6 +54,17 @@ async fn run_loop(config: Arc<PollerConfig>) {
     }
 }
 
+/// Ejecuta un único ciclo de recolección y subida (para invocación manual `--once`).
+pub async fn run_once(config: &PollerConfig) {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .expect("No se pudo crear el cliente HTTP");
+    let alert_config = AlertConfig::from_env();
+    let mut alert_manager = AlertManager::new(alert_config);
+    run_cycle(&client, config, &mut alert_manager).await;
+}
+
 async fn run_cycle(
     client: &reqwest::Client,
     config: &PollerConfig,
@@ -72,7 +81,8 @@ async fn run_cycle(
     // 2. Recolectar snapshots locales
     let snapshots = collector::collect_all(&config.device_id);
     if snapshots.is_empty() {
-        warn!("⚠️ No se obtuvieron lecturas de cuota — se omite ciclo");
+        warn!("⚠️ No se obtuvieron lecturas de cuota — se omite subida");
+        info!("✅ Ciclo completado");
         return;
     }
 

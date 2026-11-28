@@ -10,8 +10,8 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Drawing
 
 $Repo = "C:\Users\User\Desktop\Sistema\PitayaWeb\ai_keyvault"
-$src = "$Repo\assets\branding\AI_KeyVault_Color.png"
-$mono = "$Repo\assets\branding\AI_KeyVault_MonoColor.png"
+$src = "$Repo\apps\desktop\src-tauri\icons\icon-rounded.png"
+$mono = "$Repo\apps\desktop\src-tauri\icons\icon-rounded.png"
 $iconsDir = "$Repo\apps\desktop\src-tauri\icons"
 
 New-Item -ItemType Directory -Force -Path $iconsDir | Out-Null

@@ -1,18 +1,25 @@
 /**
  * DashboardPage — Dashboard principal de AI KeyVault.
  *
- * Separado por pestañas de proveedor (Antigravity / Codex) en formato tabla.
+ * Separado por pestañas de proveedor (Antigravity / Codex) en formato tabla ordenable.
  * FUENTE DE VERDAD: Las cuentas vienen de la BÓVEDA (list_vault_accounts).
  * Los datos de cuota del VPS (get_stats_compare) se cruzan por UUID opaco.
  */
-import { useEffect, useCallback, useRef, useState } from "react";
+import { useEffect, useCallback, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
+import { useTheme } from "../hooks/useTheme";
 import AccountDetailModal from "../components/AccountDetailModal";
 import { isNoAgentOnPc } from "../utils/settings";
+import agyLight from "../assets/agy-light.png";
+import agyDark from "../assets/agy-dark.png";
+import codexLight from "../assets/codex-light.png";
+import codexDark from "../assets/codex-dark.png";
 import type { PoolSummary, AccountInfo, PollerStatus, SwitchResult } from "../types/api";
 
 type ProviderTab = "agy" | "codex";
+type SortField = "name" | "email" | "gemini" | "claude" | "quota";
+type SortDir = "asc" | "desc";
 
 function formatRelativeAge(isoDate: string | null | undefined): string {
   if (!isoDate) return "sin lecturas";
@@ -66,7 +73,10 @@ function QuotaCell({ pool }: { pool: PoolSummary | undefined }) {
 }
 
 export default function DashboardPage() {
+  const theme = useTheme();
   const [activeTab, setActiveTab] = useState<ProviderTab>("agy");
+  const [sortField, setSortField] = useState<SortField>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [pollerStarted, setPollerStarted] = useState(false);
   const [pollerError, setPollerError] = useState<string | null>(null);
   const [autolockError, setAutolockError] = useState<string | null>(null);
@@ -136,14 +146,68 @@ export default function DashboardPage() {
 
   const agyAccounts = vaultList.filter(a => a.provider === "agy");
   const codexAccounts = vaultList.filter(a => a.provider === "codex");
-  const visibleAccounts = activeTab === "agy" ? agyAccounts : codexAccounts;
 
   // Índice de pools por account_id del VPS
-  const poolsByVpsId = quotaPools.reduce<Record<string, PoolSummary[]>>((acc, pool) => {
-    if (!acc[pool.account_id]) acc[pool.account_id] = [];
-    acc[pool.account_id].push(pool);
-    return acc;
-  }, {});
+  const poolsByVpsId = useMemo(
+    () =>
+      quotaPools.reduce<Record<string, PoolSummary[]>>((acc, pool) => {
+        if (!acc[pool.account_id]) acc[pool.account_id] = [];
+        acc[pool.account_id].push(pool);
+        return acc;
+      }, {}),
+    [quotaPools]
+  );
+
+  function handleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir(d => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  }
+
+  function sortIndicator(field: SortField): string {
+    if (sortField !== field) return "";
+    return sortDir === "asc" ? " ▲" : " ▼";
+  }
+
+  const visibleAccounts = useMemo(() => {
+    const base = activeTab === "agy" ? [...agyAccounts] : [...codexAccounts];
+    const mult = sortDir === "asc" ? 1 : -1;
+
+    base.sort((a, b) => {
+      if (sortField === "name") {
+        return mult * a.alias.localeCompare(b.alias, "es", { sensitivity: "base" });
+      }
+      if (sortField === "email") {
+        return mult * (a.email ?? "").localeCompare(b.email ?? "", "es", { sensitivity: "base" });
+      }
+      const poolsA = poolsByVpsId[a.id] ?? [];
+      const poolsB = poolsByVpsId[b.id] ?? [];
+
+      if (sortField === "gemini") {
+        const pa = poolsA.find(p => p.pool === "gemini-weekly")?.current_percent_used ?? -1;
+        const pb = poolsB.find(p => p.pool === "gemini-weekly")?.current_percent_used ?? -1;
+        return mult * (pa - pb);
+      }
+      if (sortField === "claude") {
+        const pa =
+          poolsA.find(p => p.pool === "claude-gpt-weekly" || p.pool === "3p-weekly")
+            ?.current_percent_used ?? -1;
+        const pb =
+          poolsB.find(p => p.pool === "claude-gpt-weekly" || p.pool === "3p-weekly")
+            ?.current_percent_used ?? -1;
+        return mult * (pa - pb);
+      }
+      // "quota" (Codex)
+      const pa = (poolsA.find(p => p.pool === "default") ?? poolsA[0])?.current_percent_used ?? -1;
+      const pb = (poolsB.find(p => p.pool === "default") ?? poolsB[0])?.current_percent_used ?? -1;
+      return mult * (pa - pb);
+    });
+
+    return base;
+  }, [activeTab, agyAccounts, codexAccounts, poolsByVpsId, sortField, sortDir]);
 
   async function handleSwitch(account: AccountInfo) {
     if (noAgentOnPc) return;
@@ -159,6 +223,7 @@ export default function DashboardPage() {
       if (result.success) {
         setSwitchMsg(`✅ Cambiado a '${account.alias}'. ${result.restart_notice ?? ""}`);
         setCanUndoSwitch(Boolean(result.can_undo));
+        quota.refetch();
       } else {
         setSwitchMsg(`❌ ${result.error ?? "Error desconocido al cambiar de cuenta."}`);
       }
@@ -186,6 +251,8 @@ export default function DashboardPage() {
 
   const isLoading = vaultAccounts.loading;
   const hasError = vaultAccounts.error;
+  const agyIcon = theme === "dark" ? agyDark : agyLight;
+  const codexIcon = theme === "dark" ? codexDark : codexLight;
 
   return (
     <div style={styles.page}>
@@ -210,18 +277,20 @@ export default function DashboardPage() {
             ...styles.tabBtn,
             ...(activeTab === "agy" ? styles.tabBtnActive : {}),
           }}
-          onClick={() => setActiveTab("agy")}
+          onClick={() => { setActiveTab("agy"); setSortField("name"); setSortDir("asc"); }}
         >
-          🤖 Antigravity ({agyAccounts.length})
+          <img src={agyIcon} alt="Antigravity" style={styles.tabIcon} />
+          <span>Antigravity ({agyAccounts.length})</span>
         </button>
         <button
           style={{
             ...styles.tabBtn,
             ...(activeTab === "codex" ? styles.tabBtnActive : {}),
           }}
-          onClick={() => setActiveTab("codex")}
+          onClick={() => { setActiveTab("codex"); setSortField("name"); setSortDir("asc"); }}
         >
-          💻 Codex ({codexAccounts.length})
+          <img src={codexIcon} alt="Codex" style={styles.tabIcon} />
+          <span>Codex ({codexAccounts.length})</span>
         </button>
       </div>
 
@@ -296,7 +365,11 @@ export default function DashboardPage() {
       {/* Sin cuentas para el proveedor */}
       {!isLoading && !hasError && visibleAccounts.length === 0 && (
         <div style={styles.empty}>
-          <span style={{ fontSize: 48 }}>{activeTab === "agy" ? "🤖" : "💻"}</span>
+          <img
+            src={activeTab === "agy" ? agyIcon : codexIcon}
+            alt={activeTab}
+            style={{ width: 48, height: 48, objectFit: "contain" }}
+          />
           <p style={{ fontWeight: 600 }}>
             No hay cuentas de {activeTab === "agy" ? "Antigravity" : "Codex"} en tu bóveda
           </p>
@@ -314,10 +387,18 @@ export default function DashboardPage() {
           <table style={styles.table}>
             <thead>
               <tr style={styles.theadRow}>
-                <th style={styles.th}>Nombre</th>
-                <th style={styles.th}>Correo</th>
-                <th style={styles.th}>Gemini Weekly</th>
-                <th style={styles.th}>Claude / GPT Weekly</th>
+                <th style={{ ...styles.th, ...styles.thSortable }} onClick={() => handleSort("name")}>
+                  Nombre{sortIndicator("name")}
+                </th>
+                <th style={{ ...styles.th, ...styles.thSortable }} onClick={() => handleSort("email")}>
+                  Correo{sortIndicator("email")}
+                </th>
+                <th style={{ ...styles.th, ...styles.thSortable }} onClick={() => handleSort("gemini")}>
+                  Gemini Weekly{sortIndicator("gemini")}
+                </th>
+                <th style={{ ...styles.th, ...styles.thSortable }} onClick={() => handleSort("claude")}>
+                  Claude / GPT Weekly{sortIndicator("claude")}
+                </th>
                 <th style={{ ...styles.th, textAlign: "right" }}>Acciones</th>
               </tr>
             </thead>
@@ -381,9 +462,15 @@ export default function DashboardPage() {
           <table style={styles.table}>
             <thead>
               <tr style={styles.theadRow}>
-                <th style={styles.th}>Nombre</th>
-                <th style={styles.th}>Correo</th>
-                <th style={styles.th}>Cuota</th>
+                <th style={{ ...styles.th, ...styles.thSortable }} onClick={() => handleSort("name")}>
+                  Nombre{sortIndicator("name")}
+                </th>
+                <th style={{ ...styles.th, ...styles.thSortable }} onClick={() => handleSort("email")}>
+                  Correo{sortIndicator("email")}
+                </th>
+                <th style={{ ...styles.th, ...styles.thSortable }} onClick={() => handleSort("quota")}>
+                  Cuota{sortIndicator("quota")}
+                </th>
                 <th style={{ ...styles.th, textAlign: "right" }}>Acciones</th>
               </tr>
             </thead>
@@ -454,14 +541,17 @@ const styles: Record<string, React.CSSProperties> = {
   pageHeader: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   pageTitle: { fontSize: 20, fontWeight: 700, color: "var(--color-text)", margin: 0 },
   headerActions: { display: "flex", gap: 8 },
-  refreshBtn: { padding: "7px 14px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" },
+  refreshBtn: { padding: "7px 14px", border: "1px solid var(--color-btn-border)", borderRadius: "var(--radius-md)", background: "var(--color-btn-bg)", color: "var(--color-btn-text)", fontSize: 13, cursor: "pointer" },
   tabsRow: { display: "flex", gap: 8, borderBottom: "1px solid var(--color-border)", paddingBottom: 10 },
   tabBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
     padding: "8px 16px",
-    border: "1px solid var(--color-border)",
+    border: "1px solid var(--color-btn-border)",
     borderRadius: "var(--radius-md)",
-    background: "var(--color-bg)",
-    color: "var(--color-text-secondary)",
+    background: "var(--color-btn-bg)",
+    color: "var(--color-btn-text)",
     fontSize: 13,
     fontWeight: 500,
     cursor: "pointer",
@@ -472,6 +562,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderColor: "var(--color-primary)",
     fontWeight: 700,
   },
+  tabIcon: { width: 18, height: 18, objectFit: "contain" },
   warningBanner: { padding: "10px 16px", background: "var(--color-bg)", border: "1px solid var(--color-secondary)", borderRadius: "var(--radius-md)", fontSize: 12, color: "var(--color-text)" },
   pollerBar: { padding: "8px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 12, color: "var(--color-text-secondary)" },
   infoBar: { padding: "10px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 },
@@ -504,6 +595,10 @@ const styles: Record<string, React.CSSProperties> = {
     color: "var(--color-text-secondary)",
     whiteSpace: "nowrap" as const,
   },
+  thSortable: {
+    cursor: "pointer",
+    userSelect: "none" as const,
+  },
   tr: {
     borderBottom: "1px solid var(--color-border-subtle)",
   },
@@ -519,6 +614,6 @@ const styles: Record<string, React.CSSProperties> = {
   pctPill: { fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, border: "1px solid", whiteSpace: "nowrap" as const },
   resetDate: { fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "nowrap" as const },
   rowActions: { display: "inline-flex", gap: 6, justifyContent: "flex-end" },
-  detailBtn: { padding: "5px 10px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)", fontSize: 12, cursor: "pointer" },
+  detailBtn: { padding: "5px 10px", border: "1px solid var(--color-btn-border)", borderRadius: "var(--radius-md)", background: "var(--color-btn-bg)", color: "var(--color-btn-text)", fontSize: 12, cursor: "pointer" },
   switchBtn: { padding: "6px 14px", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 12, cursor: "pointer", fontWeight: 600 },
 };

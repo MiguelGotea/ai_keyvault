@@ -375,10 +375,10 @@ function GlobalLogoutButton() {
           style={{
             padding: "6px 12px",
             fontSize: 12,
-            border: "1px solid var(--color-danger)",
+            border: "1px solid var(--color-danger-border)",
             borderRadius: "var(--radius-md)",
-            background: "transparent",
-            color: "var(--color-danger)",
+            background: "var(--color-danger-bg)",
+            color: "var(--color-danger-text)",
             cursor: "pointer",
             fontWeight: 600,
           }}
@@ -397,10 +397,10 @@ function GlobalLogoutButton() {
               style={{
                 padding: "6px 12px",
                 fontSize: 12,
-                border: "none",
+                border: "1px solid var(--color-danger-border)",
                 borderRadius: "var(--radius-md)",
-                background: "var(--color-danger)",
-                color: "#fff",
+                background: "var(--color-danger-bg)",
+                color: "var(--color-danger-text)",
                 cursor: "pointer",
                 fontWeight: 600,
               }}
@@ -590,7 +590,7 @@ const styles: Record<string, React.CSSProperties> = {
   saveBtn: { padding: "10px 20px", border: "none", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 14, cursor: "pointer", fontWeight: 600 },
   modalOverlay: { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 },
   modal: { background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: 28, maxWidth: 420, width: "90%" },
-  btnOutline: { padding: "8px 14px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "transparent", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" },
+  btnOutline: { padding: "8px 14px", border: "1px solid var(--color-btn-border)", borderRadius: "var(--radius-md)", background: "var(--color-btn-bg)", color: "var(--color-btn-text)", fontSize: 13, cursor: "pointer" },
 };
 
 const rowStyles: Record<string, React.CSSProperties> = {

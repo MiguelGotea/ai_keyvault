@@ -99,7 +99,7 @@ const styles: Record<string, React.CSSProperties> = {
   header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   title: { fontSize: 20, fontWeight: 700, color: "var(--color-text)", margin: 0 },
   subtitle: { fontSize: 12, color: "var(--color-text-disabled)", margin: "4px 0 0 0" },
-  refreshBtn: { padding: "7px 14px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" },
+  refreshBtn: { padding: "7px 14px", border: "1px solid var(--color-btn-border)", borderRadius: "var(--radius-md)", background: "var(--color-btn-bg)", color: "var(--color-btn-text)", fontSize: 13, cursor: "pointer" },
   banner: { padding: "10px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center" },
   closeBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--color-text-disabled)" },
   error: { padding: "10px 14px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", fontSize: 12, color: "#991B1B" },
@@ -111,5 +111,5 @@ const styles: Record<string, React.CSSProperties> = {
   name: { fontSize: 14, color: "var(--color-text)" },
   badge: { fontSize: 10, fontWeight: 700, padding: "1px 8px", borderRadius: 999, border: "1px solid" },
   meta: { fontSize: 11, color: "var(--color-text-disabled)", fontFamily: "var(--font-mono)" },
-  revokeBtn: { padding: "6px 12px", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", background: "#FEF2F2", color: "#991B1B", fontSize: 12, cursor: "pointer", fontWeight: 600 },
+  revokeBtn: { padding: "6px 12px", border: "1px solid var(--color-danger-border)", borderRadius: "var(--radius-md)", background: "var(--color-danger-bg)", color: "var(--color-danger-text)", fontSize: 12, cursor: "pointer", fontWeight: 600 },
 };

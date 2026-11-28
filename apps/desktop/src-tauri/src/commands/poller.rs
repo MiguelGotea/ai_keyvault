@@ -117,10 +117,6 @@ pub async fn start_poller(app: AppHandle, poller: State<'_, PollerManager>) -> R
             "AKYV_ALERTS_MUTE_FILE",
             mute_path.to_string_lossy().as_ref(),
         )
-        .env(
-            "AKYV_ALERTS_MUTE_FILE",
-            mute_path.to_string_lossy().as_ref(),
-        )
         .env("AKYV_SERVER_URL", crate::api_client::SERVER_URL)
         .env("AKYV_POLL_INTERVAL", "600")
         .spawn();
@@ -238,4 +234,43 @@ pub async fn resume_poller(poller: State<'_, PollerManager>) -> Result<(), Strin
 pub async fn stop_poller(poller: State<'_, PollerManager>) -> Result<(), String> {
     kill_poller_process(&poller);
     Ok(())
+}
+
+/// Ejecuta un ciclo único del poller (`--once`) y espera a que termine.
+/// Se usa antes de cambiar de cuenta o agregar una nueva para capturar
+/// la última cuota de la sesión en curso si pertenece a una cuenta registrada.
+pub async fn run_poller_once(app: &AppHandle) -> Result<(), String> {
+    let map_path = crate::commands::vault::identity_map_path(app);
+    let mute_path = crate::commands::security::alerts_mute_file_path(app);
+
+    let output = app
+        .shell()
+        .sidecar("ai-keyvault-poller")
+        .map_err(|e| format!("No se encontró el sidecar del poller: {e}"))?
+        .args(["--once"])
+        .env(
+            "AKYV_IDENTITY_MAP_PATH",
+            map_path.to_string_lossy().as_ref(),
+        )
+        .env(
+            "AKYV_ALERTS_MUTE_FILE",
+            mute_path.to_string_lossy().as_ref(),
+        )
+        .env("AKYV_SERVER_URL", crate::api_client::SERVER_URL)
+        .output()
+        .await
+        .map_err(|e| format!("Error ejecutando poller --once: {e}"))?;
+
+    if output.status.success() {
+        let manager = app.state::<PollerManager>();
+        if let Ok(mut guard) = manager.status.lock() {
+            guard.last_poll_at = Some(chrono::Utc::now().to_rfc3339());
+            guard.error = None;
+        }
+        info!("✅ Poll manual (--once) completado");
+        Ok(())
+    } else {
+        let err_txt = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(format!("Poller --once falló: {err_txt}"))
+    }
 }

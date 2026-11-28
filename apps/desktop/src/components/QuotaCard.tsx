@@ -219,10 +219,10 @@ const styles: Record<string, React.CSSProperties> = {
   actionBtn: {
     marginTop: 4,
     padding: "7px 10px",
-    border: "1px solid var(--color-border)",
+    border: "1px solid var(--color-btn-border)",
     borderRadius: "var(--radius-md)",
-    background: "var(--color-bg-secondary)",
-    color: "var(--color-text-secondary)",
+    background: "var(--color-btn-bg)",
+    color: "var(--color-btn-text)",
     fontSize: 12,
     cursor: "pointer",
     textAlign: "right" as const,

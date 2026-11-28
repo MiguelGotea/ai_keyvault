@@ -307,6 +307,7 @@ pub async fn get_running_agent_processes() -> Result<Vec<String>, String> {
 /// Switch de cuenta real: lee credenciales de la bóveda y las escribe en el SO.
 #[command]
 pub async fn switch_account(
+    app: tauri::AppHandle,
     vault_state: State<'_, VaultState>,
     undo_state: State<'_, SwitchUndoState>,
     account_id: String,
@@ -359,6 +360,25 @@ pub async fn switch_account(
 
     // Capturar credencial previa para permitir «Deshacer» (Fase 26)
     let previous_label = get_active_account(provider.clone()).await.ok().flatten();
+
+    // Si la cuenta actualmente activa en esta PC está registrada en la bóveda,
+    // ejecutar un poll manual antes de reemplazarla para guardar su cuota final.
+    if let Some(ref current_email) = previous_label {
+        let map_path = crate::commands::vault::identity_map_path(&app);
+        let is_registered = ai_keyvault_core::identity_map::IdentityMap::load_encrypted(&map_path)
+            .map(|m| m.resolve(&provider, current_email).is_some())
+            .unwrap_or(false);
+        if is_registered {
+            info!(
+                provider = %provider,
+                current_email = %current_email,
+                "⚡ Ejecutando poll manual antes de cambiar de cuenta..."
+            );
+            if let Err(e) = crate::commands::poller::run_poller_once(&app).await {
+                warn!("⚠️ Poll previo al cambio de cuenta falló (se continúa): {e}");
+            }
+        }
+    }
     let prev_agy_blob = if provider == "agy" {
         #[cfg(target_os = "windows")]
         {

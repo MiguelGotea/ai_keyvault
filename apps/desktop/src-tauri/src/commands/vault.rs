@@ -1081,6 +1081,25 @@ pub async fn add_agy_account_oauth(
     let agy_bin =
         find_agy_binary().ok_or_else(|| "No se encontró agy.exe en el sistema.".to_string())?;
 
+    // 0. Si hay una cuenta AGY activa registrada en la bóveda, capturar su cuota antes de cerrar sesión
+    if let Ok(Some(current_email)) =
+        crate::commands::switch_cmd::get_active_account("agy".to_string()).await
+    {
+        let map_path = identity_map_path(&app);
+        let is_registered = ai_keyvault_core::identity_map::IdentityMap::load_encrypted(&map_path)
+            .map(|m| m.resolve("agy", &current_email).is_some())
+            .unwrap_or(false);
+        if is_registered {
+            tracing::info!(
+                current_email = %current_email,
+                "⚡ Ejecutando poll manual antes de agregar nueva cuenta AGY..."
+            );
+            if let Err(e) = crate::commands::poller::run_poller_once(&app).await {
+                tracing::warn!("⚠️ Poll previo al login OAuth falló (se continúa): {e}");
+            }
+        }
+    }
+
     // 1. Respaldar credencial actual y limpiar Credential Manager para forzar login OAuth
     let backup = backup_and_clear_agy_credential();
 

@@ -2,11 +2,16 @@
  * AccountsPage — Bóveda de cuentas AI.
  *
  * Separada por pestañas de proveedor (Antigravity / Codex).
- * Cada cuenta se muestra en una sola línea: nombre + fecha guardada al costado, y acciones a la derecha.
+ * Cada cuenta se muestra en una sola línea ordenada alfabéticamente por nombre.
  */
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useCommand } from "../hooks/useCommand";
+import { useTheme } from "../hooks/useTheme";
+import agyLight from "../assets/agy-light.png";
+import agyDark from "../assets/agy-dark.png";
+import codexLight from "../assets/codex-light.png";
+import codexDark from "../assets/codex-dark.png";
 import type { AccountInfo } from "../types/api";
 
 type ProviderType = "agy" | "codex";
@@ -22,6 +27,7 @@ interface AccountCredentials {
 }
 
 export default function AccountsPage() {
+  const theme = useTheme();
   const [activeTab, setActiveTab] = useState<ProviderType>("agy");
   const [showModal, setShowModal] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<ProviderType>("agy");
@@ -202,9 +208,24 @@ export default function AccountsPage() {
   };
 
   const allAccounts = accounts.data ?? [];
-  const agyAccounts = allAccounts.filter(a => a.provider === "agy");
-  const codexAccounts = allAccounts.filter(a => a.provider === "codex");
+  const agyAccounts = useMemo(
+    () =>
+      allAccounts
+        .filter(a => a.provider === "agy")
+        .sort((a, b) => a.alias.localeCompare(b.alias, "es", { sensitivity: "base" })),
+    [allAccounts]
+  );
+  const codexAccounts = useMemo(
+    () =>
+      allAccounts
+        .filter(a => a.provider === "codex")
+        .sort((a, b) => a.alias.localeCompare(b.alias, "es", { sensitivity: "base" })),
+    [allAccounts]
+  );
   const visibleAccounts = activeTab === "agy" ? agyAccounts : codexAccounts;
+
+  const agyIcon = theme === "dark" ? agyDark : agyLight;
+  const codexIcon = theme === "dark" ? codexDark : codexLight;
 
   return (
     <div style={styles.page}>
@@ -235,7 +256,8 @@ export default function AccountsPage() {
           }}
           onClick={() => setActiveTab("agy")}
         >
-          🤖 Antigravity ({agyAccounts.length})
+          <img src={agyIcon} alt="Antigravity" style={styles.tabIcon} />
+          <span>Antigravity ({agyAccounts.length})</span>
         </button>
         <button
           style={{
@@ -244,7 +266,8 @@ export default function AccountsPage() {
           }}
           onClick={() => setActiveTab("codex")}
         >
-          💻 Codex ({codexAccounts.length})
+          <img src={codexIcon} alt="Codex" style={styles.tabIcon} />
+          <span>Codex ({codexAccounts.length})</span>
         </button>
       </div>
 
@@ -272,7 +295,11 @@ export default function AccountsPage() {
       {/* Sin cuentas en este proveedor */}
       {!accounts.loading && !accounts.error && visibleAccounts.length === 0 && (
         <div style={styles.empty}>
-          <span style={{ fontSize: 48 }}>{activeTab === "agy" ? "🤖" : "💻"}</span>
+          <img
+            src={activeTab === "agy" ? agyIcon : codexIcon}
+            alt={activeTab}
+            style={{ width: 48, height: 48, objectFit: "contain" }}
+          />
           <p style={{ fontWeight: 600 }}>
             No hay cuentas de {activeTab === "agy" ? "Antigravity" : "Codex"} en tu bóveda
           </p>
@@ -442,7 +469,8 @@ export default function AccountsPage() {
                     }}
                     onClick={() => setSelectedProvider("agy")}
                   >
-                    🤖 Antigravity (agy)
+                    <img src={agyIcon} alt="Antigravity" style={styles.tabIcon} />
+                    <span>Antigravity (agy)</span>
                   </button>
                   <button
                     style={{
@@ -451,7 +479,8 @@ export default function AccountsPage() {
                     }}
                     onClick={() => setSelectedProvider("codex")}
                   >
-                    💻 Codex
+                    <img src={codexIcon} alt="Codex" style={styles.tabIcon} />
+                    <span>Codex</span>
                   </button>
                 </div>
               </div>
@@ -509,11 +538,14 @@ const styles: Record<string, React.CSSProperties> = {
   subtitle: { fontSize: 12, color: "var(--color-text-disabled)", margin: "4px 0 0 0" },
   tabsRow: { display: "flex", gap: 8, borderBottom: "1px solid var(--color-border)", paddingBottom: 10 },
   tabBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
     padding: "8px 16px",
-    border: "1px solid var(--color-border)",
+    border: "1px solid var(--color-btn-border)",
     borderRadius: "var(--radius-md)",
-    background: "var(--color-bg)",
-    color: "var(--color-text-secondary)",
+    background: "var(--color-btn-bg)",
+    color: "var(--color-btn-text)",
     fontSize: 13,
     fontWeight: 500,
     cursor: "pointer",
@@ -524,7 +556,8 @@ const styles: Record<string, React.CSSProperties> = {
     borderColor: "var(--color-primary)",
     fontWeight: 700,
   },
-  refreshBtn: { padding: "7px 12px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" },
+  tabIcon: { width: 18, height: 18, objectFit: "contain" },
+  refreshBtn: { padding: "7px 12px", border: "1px solid var(--color-btn-border)", borderRadius: "var(--radius-md)", background: "var(--color-btn-bg)", color: "var(--color-btn-text)", fontSize: 13, cursor: "pointer" },
   addBtn: { padding: "7px 14px", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 13, cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" as const },
   actionBar: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", border: "1px solid", borderRadius: "var(--radius-md)", fontSize: 13 },
   error: { padding: "10px 14px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", fontSize: 12, color: "#991B1B" },
@@ -535,8 +568,8 @@ const styles: Record<string, React.CSSProperties> = {
   cardAlias: { fontSize: 14, fontWeight: 600, color: "var(--color-text)" },
   cardMeta: { fontSize: 11, color: "var(--color-text-disabled)", whiteSpace: "nowrap" as const },
   cardActions: { display: "flex", gap: 6, flexShrink: 0, flexWrap: "wrap" as const },
-  copyBtn: { padding: "6px 10px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg-secondary)", color: "var(--color-text)", fontSize: 12, cursor: "pointer" },
-  deleteBtn: { padding: "6px 10px", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", background: "#FEF2F2", color: "#991B1B", fontSize: 12, cursor: "pointer" },
+  copyBtn: { padding: "6px 10px", border: "1px solid var(--color-btn-border)", borderRadius: "var(--radius-md)", background: "var(--color-btn-bg)", color: "var(--color-btn-text)", fontSize: 12, cursor: "pointer" },
+  deleteBtn: { padding: "6px 10px", border: "1px solid var(--color-danger-border)", borderRadius: "var(--radius-md)", background: "var(--color-danger-bg)", color: "var(--color-danger-text)", fontSize: 12, cursor: "pointer", fontWeight: 600 },
   // Modal
   overlay: { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 },
   modal: { background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: 24, width: "min(480px, 90vw)", display: "flex", flexDirection: "column" as const, gap: 16, maxHeight: "90vh", overflowY: "auto" as const },
@@ -550,9 +583,9 @@ const styles: Record<string, React.CSSProperties> = {
   input: { padding: "9px 12px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 14, background: "var(--color-bg-secondary)", color: "var(--color-text)", outline: "none", fontFamily: "inherit" },
   infoBox: { padding: "10px 12px", background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)" },
   providerTabs: { display: "flex", gap: 8 },
-  providerTab: { flex: 1, padding: "8px 12px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer", fontWeight: 500, textAlign: "center" as const },
+  providerTab: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "8px 12px", border: "1px solid var(--color-btn-border)", borderRadius: "var(--radius-md)", background: "var(--color-btn-bg)", color: "var(--color-btn-text)", fontSize: 13, cursor: "pointer", fontWeight: 500, textAlign: "center" as const },
   providerTabActive: { borderColor: "var(--color-primary)", background: "var(--color-primary)", color: "var(--color-on-primary)", fontWeight: 700 },
   modalFooter: { display: "flex", gap: 10, justifyContent: "flex-end" },
-  cancelBtn: { padding: "8px 16px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" },
+  cancelBtn: { padding: "8px 16px", border: "1px solid var(--color-btn-border)", borderRadius: "var(--radius-md)", background: "var(--color-btn-bg)", color: "var(--color-btn-text)", fontSize: 13, cursor: "pointer" },
   saveBtn: { padding: "8px 18px", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 13, cursor: "pointer", fontWeight: 600 },
 };

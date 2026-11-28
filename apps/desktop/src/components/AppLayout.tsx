@@ -9,8 +9,11 @@ import ServerStatusBadge from "./ServerStatusBadge";
 import PollerStatusBadge from "./PollerStatusBadge";
 import CommandPalette from "./CommandPalette";
 import { useServerHealth } from "../hooks/useServerHealth";
-import logoIcon from "../assets/ai-keyvault-icon.svg";
-import logoText from "../assets/ai-keyvault-text.svg";
+import { useTheme } from "../hooks/useTheme";
+import logoIconLight from "../assets/ai-keyvault-icon.svg";
+import logoTextLight from "../assets/ai-keyvault-text.svg";
+import logoIconDark from "../assets/ai-keyvault-icon-dark.svg";
+import logoTextDark from "../assets/ai-keyvault-text-dark.svg";
 import es from "../i18n/es.json";
 
 const NAV_ITEMS = [
@@ -28,6 +31,7 @@ const NAV_ITEMS = [
 export default function AppLayout() {
   const navigate = useNavigate();
   const health = useServerHealth();
+  const theme = useTheme();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   useEffect(() => {
@@ -52,8 +56,16 @@ export default function AppLayout() {
       <aside style={styles.sidebar}>
         {/* Logo */}
         <div style={styles.sidebarHeader}>
-          <img src={logoIcon} alt="AI KeyVault" style={styles.sidebarLogoIcon} />
-          <img src={logoText} alt="AI KeyVault" style={styles.sidebarLogoText} />
+          <img
+            src={theme === "dark" ? logoIconDark : logoIconLight}
+            alt="AI KeyVault"
+            style={styles.sidebarLogoIcon}
+          />
+          <img
+            src={theme === "dark" ? logoTextDark : logoTextLight}
+            alt="AI KeyVault"
+            style={styles.sidebarLogoText}
+          />
         </div>
 
         {/* Navegación */}
@@ -80,7 +92,7 @@ export default function AppLayout() {
           </div>
           <PollerStatusBadge compact />
           <button
-            style={{ ...styles.lockBtn, marginTop: 8, background: "transparent", color: "var(--color-text-secondary)", borderColor: "var(--color-border)" }}
+            style={{ ...styles.lockBtn, marginTop: 8 }}
             onClick={() => setPaletteOpen(true)}
             title="Abrir paleta de comandos (Ctrl+K)"
           >
@@ -175,10 +187,10 @@ const styles: Record<string, React.CSSProperties> = {
   lockBtn: {
     marginTop: 8,
     padding: "8px 10px",
-    border: "1px solid var(--color-border)",
+    border: "1px solid var(--color-btn-border)",
     borderRadius: "var(--radius-md)",
-    background: "transparent",
-    color: "var(--color-text-secondary)",
+    background: "var(--color-btn-bg)",
+    color: "var(--color-btn-text)",
     fontSize: 12,
     cursor: "pointer",
     textAlign: "left" as const,

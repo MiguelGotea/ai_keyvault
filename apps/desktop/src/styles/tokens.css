@@ -42,10 +42,18 @@
   --color-quota-crit:    #EF4444;  /* rojo — ≥ 95% usado */
 
   /* ── Estados semánticos ── */
-  --color-success:  #2f4a42;  /* verde marca — operación exitosa */
-  --color-warning:  #b8a377;  /* dorado — advertencia */
-  --color-danger:   #EF4444;  /* rojo — error / crítico */
-  --color-info:     #3B82F6;  /* azul — información */
+  --color-success:       #2f4a42;  /* verde marca — operación exitosa */
+  --color-warning:       #b8a377;  /* dorado — advertencia */
+  --color-danger:        #DC2626;  /* rojo — error / crítico */
+  --color-danger-bg:     #DC2626;  /* fondo sólido rojo para botones de peligro */
+  --color-danger-border: #B91C1C;
+  --color-danger-text:   #FFFFFF;
+  --color-info:          #3B82F6;  /* azul — información */
+
+  /* ── Botones normales (secundarios) ── */
+  --color-btn-bg:     #e2dac9;
+  --color-btn-text:   #1f2d28;
+  --color-btn-border: #cdbb94;
 
   /* ── Neutros (tema claro oficial #e9e3d5) ── */
   --color-bg:            #e9e3d5;
@@ -96,4 +104,11 @@
   --color-quota-ok:      #6ea393;
   --color-warning:       #cdbb94;
   --color-quota-warn:    #cdbb94;
+  --color-danger:        #EF4444;
+  --color-danger-bg:     #DC2626;
+  --color-danger-border: #B91C1C;
+  --color-danger-text:   #FFFFFF;
+  --color-btn-bg:        #161616;
+  --color-btn-text:      #e9e3d5;
+  --color-btn-border:    #3a3a3a;
 }
