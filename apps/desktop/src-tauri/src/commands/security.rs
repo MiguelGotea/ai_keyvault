@@ -10,7 +10,7 @@
 //! - La bóveda se sincroniza con el VPS via POST /api/vault/sync (cifrada, conocimiento cero).
 //! - Descarga al abrir y sube al guardar cambios.
 
-use crate::api_client::{http_client, DeviceRegistration, SERVER_URL};
+use crate::api_client::http_client;
 use crate::commands::vault::VaultState;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -130,46 +130,8 @@ pub async fn sync_vault_to_vps(app: &AppHandle) -> Result<(), String> {
         }
     }
 
-    // Fallback legado sin usuario registrado
-    let reg_payload = DeviceRegistration {
-        device_id: device_id.clone(),
-        device_name: device_id.clone(),
-        public_key_hex: "0".repeat(64),
-    };
-    let reg_resp = http_client()
-        .post(&format!("{SERVER_URL}/api/devices/register"))
-        .json(&reg_payload)
-        .send()
-        .await
-        .map_err(|e| format!("Error al registrar dispositivo: {e}"))?;
-    if !reg_resp.status().is_success() {
-        return Err(format!(
-            "Error del servidor al registrar dispositivo: {}",
-            reg_resp.status()
-        ));
-    }
-
-    let payload = serde_json::json!({
-        "device_id": device_id,
-        "encrypted_payload": vault_str,
-    });
-
-    let resp = http_client()
-        .post(&format!("{SERVER_URL}/api/vault/sync"))
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| format!("Error al subir bóveda: {e}"))?;
-
-    if resp.status().is_success() {
-        info!("☁️ Bóveda sincronizada con VPS");
-        Ok(())
-    } else {
-        Err(format!(
-            "Error del servidor al sincronizar: {}",
-            resp.status()
-        ))
-    }
+    // Sin sesión de usuario — la app siempre requiere cuenta registrada
+    Err("No hay sesión activa. Inicia sesión para sincronizar la bóveda.".into())
 }
 
 /// Sube la bóveda cifrada al VPS (conocimiento cero — el servidor no puede descifrarla).
@@ -322,53 +284,12 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
         }
     }
 
-    // Fallback legado: GET /api/vault/sync (sin usuario registrado)
-    let resp = http_client()
-        .get(&format!("{SERVER_URL}/api/vault/sync"))
-        .send()
-        .await
-        .map_err(|e| format!("Error al descargar bóveda: {e}"))?;
-
-    let status = resp.status();
-    if status.is_success() {
-        let body: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| format!("Error leyendo respuesta del servidor: {e}"))?;
-
-        let encrypted_payload = body
-            .get("encrypted_payload")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| "La respuesta del servidor no contiene encrypted_payload".to_string())?;
-
-        let new_state = serde_json::from_str::<EncryptedVaultState>(encrypted_payload)
-            .map_err(|e| format!("La bóveda descargada tiene formato inválido: {e}"))?;
-
-        let path = vault_path(&app);
-        apply_hot_reload(&app, new_state, &path, encrypted_payload.as_bytes())?;
-
-        info!(
-            "⬇️ Bóveda descargada del VPS ({} bytes)",
-            encrypted_payload.len()
-        );
-        Ok(VaultSyncResult {
-            success: true,
-            direction: "download".into(),
-            error: None,
-        })
-    } else if status.as_u16() == 400 || status.as_u16() == 404 {
-        Ok(VaultSyncResult {
-            success: true,
-            direction: "none".into(),
-            error: None,
-        })
-    } else {
-        Ok(VaultSyncResult {
-            success: false,
-            direction: "download".into(),
-            error: Some(format!("Error del servidor: {}", status)),
-        })
-    }
+    // Sin sesión de usuario — la app siempre requiere cuenta registrada
+    Ok(VaultSyncResult {
+        success: false,
+        direction: "download".into(),
+        error: Some("No hay sesión activa. Inicia sesión para sincronizar la bóveda.".into()),
+    })
 }
 
 /// Lanza el timer de auto-sincronización periódica de la bóveda en background.
