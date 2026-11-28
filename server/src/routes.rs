@@ -34,52 +34,8 @@ pub async fn health() -> Json<serde_json::Value> {
 }
 
 // ─────────────────────────────────────────────
-// 2. Registro de Dispositivos (Ed25519)
+// 2. Dispositivos (listado y revocación)
 // ─────────────────────────────────────────────
-#[derive(Debug, Deserialize)]
-pub struct RegisterDeviceRequest {
-    pub device_id: String,
-    pub device_name: String,
-    pub public_key_hex: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct RegisterDeviceResponse {
-    pub device_id: String,
-    pub registered: bool,
-    pub message: String,
-}
-
-pub async fn register_device(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<RegisterDeviceRequest>,
-) -> Result<Json<RegisterDeviceResponse>> {
-    let now = Utc::now().to_rfc3339();
-
-    sqlx::query(
-        r#"
-        INSERT INTO devices (id, name, public_key_hex, is_active, created_at, last_seen_at)
-        VALUES (?, ?, ?, 1, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            name = excluded.name,
-            last_seen_at = excluded.last_seen_at
-        "#,
-    )
-    .bind(&payload.device_id)
-    .bind(&payload.device_name)
-    .bind(&payload.public_key_hex)
-    .bind(&now)
-    .bind(&now)
-    .execute(&state.db)
-    .await?;
-
-    Ok(Json(RegisterDeviceResponse {
-        device_id: payload.device_id,
-        registered: true,
-        message: "Dispositivo registrado exitosamente".to_string(),
-    }))
-}
-
 #[derive(Debug, Serialize)]
 pub struct DeviceItem {
     pub id: String,
@@ -134,57 +90,17 @@ pub async fn revoke_device(
 }
 
 // ─────────────────────────────────────────────
-// 3. Sincronización de Bóveda Cifrada (Conocimiento Cero)
+// 3. Sincronización de Bóveda por Usuario (Conocimiento Cero)
 // ─────────────────────────────────────────────
-#[derive(Debug, Deserialize)]
-pub struct SyncUploadRequest {
-    pub device_id: String,
-    pub encrypted_payload: String, // JSON cifrado en cliente
-}
+// Los endpoints legados /api/vault/sync y /api/devices/register
+// fueron eliminados. Toda sincronización usa /api/auth/vault (upload)
+// y /api/auth/vault/download (download), ambos autenticados por usuario.
 
 #[derive(Debug, Serialize)]
-pub struct SyncUploadResponse {
+pub struct VaultUploadResponse {
     pub version: i64,
     pub checksum_sha256: String,
     pub updated_at: String,
-}
-
-pub async fn upload_vault(
-    State(state): State<Arc<AppState>>,
-    Json(payload): Json<SyncUploadRequest>,
-) -> Result<Json<SyncUploadResponse>> {
-    let mut hasher = Sha256::new();
-    hasher.update(payload.encrypted_payload.as_bytes());
-    let checksum = hex::encode(hasher.finalize());
-    let now = Utc::now().to_rfc3339();
-
-    // Obtener la última versión
-    let row = sqlx::query("SELECT MAX(version) as max_v FROM vault_snapshots")
-        .fetch_one(&state.db)
-        .await?;
-
-    let current_version: Option<i64> = row.try_get("max_v").unwrap_or(None);
-    let next_version = current_version.unwrap_or(0) + 1;
-
-    sqlx::query(
-        r#"
-        INSERT INTO vault_snapshots (version, device_id, encrypted_payload, checksum_sha256, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-        "#,
-    )
-    .bind(next_version)
-    .bind(&payload.device_id)
-    .bind(&payload.encrypted_payload)
-    .bind(&checksum)
-    .bind(&now)
-    .execute(&state.db)
-    .await?;
-
-    Ok(Json(SyncUploadResponse {
-        version: next_version,
-        checksum_sha256: checksum,
-        updated_at: now,
-    }))
 }
 
 /// Cuerpo de `POST /api/auth/vault/download` — descarga la bóveda cifrada del usuario autenticado.
@@ -239,44 +155,6 @@ pub async fn auth_download_vault(
     } else {
         Err(ServerError::BadRequest(
             "No existe ninguna bóveda sincronizada aún para este usuario".into(),
-        ))
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct SyncDownloadResponse {
-    pub version: i64,
-    pub device_id: String,
-    pub encrypted_payload: String,
-    pub checksum_sha256: String,
-    pub updated_at: String,
-}
-
-pub async fn download_vault(
-    State(state): State<Arc<AppState>>,
-) -> Result<Json<SyncDownloadResponse>> {
-    let row = sqlx::query(
-        r#"
-        SELECT version, device_id, encrypted_payload, checksum_sha256, updated_at
-        FROM vault_snapshots
-        ORDER BY version DESC
-        LIMIT 1
-        "#,
-    )
-    .fetch_optional(&state.db)
-    .await?;
-
-    if let Some(r) = row {
-        Ok(Json(SyncDownloadResponse {
-            version: r.get("version"),
-            device_id: r.get("device_id"),
-            encrypted_payload: r.get("encrypted_payload"),
-            checksum_sha256: r.get("checksum_sha256"),
-            updated_at: r.get("updated_at"),
-        }))
-    } else {
-        Err(ServerError::BadRequest(
-            "No existe ninguna bóveda sincronizada aún".into(),
         ))
     }
 }
@@ -1357,7 +1235,7 @@ pub struct AuthUploadVaultRequest {
 pub async fn auth_upload_vault(
     State(state): State<Arc<AppState>>,
     Json(body): Json<AuthUploadVaultRequest>,
-) -> Result<Json<SyncUploadResponse>> {
+) -> Result<Json<VaultUploadResponse>> {
     let username = body.username.trim().to_lowercase();
     verify_user_auth(&state, &username, &body.auth_key_hex).await?;
 
@@ -1393,7 +1271,7 @@ pub async fn auth_upload_vault(
     .execute(&state.db)
     .await?;
 
-    Ok(Json(SyncUploadResponse {
+    Ok(Json(VaultUploadResponse {
         version: next_version,
         checksum_sha256: checksum,
         updated_at: now,

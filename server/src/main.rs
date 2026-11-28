@@ -58,12 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/health", get(routes::health))
         .route("/api/devices", get(routes::list_devices))
-        .route("/api/devices/register", post(routes::register_device))
         .route("/api/devices/revoke", post(routes::revoke_device))
-        .route(
-            "/api/vault/sync",
-            post(routes::upload_vault).get(routes::download_vault),
-        )
         .route("/api/quota/lease", post(routes::acquire_lease))
         .route("/api/quota/readings", post(routes::post_quota_reading))
         .route(
