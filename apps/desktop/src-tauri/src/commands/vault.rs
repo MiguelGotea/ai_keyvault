@@ -800,11 +800,9 @@ pub async fn update_vault_account(
                     .find(|a| a.id == uid)
                     .map(|a| a.provider.clone())
                     .unwrap_or_default();
-                let duplicate = vault
-                    .state()
-                    .accounts
-                    .iter()
-                    .any(|a| a.id != uid && a.provider == target_provider && a.alias == clean_alias);
+                let duplicate = vault.state().accounts.iter().any(|a| {
+                    a.id != uid && a.provider == target_provider && a.alias == clean_alias
+                });
                 if duplicate {
                     return Err(format!(
                         "Ya existe otra cuenta de este proveedor con el alias '{clean_alias}'."

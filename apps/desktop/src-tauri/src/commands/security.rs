@@ -205,17 +205,50 @@ pub async fn upload_vault_sync(
     }
 }
 
-/// Descarga la bóveda cifrada del VPS y la guarda localmente.
-/// Si hay sesión de usuario autenticado, usa POST /api/auth/login para obtener la bóveda
-/// (igual que hace login_user_and_sync) — esto garantiza que descarga la bóveda del usuario
-/// y no la del endpoint legado de dispositivo.
-/// En fallback sin sesión usa GET /api/vault/sync (legado).
+/// Descarga la bóveda cifrada del VPS, la guarda en disco y recarga el estado en memoria
+/// (hot-reload sin pedir contraseña) para que la UI refleje los cambios de inmediato.
+/// Si hay sesión autenticada usa POST /api/auth/vault/download (tabla user_vaults).
+/// En fallback usa GET /api/vault/sync (legado, sin sesión).
 #[command]
 pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, String> {
-    use crate::commands::vault::{vault_path, SessionAuthState};
+    use crate::commands::vault::{vault_path, SessionAuthState, VaultState};
     use ai_keyvault_core::vault::EncryptedVaultState;
 
-    // Si hay sesión de usuario registrado, descargar desde /api/auth/vault (endpoint de usuario)
+    // ── Helper: aplica hot-reload en memoria y emite evento vault-reloaded ──
+    fn apply_hot_reload(
+        app: &AppHandle,
+        new_state: EncryptedVaultState,
+        path: &std::path::Path,
+        payload_bytes: &[u8],
+    ) -> Result<(), String> {
+        // 1. Guardar en disco
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("No se pudo crear directorio: {e}"))?;
+        }
+        std::fs::write(path, payload_bytes)
+            .map_err(|e| format!("Error guardando bóveda descargada: {e}"))?;
+
+        // 2. Hot-reload en RAM: si la bóveda está desbloqueada, reemplazamos el
+        //    EncryptedVaultState en memoria (cuentas, etc.) sin tocar unlocked_key.
+        //    state_mut() es &mut al campo state, el unlocked_key queda intacto.
+        {
+            let vault_state = app.state::<VaultState>();
+            let mut guard = vault_state.vault.lock().unwrap();
+            if let Some(vault) = &mut *guard {
+                if vault.is_unlocked() {
+                    *vault.state_mut() = new_state;
+                    info!("🔄 Bóveda recargada en memoria sin re-bloquear.");
+                }
+            }
+        }
+
+        // 3. Notificar al frontend para que haga refetch
+        let _ = app.emit("vault-reloaded", ());
+        Ok(())
+    }
+
+    // Si hay sesión de usuario registrado, descargar desde /api/auth/vault/download
     let session_creds = {
         let state = app.state::<SessionAuthState>();
         let guard = state.auth.lock().unwrap();
@@ -229,10 +262,8 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
     };
 
     if let Some((server_url, username, auth_key_hex)) = session_creds {
-        let device_id =
-            std::env::var("COMPUTERNAME").unwrap_or_else(|_| "desktop-win".to_string());
+        let device_id = std::env::var("COMPUTERNAME").unwrap_or_else(|_| "desktop-win".to_string());
 
-        // POST /api/auth/vault/download — descarga la última versión del usuario autenticado
         let resp = http_client()
             .post(&format!("{server_url}/api/auth/vault/download"))
             .json(&serde_json::json!({
@@ -258,16 +289,11 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
                     "La respuesta del servidor no contiene encrypted_payload".to_string()
                 })?;
 
-            serde_json::from_str::<EncryptedVaultState>(encrypted_payload)
+            let new_state = serde_json::from_str::<EncryptedVaultState>(encrypted_payload)
                 .map_err(|e| format!("La bóveda descargada tiene formato inválido: {e}"))?;
 
             let path = vault_path(&app);
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("No se pudo crear directorio: {e}"))?;
-            }
-            std::fs::write(&path, encrypted_payload.as_bytes())
-                .map_err(|e| format!("Error guardando bóveda descargada: {e}"))?;
+            apply_hot_reload(&app, new_state, &path, encrypted_payload.as_bytes())?;
 
             info!(
                 "⬇️ Bóveda de usuario descargada del VPS ({} bytes)",
@@ -315,16 +341,11 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
             .and_then(|v| v.as_str())
             .ok_or_else(|| "La respuesta del servidor no contiene encrypted_payload".to_string())?;
 
-        serde_json::from_str::<EncryptedVaultState>(encrypted_payload)
+        let new_state = serde_json::from_str::<EncryptedVaultState>(encrypted_payload)
             .map_err(|e| format!("La bóveda descargada tiene formato inválido: {e}"))?;
 
         let path = vault_path(&app);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("No se pudo crear directorio: {e}"))?;
-        }
-        std::fs::write(&path, encrypted_payload.as_bytes())
-            .map_err(|e| format!("Error guardando bóveda descargada: {e}"))?;
+        apply_hot_reload(&app, new_state, &path, encrypted_payload.as_bytes())?;
 
         info!(
             "⬇️ Bóveda descargada del VPS ({} bytes)",
@@ -357,14 +378,12 @@ static VAULT_SYNC_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU
 
 #[command]
 pub async fn start_vault_autosync(app: AppHandle, interval_minutes: u32) -> Result<(), String> {
-    use std::sync::atomic::Ordering;
     use crate::commands::vault::VaultState;
+    use std::sync::atomic::Ordering;
 
     let interval_minutes = interval_minutes.max(5).min(60);
     let my_gen = VAULT_SYNC_GEN.fetch_add(1, Ordering::SeqCst) + 1;
-    info!(
-        "🔄 Auto-sync de bóveda iniciado: cada {interval_minutes} min (gen {my_gen})"
-    );
+    info!("🔄 Auto-sync de bóveda iniciado: cada {interval_minutes} min (gen {my_gen})");
 
     let app_handle = app.clone();
     let duration = tokio::time::Duration::from_secs((interval_minutes as u64) * 60);

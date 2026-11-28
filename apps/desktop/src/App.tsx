@@ -61,6 +61,14 @@ function App() {
         console.error("Error suscribiendo evento autolock:", e);
       });
 
+    // Escuchar vault-reloaded: Rust hot-recaró la bóveda en memoria tras un download.
+    // Disparamos un CustomEvent del browser para que las páginas hagan refetch de cuentas.
+    listen<void>("vault-reloaded", () => {
+      window.dispatchEvent(new CustomEvent("akv:vault-reloaded"));
+    }).catch((e) => {
+      console.error("Error suscribiendo vault-reloaded:", e);
+    });
+
     // Al restaurar/enfocar la ventana (si WebView2 estuvo suspendido minimizado),
     // sincronizar con el estado real de Rust.
     const checkLockedOnFocus = () => {

@@ -46,6 +46,13 @@ export default function AccountsPage() {
 
   const accounts = useCommand<AccountInfo[]>("list_vault_accounts", {});
 
+  // Recargar cuentas automáticamente cuando Rust hace hot-reload tras descargar bóveda del VPS
+  useEffect(() => {
+    const handler = () => accounts.refetch();
+    window.addEventListener("akv:vault-reloaded", handler);
+    return () => window.removeEventListener("akv:vault-reloaded", handler);
+  }, [accounts.refetch]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (clipboardCountdown === null) return;
     if (clipboardCountdown <= 0) {
