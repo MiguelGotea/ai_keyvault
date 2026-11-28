@@ -173,6 +173,15 @@ jobs:
           Write-Host "[OK] Sidecar copiado: $sizeMB MB"
         shell: pwsh
 
+      - name: 🧹 Limpiar bundles previos del caché
+        shell: pwsh
+        run: |
+          $bundleDir = "apps/desktop/src-tauri/target/release/bundle"
+          if (Test-Path $bundleDir) {
+            Remove-Item -Recurse -Force $bundleDir
+            Write-Host "[OK] Carpeta bundle/ limpiada para evitar instaladores de versiones anteriores."
+          }
+
       - name: 🏗️ cargo tauri build
         run: pnpm tauri build
         working-directory: apps/desktop
@@ -250,9 +259,14 @@ jobs:
         run: |
           $ver = (Get-Content apps/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
           $short = "${{ github.sha }}".Substring(0, 7)
-          $tag = "v$ver-$short"
+          $tag = "v$ver"
           $files = @()
           $files += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/nsis/*.exe" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
           $files += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/msi/*.msi" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
           $files += Get-ChildItem "apps/desktop/src-tauri/target/release/bundle/portable/*.zip" -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
-          gh release create $tag @files --title "AI KeyVault v$ver ($short)" --notes "Instalador y versión portable generados automáticamente desde main ($short)." --latest
+          gh release view $tag 2>$null | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag @files --clobber
+          } else {
+            gh release create $tag @files --title "AI KeyVault v$ver" --notes "Instalador y versión portable generados automáticamente desde main ($short)." --latest
+          }
