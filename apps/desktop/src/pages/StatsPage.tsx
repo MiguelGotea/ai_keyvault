@@ -227,7 +227,7 @@ const styles: Record<string, React.CSSProperties> = {
   header: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   title: { fontSize: 20, fontWeight: 700, color: "var(--color-text)", margin: 0 },
   tabBtn: { padding: "6px 12px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text-secondary)", fontSize: 12, cursor: "pointer" },
-  tabBtnActive: { background: "var(--color-primary)", color: "#fff", border: "none" },
+  tabBtnActive: { background: "var(--color-primary)", color: "var(--color-on-primary)", border: "none" },
   section: { background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: 20, display: "flex", flexDirection: "column", gap: 14 },
   sectionTitle: { fontSize: 15, fontWeight: 600, color: "var(--color-text)", margin: 0 },
   hint: { color: "var(--color-text-secondary)", fontSize: 13 },

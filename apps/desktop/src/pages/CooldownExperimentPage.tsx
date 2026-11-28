@@ -256,7 +256,7 @@ const styles: Record<string, React.CSSProperties> = {
   poolGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 12 },
   poolCard: { background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: 12, display: "flex", flexDirection: "column", gap: 6 },
   poolMeta: { fontSize: 11, color: "var(--color-text-secondary)" },
-  actionBtn: { marginTop: 4, padding: "6px 10px", background: "var(--color-primary)", color: "#fff", border: "none", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
+  actionBtn: { marginTop: 4, padding: "6px 10px", background: "var(--color-primary)", color: "var(--color-on-primary)", border: "none", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   list: { display: "flex", flexDirection: "column", gap: 8 },
   obsRow: { display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", flexWrap: "wrap" },
   finishBtn: { padding: "5px 10px", background: "var(--color-success)", color: "#fff", border: "none", borderRadius: "var(--radius-md)", fontSize: 12, fontWeight: 600, cursor: "pointer" },

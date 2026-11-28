@@ -9,6 +9,8 @@ import ServerStatusBadge from "./ServerStatusBadge";
 import PollerStatusBadge from "./PollerStatusBadge";
 import CommandPalette from "./CommandPalette";
 import { useServerHealth } from "../hooks/useServerHealth";
+import logoIcon from "../assets/ai-keyvault-icon.svg";
+import logoText from "../assets/ai-keyvault-text.svg";
 import es from "../i18n/es.json";
 
 const NAV_ITEMS = [
@@ -50,8 +52,8 @@ export default function AppLayout() {
       <aside style={styles.sidebar}>
         {/* Logo */}
         <div style={styles.sidebarHeader}>
-          <span style={styles.sidebarIcon}>🔐</span>
-          <span style={styles.sidebarTitle}>AI KeyVault</span>
+          <img src={logoIcon} alt="AI KeyVault" style={styles.sidebarLogoIcon} />
+          <img src={logoText} alt="AI KeyVault" style={styles.sidebarLogoText} />
         </div>
 
         {/* Navegación */}
@@ -103,32 +105,43 @@ export default function AppLayout() {
 const styles: Record<string, React.CSSProperties> = {
   shell: {
     display: "flex",
-    minHeight: "100vh",
+    height: "100vh",
+    overflow: "hidden",
     background: "var(--color-bg-secondary)",
   },
   sidebar: {
     width: 220,
+    height: "100%",
     background: "var(--color-bg)",
     borderRight: "1px solid var(--color-border)",
     display: "flex",
     flexDirection: "column",
     flexShrink: 0,
+    overflow: "hidden",
   },
   sidebarHeader: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
-    padding: "20px 18px 16px",
+    gap: 8,
+    padding: "16px 16px 14px",
     borderBottom: "1px solid var(--color-border-subtle)",
+    flexShrink: 0,
   },
-  sidebarIcon: { fontSize: 22 },
-  sidebarTitle: {
-    fontSize: 15,
-    fontWeight: 700,
-    color: "var(--color-primary)",
+  sidebarLogoIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    objectFit: "contain",
+  },
+  sidebarLogoText: {
+    height: 22,
+    borderRadius: 4,
+    objectFit: "contain",
   },
   nav: {
     flex: 1,
+    minHeight: 0,
+    overflowY: "auto",
     padding: "12px 8px",
     display: "flex",
     flexDirection: "column",
@@ -147,7 +160,7 @@ const styles: Record<string, React.CSSProperties> = {
   } as React.CSSProperties,
   navItemActive: {
     background: "var(--color-primary)",
-    color: "#fff",
+    color: "var(--color-on-primary)",
     fontWeight: 600,
   },
   navIcon: { fontSize: 15, flexShrink: 0 },
@@ -157,6 +170,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: 6,
+    flexShrink: 0,
   },
   lockBtn: {
     marginTop: 8,
@@ -172,6 +186,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   main: {
     flex: 1,
-    overflow: "auto",
+    height: "100%",
+    overflowY: "auto",
   },
 };

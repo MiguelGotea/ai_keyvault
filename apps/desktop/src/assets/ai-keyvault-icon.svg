@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="288 16 800 800" width="800" height="800">
+  <defs>
+    <style>
+      :root { --bg:#e9e3d5; --gold:#cdbb94; --green:#2f4a42; }
+      .g-stroke { fill:none; stroke:#2f4a42; stroke-linecap:round; stroke-linejoin:round; }
+      .trace { stroke-width:22; }
+      .node-l { fill:none; stroke:#2f4a42; stroke-width:26; }
+      .node-s { fill:none; stroke:#2f4a42; stroke-width:20; }
+      .label { font-family:'Poppins','Montserrat','Nunito Sans','DejaVu Sans',Arial,sans-serif; font-weight:700; }
+    </style>
+    <g id="half">
+      <!-- top-left nodes and traces -->
+      <circle class="node-l" cx="511" cy="201" r="22"/>
+      <path class="g-stroke trace" d="M530 225 L570 268 Q575 275 575 285 L575 312"/>
+      <circle class="node-s" cx="613" cy="201" r="16"/>
+      <path class="g-stroke trace" d="M613 226 L613 276"/>
+      <!-- left nodes -->
+      <circle class="node-l" cx="486" cy="293" r="20"/>
+      <path class="g-stroke trace" d="M506 306 L540 340 Q548 350 560 350 L590 350"/>
+      <circle class="node-l" cx="486" cy="399" r="20"/>
+      <path class="g-stroke trace" d="M512 399 L566 399"/>
+      <circle class="node-l" cx="486" cy="500" r="20"/>
+      <path class="g-stroke trace" d="M506 487 L540 454 Q548 446 560 446 L566 446"/>
+      <!-- bottom-left -->
+      <circle class="node-l" cx="512" cy="597" r="22"/>
+      <path class="g-stroke trace" d="M532 574 L558 544 Q563 538 563 528 L563 496"/>
+      <circle class="node-s" cx="616" cy="605" r="16"/>
+      <path class="g-stroke trace" d="M616 584 L618 562"/>
+    </g>
+  </defs>
+
+  <!-- Fondo -->
+  <rect width="1401" height="1121" fill="#e9e3d5"/>
+
+  <!-- Caja fuerte -->
+  <rect class="g-stroke" x="402" y="112" width="600" height="572" rx="62" stroke-width="28"/>
+  <!-- Bisagras -->
+  <rect x="372" y="207" width="53" height="108" rx="14" fill="none" stroke="#2f4a42" stroke-width="24"/>
+  <rect x="372" y="459" width="53" height="122" rx="14" fill="none" stroke="#2f4a42" stroke-width="24"/>
+  <!-- Patas -->
+  <path d="M456 698 L470 718 Q474 724 482 724 L552 724 Q560 724 564 718 L576 698" fill="none" stroke="#2f4a42" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M826 698 L838 718 Q842 724 850 724 L920 724 Q928 724 932 718 L944 698" fill="none" stroke="#2f4a42" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Circuitos: mitad izquierda, espejo derecha -->
+  <use href="#half"/>
+  <use href="#half" transform="translate(1404 0) scale(-1 1)"/>
+  <!-- Nodos centrales -->
+  <circle class="node-l" cx="699" cy="189" r="22"/>
+  <path class="g-stroke trace" d="M699 222 L699 253"/>
+  <circle class="node-l" cx="699" cy="625" r="18"/>
+  <path class="g-stroke trace" d="M699 603 L699 563"/>
+
+  <!-- Candado -->
+  <path d="M631 395 L631 355 Q631 295 699 295 Q768 295 768 355 L768 395" fill="none" stroke="#2f4a42" stroke-width="38"/>
+  <rect x="588" y="387" width="222" height="153" rx="38" fill="#2f4a42"/>
+  <circle cx="699" cy="438" r="25" fill="#e9e3d5"/>
+  <path d="M686 458 L712 458 L722 505 L678 505 Z" fill="#e9e3d5"/>
+</svg>

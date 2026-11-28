@@ -323,7 +323,7 @@ pub async fn switch_account(
                 let accounts = &vault.state().accounts;
                 let found_id = accounts
                     .iter()
-                    .find(|a| a.id.to_string() == account_id || a.alias == account_id)
+                    .find(|a| a.id.to_string() == account_id || (a.provider == provider && a.alias == account_id))
                     .map(|a| a.id);
 
                 match found_id {

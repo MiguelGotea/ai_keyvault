@@ -228,8 +228,8 @@ export default function SettingsPage() {
               onClick={() => set("theme", "dark")}
               style={{
                 ...styles.btnOutline,
-                background: settings.theme === "dark" ? "var(--color-primary)" : "var(--color-surface)",
-                color: settings.theme === "dark" ? "#FFFFFF" : "var(--color-text)",
+                background: settings.theme === "dark" ? "var(--color-primary)" : "var(--color-bg-secondary)",
+                color: settings.theme === "dark" ? "var(--color-on-primary)" : "var(--color-text)",
                 borderColor: settings.theme === "dark" ? "var(--color-primary)" : "var(--color-border)",
               }}
             >
@@ -240,8 +240,8 @@ export default function SettingsPage() {
               onClick={() => set("theme", "light")}
               style={{
                 ...styles.btnOutline,
-                background: settings.theme === "light" ? "var(--color-primary)" : "var(--color-surface)",
-                color: settings.theme === "light" ? "#FFFFFF" : "var(--color-text)",
+                background: settings.theme === "light" ? "var(--color-primary)" : "var(--color-bg-secondary)",
+                color: settings.theme === "light" ? "var(--color-on-primary)" : "var(--color-text)",
                 borderColor: settings.theme === "light" ? "var(--color-primary)" : "var(--color-border)",
               }}
             >
@@ -587,7 +587,7 @@ const styles: Record<string, React.CSSProperties> = {
   dpapiRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 },
   dpapiDesc: { fontSize: 12, color: "var(--color-text-secondary)", marginTop: 4, maxWidth: 420, lineHeight: 1.5 },
   saveRow: { display: "flex", justifyContent: "flex-end" },
-  saveBtn: { padding: "10px 20px", border: "none", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "#fff", fontSize: 14, cursor: "pointer", fontWeight: 600 },
+  saveBtn: { padding: "10px 20px", border: "none", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 14, cursor: "pointer", fontWeight: 600 },
   modalOverlay: { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 },
   modal: { background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-xl)", padding: 28, maxWidth: 420, width: "90%" },
   btnOutline: { padding: "8px 14px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "transparent", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" },

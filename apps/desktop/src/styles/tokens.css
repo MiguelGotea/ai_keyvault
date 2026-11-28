@@ -1,61 +1,61 @@
 /**
  * tokens.css — Sistema de colores y variables de diseño de AI KeyVault.
  *
- * Colores de marca:
- *   Primario: #064E3B (seguridad, confianza — verde oscuro)
- *   Secundario: #D6A84F (valor, exclusividad — dorado)
- *
- * IMPORTANTE: El dorado (#D6A84F) NO se usa como texto sobre fondo claro.
- * Falla WCAG AA. Solo se usa para acentos, bordes, iconos y estados destacados.
+ * Paleta oficial de marca:
+ *   Fondo claro:  #e9e3d5 (pergamino / crema)
+ *   Dorado:       #cdbb94 (detalles dorados y texto sobre botones)
+ *   Verde marca:  #2f4a42 (fondo de botones y acentos principales)
+ *   Fondo oscuro: #000000 (negro total)
  */
 
 :root {
-  /* ── Escala de color primario (verde) ── */
-  --color-primary-50:  #ECFDF5;
-  --color-primary-100: #D1FAE5;
-  --color-primary-200: #A7F3D0;
-  --color-primary-300: #6EE7B7;
-  --color-primary-400: #34D399;
-  --color-primary-500: #10B981;
-  --color-primary-600: #059669;
-  --color-primary-700: #047857;
-  --color-primary-800: #065F46;
-  --color-primary-900: #064E3B;  /* ← color principal de marca */
-  --color-primary:     #064E3B;
+  /* ── Escala de color primario (verde marca #2f4a42) ── */
+  --color-primary-50:  #eef3f1;
+  --color-primary-100: #d5e1dd;
+  --color-primary-200: #acc3bc;
+  --color-primary-300: #82a49a;
+  --color-primary-400: #598578;
+  --color-primary-500: #3d6358;
+  --color-primary-600: #36564d;
+  --color-primary-700: #2f4a42;
+  --color-primary-800: #273e37;
+  --color-primary-900: #2f4a42;  /* ← color principal de marca */
+  --color-primary:     #2f4a42;
+  --color-on-primary:  #cdbb94;  /* ← letra de botones sobre verde */
 
-  /* ── Escala de color secundario (dorado) ── */
-  --color-secondary-50:  #FFFBEB;
-  --color-secondary-100: #FEF3C7;
-  --color-secondary-200: #FDE68A;
-  --color-secondary-300: #FCD34D;
-  --color-secondary-400: #FBBF24;
-  --color-secondary-500: #F59E0B;
-  --color-secondary-600: #D97706;
-  --color-secondary-700: #B45309;
-  --color-secondary-800: #92400E;
-  --color-secondary-900: #D6A84F;  /* ← color secundario de marca */
-  --color-secondary:     #D6A84F;
+  /* ── Escala de color secundario (dorado marca #cdbb94) ── */
+  --color-secondary-50:  #faf7f0;
+  --color-secondary-100: #f3ecdc;
+  --color-secondary-200: #e9e3d5;
+  --color-secondary-300: #dfd2b6;
+  --color-secondary-400: #d5c5a3;
+  --color-secondary-500: #cdbb94;
+  --color-secondary-600: #b8a377;
+  --color-secondary-700: #9a855a;
+  --color-secondary-800: #7a6845;
+  --color-secondary-900: #cdbb94;  /* ← color secundario de marca */
+  --color-secondary:     #cdbb94;
 
   /* ── Estados de cuota ── */
-  --color-quota-ok:      #10B981;  /* verde — < 80% usado */
-  --color-quota-warn:    #D6A84F;  /* dorado — ≥ 80% usado */
-  --color-quota-crit:    #EF4444;  /* rojo   — ≥ 95% usado */
+  --color-quota-ok:      #2f4a42;  /* verde marca — < 80% usado */
+  --color-quota-warn:    #b8a377;  /* dorado oscuro — ≥ 80% usado */
+  --color-quota-crit:    #EF4444;  /* rojo — ≥ 95% usado */
 
   /* ── Estados semánticos ── */
-  --color-success:  #10B981;  /* verde — operación exitosa */
-  --color-warning:  #D6A84F;  /* dorado — advertencia */
+  --color-success:  #2f4a42;  /* verde marca — operación exitosa */
+  --color-warning:  #b8a377;  /* dorado — advertencia */
   --color-danger:   #EF4444;  /* rojo — error / crítico */
   --color-info:     #3B82F6;  /* azul — información */
 
-  /* ── Neutros (tema claro) ── */
-  --color-bg:            #FFFFFF;
-  --color-bg-secondary:  #F9FAFB;
-  --color-bg-tertiary:   #F3F4F6;
-  --color-border:        #E5E7EB;
-  --color-border-subtle: #F3F4F6;
-  --color-text:          #111827;
-  --color-text-secondary:#6B7280;
-  --color-text-disabled: #9CA3AF;
+  /* ── Neutros (tema claro oficial #e9e3d5) ── */
+  --color-bg:            #e9e3d5;
+  --color-bg-secondary:  #e2dac9;
+  --color-bg-tertiary:   #d8cfbc;
+  --color-border:        #cdbb94;
+  --color-border-subtle: #dcd4c2;
+  --color-text:          #1f2d28;
+  --color-text-secondary:#4a5852;
+  --color-text-disabled: #757c76;
 
   /* ── Tipografía ── */
   --font-sans: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -78,17 +78,22 @@
   --transition-normal: 250ms ease;
 }
 
-/* ── Tema oscuro ── */
+/* ── Tema oscuro (fondos totalmente negros) ── */
 [data-theme="dark"] {
-  --color-bg:            #0F172A;
-  --color-bg-secondary:  #1E293B;
-  --color-bg-tertiary:   #334155;
-  --color-border:        #334155;
-  --color-border-subtle: #1E293B;
-  --color-text:          #F1F5F9;
-  --color-text-secondary:#94A3B8;
-  --color-text-disabled: #64748B;
+  --color-bg:            #000000;
+  --color-bg-secondary:  #000000;
+  --color-bg-tertiary:   #0a0a0a;
+  --color-border:        #262626;
+  --color-border-subtle: #171717;
+  --color-text:          #e9e3d5;
+  --color-text-secondary:#cdbb94;
+  --color-text-disabled: #7c7464;
 
-  /* En oscuro el primario se aclara ligeramente para contraste */
-  --color-primary: #10B981;
+  --color-primary:       #2f4a42;
+  --color-on-primary:    #cdbb94;
+  --color-secondary:     #cdbb94;
+  --color-success:       #6ea393;
+  --color-quota-ok:      #6ea393;
+  --color-warning:       #cdbb94;
+  --color-quota-warn:    #cdbb94;
 }

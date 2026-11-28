@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="78 731 1257 300" width="1257" height="300">
+  <defs>
+    <style>
+      :root { --bg:#e9e3d5; --gold:#cdbb94; --green:#2f4a42; }
+      .g-stroke { fill:none; stroke:#2f4a42; stroke-linecap:round; stroke-linejoin:round; }
+      .trace { stroke-width:22; }
+      .node-l { fill:none; stroke:#2f4a42; stroke-width:26; }
+      .node-s { fill:none; stroke:#2f4a42; stroke-width:20; }
+      .label { font-family:'Poppins','Montserrat','Nunito Sans','DejaVu Sans',Arial,sans-serif; font-weight:700; }
+    </style>
+    <g id="half">
+      <!-- top-left nodes and traces -->
+      <circle class="node-l" cx="511" cy="201" r="22"/>
+      <path class="g-stroke trace" d="M530 225 L570 268 Q575 275 575 285 L575 312"/>
+      <circle class="node-s" cx="613" cy="201" r="16"/>
+      <path class="g-stroke trace" d="M613 226 L613 276"/>
+      <!-- left nodes -->
+      <circle class="node-l" cx="486" cy="293" r="20"/>
+      <path class="g-stroke trace" d="M506 306 L540 340 Q548 350 560 350 L590 350"/>
+      <circle class="node-l" cx="486" cy="399" r="20"/>
+      <path class="g-stroke trace" d="M512 399 L566 399"/>
+      <circle class="node-l" cx="486" cy="500" r="20"/>
+      <path class="g-stroke trace" d="M506 487 L540 454 Q548 446 560 446 L566 446"/>
+      <!-- bottom-left -->
+      <circle class="node-l" cx="512" cy="597" r="22"/>
+      <path class="g-stroke trace" d="M532 574 L558 544 Q563 538 563 528 L563 496"/>
+      <circle class="node-s" cx="616" cy="605" r="16"/>
+      <path class="g-stroke trace" d="M616 584 L618 562"/>
+    </g>
+  </defs>
+
+  <!-- Fondo -->
+  <rect width="1401" height="1121" fill="#e9e3d5"/>
+
+  <!-- Texto -->
+  <text class="label" x="155" y="922" font-size="182" fill="#cdbb94">AI</text>
+  <text class="label" x="400" y="922" font-size="182" fill="#2f4a42">KeyVault</text>
+</svg>

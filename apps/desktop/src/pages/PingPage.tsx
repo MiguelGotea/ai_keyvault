@@ -126,5 +126,5 @@ const styles: Record<string, React.CSSProperties> = {
   info: { display: "flex", flexDirection: "column" as const, gap: 3 },
   accountId: { fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text)", fontWeight: 600 },
   meta: { fontSize: 11, color: "var(--color-text-disabled)" },
-  pingBtn: { padding: "7px 14px", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "#fff", fontSize: 13, cursor: "pointer", fontWeight: 600 },
+  pingBtn: { padding: "7px 14px", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 13, cursor: "pointer", fontWeight: 600 },
 };

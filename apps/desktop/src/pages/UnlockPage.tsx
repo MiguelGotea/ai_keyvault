@@ -9,6 +9,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useServerHealth } from "../hooks/useServerHealth";
 import { useCommand } from "../hooks/useCommand";
 import ServerStatusBadge from "../components/ServerStatusBadge";
+import logoIconText from "../assets/ai-keyvault-icon-text.svg";
 import es from "../i18n/es.json";
 
 type ScreenMode = "login" | "register" | "unlock" | "recovery" | "show_recovery_key";
@@ -192,8 +193,7 @@ export default function UnlockPage() {
       <div style={styles.card}>
         {/* Header */}
         <div style={styles.header}>
-          <span style={styles.icon}>🔐</span>
-          <h1 style={styles.title}>{es.app.nombre}</h1>
+          <img src={logoIconText} alt={es.app.nombre} style={styles.logo} />
           <p style={styles.subtitle}>
             {mode === "login" && "Inicia sesión para traer tu bóveda"}
             {mode === "register" && "Crea tu usuario y bóveda nueva"}
@@ -241,7 +241,7 @@ export default function UnlockPage() {
 
         {/* Error / aviso nube */}
         {cloudNotice && !errorMsg && (
-          <div style={{ ...styles.warningBox, background: "#ECFDF5", borderColor: "#A7F3D0", color: "#065F46" }}>
+          <div style={{ ...styles.warningBox, background: "var(--color-bg-secondary)", borderColor: "var(--color-primary)", color: "var(--color-text)" }}>
             {cloudNotice}
           </div>
         )}
@@ -468,7 +468,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     textAlign: "center",
   },
-  icon: { fontSize: 48, lineHeight: 1 },
+  logo: { height: 96, width: "auto", borderRadius: 12, objectFit: "contain" },
   title: { fontSize: 22, fontWeight: 700, color: "var(--color-primary)", margin: 0 },
   subtitle: { fontSize: 13, color: "var(--color-text-secondary)", margin: 0 },
   statusRow: {
@@ -543,7 +543,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   btnPrimary: {
     background: "var(--color-primary)",
-    color: "#fff",
+    color: "var(--color-on-primary)",
     border: "none",
   },
   btnLink: {

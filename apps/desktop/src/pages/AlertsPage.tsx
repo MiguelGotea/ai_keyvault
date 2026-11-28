@@ -343,7 +343,7 @@ const styles: Record<string, React.CSSProperties> = {
   closeBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--color-text-disabled)" },
   altRow: { marginTop: 6, paddingTop: 8, borderTop: "1px solid var(--color-border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" as const },
   altText: { fontSize: 12, color: "var(--color-text-secondary)" },
-  switchBtn: { padding: "5px 12px", border: "none", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600 },
+  switchBtn: { padding: "5px 12px", border: "none", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 12, cursor: "pointer", fontWeight: 600 },
   muteBar: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, padding: "10px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", flexWrap: "wrap" as const },
   muteBtn: { padding: "4px 10px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)", background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)", fontSize: 11, cursor: "pointer" },
 };

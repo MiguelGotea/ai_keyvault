@@ -1,13 +1,9 @@
 /**
  * DashboardPage — Dashboard principal de AI KeyVault.
  *
+ * Separado por pestañas de proveedor (Antigravity / Codex) en formato tabla.
  * FUENTE DE VERDAD: Las cuentas vienen de la BÓVEDA (list_vault_accounts).
- * Los datos de cuota del VPS (get_stats_compare) se cruzan por alias/account_id.
- *
- * Si una cuenta de la bóveda no tiene datos en el VPS aún → "Sin datos de cuota".
- * Si hay datos en el VPS que no están en la bóveda → se ignoran.
- *
- * "Usar en esta PC" → switch_account con el UUID de la bóveda.
+ * Los datos de cuota del VPS (get_stats_compare) se cruzan por UUID opaco.
  */
 import { useEffect, useCallback, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -15,6 +11,8 @@ import { useCommand } from "../hooks/useCommand";
 import AccountDetailModal from "../components/AccountDetailModal";
 import { isNoAgentOnPc } from "../utils/settings";
 import type { PoolSummary, AccountInfo, PollerStatus, SwitchResult } from "../types/api";
+
+type ProviderTab = "agy" | "codex";
 
 function formatRelativeAge(isoDate: string | null | undefined): string {
   if (!isoDate) return "sin lecturas";
@@ -29,7 +27,46 @@ function formatRelativeAge(isoDate: string | null | undefined): string {
   return `hace ${Math.floor(diffHr / 24)} d`;
 }
 
+function formatDateOnly(isoDate: string | null | undefined): string {
+  if (!isoDate) return "—";
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getPctColor(pct: number | null): string {
+  if (pct === null) return "var(--color-text-disabled)";
+  if (pct >= 95) return "var(--color-danger)";
+  if (pct >= 80) return "var(--color-warning)";
+  return "var(--color-success)";
+}
+
+function QuotaCell({ pool }: { pool: PoolSummary | undefined }) {
+  if (!pool) {
+    return <span style={styles.noDataText}>Sin datos</span>;
+  }
+  const pct = Math.round(pool.current_percent_used);
+  const color = getPctColor(pct);
+  const dateStr = formatDateOnly(pool.reset_time);
+
+  return (
+    <div style={styles.quotaCell}>
+      <span style={{ ...styles.pctPill, color, borderColor: color }}>
+        {pct}% usado
+      </span>
+      <span style={styles.resetDate} title="Fecha de renovación">
+        ↻ {dateStr}
+      </span>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
+  const [activeTab, setActiveTab] = useState<ProviderTab>("agy");
   const [pollerStarted, setPollerStarted] = useState(false);
   const [pollerError, setPollerError] = useState<string | null>(null);
   const [autolockError, setAutolockError] = useState<string | null>(null);
@@ -94,9 +131,12 @@ export default function DashboardPage() {
     };
   }, [handleActivity]);
 
-  // Cruzar bóveda con VPS: para cada cuenta de la bóveda buscar sus pools en el VPS
   const vaultList = vaultAccounts.data ?? [];
   const quotaPools = quota.data ?? [];
+
+  const agyAccounts = vaultList.filter(a => a.provider === "agy");
+  const codexAccounts = vaultList.filter(a => a.provider === "codex");
+  const visibleAccounts = activeTab === "agy" ? agyAccounts : codexAccounts;
 
   // Índice de pools por account_id del VPS
   const poolsByVpsId = quotaPools.reduce<Record<string, PoolSummary[]>>((acc, pool) => {
@@ -151,7 +191,7 @@ export default function DashboardPage() {
     <div style={styles.page}>
       {/* Header */}
       <div style={styles.pageHeader}>
-        <h2 style={styles.pageTitle}>Mis cuentas</h2>
+        <h2 style={styles.pageTitle}>Inicio — Cuotas y cuentas</h2>
         <div style={styles.headerActions}>
           <button
             style={styles.refreshBtn}
@@ -161,6 +201,28 @@ export default function DashboardPage() {
             {isLoading || quota.loading ? "⏳" : "↻"} Actualizar
           </button>
         </div>
+      </div>
+
+      {/* Pestañas por proveedor */}
+      <div style={styles.tabsRow}>
+        <button
+          style={{
+            ...styles.tabBtn,
+            ...(activeTab === "agy" ? styles.tabBtnActive : {}),
+          }}
+          onClick={() => setActiveTab("agy")}
+        >
+          🤖 Antigravity ({agyAccounts.length})
+        </button>
+        <button
+          style={{
+            ...styles.tabBtn,
+            ...(activeTab === "codex" ? styles.tabBtnActive : {}),
+          }}
+          onClick={() => setActiveTab("codex")}
+        >
+          💻 Codex ({codexAccounts.length})
+        </button>
       </div>
 
       {/* Estado del poller y errores visibles */}
@@ -231,86 +293,145 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Sin cuentas */}
-      {!isLoading && !hasError && vaultList.length === 0 && (
+      {/* Sin cuentas para el proveedor */}
+      {!isLoading && !hasError && visibleAccounts.length === 0 && (
         <div style={styles.empty}>
-          <span style={{ fontSize: 48 }}>🗝️</span>
-          <p style={{ fontWeight: 600 }}>No hay cuentas en tu bóveda</p>
-          <p style={{ fontSize: 12, color: "var(--color-text-disabled)", maxWidth: 320, textAlign: "center" }}>
-            Ve a <strong>Mis Cuentas</strong> para agregar tus cuentas de Antigravity.
+          <span style={{ fontSize: 48 }}>{activeTab === "agy" ? "🤖" : "💻"}</span>
+          <p style={{ fontWeight: 600 }}>
+            No hay cuentas de {activeTab === "agy" ? "Antigravity" : "Codex"} en tu bóveda
+          </p>
+          <p style={{ fontSize: 12, color: "var(--color-text-disabled)", maxWidth: 340, textAlign: "center" }}>
+            Ve a <strong>Mis Cuentas</strong> para agregar tus cuentas de{" "}
+            {activeTab === "agy" ? "Antigravity" : "Codex"}.
             Una vez agregadas aparecerán aquí con sus datos de cuota.
           </p>
         </div>
       )}
 
-      {/* Lista compacta de cuentas en una sola línea */}
-      {vaultList.length > 0 && (
-        <div style={styles.compactList}>
-          {vaultList.map(account => {
-            // D-02: cruzar pools del VPS por UUID opaco de la bóveda (nunca por alias)
-            const pools = poolsByVpsId[account.id] ?? [];
-            const primaryPool = pools.reduce<PoolSummary | null>(
-              (max, p) => (!max || p.current_percent_used > max.current_percent_used ? p : max),
-              null
-            );
-            const pct = primaryPool ? Math.round(primaryPool.current_percent_used) : null;
-            const pctColor =
-              pct === null
-                ? "var(--color-text-disabled)"
-                : pct >= 95
-                ? "var(--color-danger)"
-                : pct >= 80
-                ? "var(--color-warning)"
-                : "var(--color-success)";
-            const nextReset = primaryPool?.reset_time
-              ? new Date(primaryPool.reset_time).toLocaleString("es-MX", {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })
-              : "—";
-            const isSwitching = switchingAccount === account.id;
+      {/* Tabla de Antigravity */}
+      {activeTab === "agy" && visibleAccounts.length > 0 && (
+        <div style={styles.tableWrapper}>
+          <table style={styles.table}>
+            <thead>
+              <tr style={styles.theadRow}>
+                <th style={styles.th}>Nombre</th>
+                <th style={styles.th}>Correo</th>
+                <th style={styles.th}>Gemini Weekly</th>
+                <th style={styles.th}>Claude / GPT Weekly</th>
+                <th style={{ ...styles.th, textAlign: "right" }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleAccounts.map(account => {
+                const pools = poolsByVpsId[account.id] ?? [];
+                const geminiWeekly = pools.find(p => p.pool === "gemini-weekly");
+                const claudeWeekly = pools.find(
+                  p => p.pool === "claude-gpt-weekly" || p.pool === "3p-weekly"
+                );
+                const isSwitching = switchingAccount === account.id;
 
-            return (
-              <div key={account.id} style={styles.compactRow}>
-                <span style={styles.accountProvider}>
-                  {account.provider === "agy" ? "AGY" : "CODEX"}
-                </span>
-                <div style={styles.identityCol}>
-                  <span style={styles.accountAlias}>{account.alias}</span>
-                  {account.email && <span style={styles.accountEmail}>{account.email}</span>}
-                </div>
-                <span style={{ ...styles.pctPill, color: pctColor, borderColor: pctColor }}>
-                  {pct !== null ? `${pct}% usado` : "Sin datos"}
-                </span>
-                <span style={styles.resetCol} title="Próximo reinicio">
-                  ↻ {nextReset}
-                </span>
-                <div style={styles.rowActions}>
-                  <button
-                    style={styles.detailBtn}
-                    onClick={() => setDetailAccount(account)}
-                    title="Ver detalle de pools, burn rate y última lectura"
-                  >
-                    Detalles
-                  </button>
-                  <button
-                    style={{
-                      ...styles.switchBtn,
-                      opacity: noAgentOnPc ? 0.5 : 1,
-                      cursor: noAgentOnPc ? "not-allowed" : "pointer",
-                    }}
-                    onClick={() => handleSwitch(account)}
-                    disabled={isSwitching || noAgentOnPc}
-                    title={noAgentOnPc ? "Modo sin agente en esta PC activo (solo consulta)" : "Escribir esta credencial en esta PC"}
-                  >
-                    {isSwitching ? "Cambiando…" : "⚡ Usar"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                return (
+                  <tr key={account.id} style={styles.tr}>
+                    <td style={styles.td}>
+                      <span style={styles.accountAlias}>{account.alias}</span>
+                    </td>
+                    <td style={styles.td}>
+                      <span style={styles.accountEmail}>{account.email || "—"}</span>
+                    </td>
+                    <td style={styles.td}>
+                      <QuotaCell pool={geminiWeekly} />
+                    </td>
+                    <td style={styles.td}>
+                      <QuotaCell pool={claudeWeekly} />
+                    </td>
+                    <td style={{ ...styles.td, textAlign: "right" }}>
+                      <div style={styles.rowActions}>
+                        <button
+                          style={styles.detailBtn}
+                          onClick={() => setDetailAccount(account)}
+                          title="Ver detalle de pools, burn rate y última lectura"
+                        >
+                          Detalles
+                        </button>
+                        <button
+                          style={{
+                            ...styles.switchBtn,
+                            opacity: noAgentOnPc ? 0.5 : 1,
+                            cursor: noAgentOnPc ? "not-allowed" : "pointer",
+                          }}
+                          onClick={() => handleSwitch(account)}
+                          disabled={isSwitching || noAgentOnPc}
+                          title={noAgentOnPc ? "Modo sin agente en esta PC activo (solo consulta)" : "Escribir esta credencial en esta PC"}
+                        >
+                          {isSwitching ? "Cambiando…" : "⚡ Usar"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Tabla de Codex */}
+      {activeTab === "codex" && visibleAccounts.length > 0 && (
+        <div style={styles.tableWrapper}>
+          <table style={styles.table}>
+            <thead>
+              <tr style={styles.theadRow}>
+                <th style={styles.th}>Nombre</th>
+                <th style={styles.th}>Correo</th>
+                <th style={styles.th}>Cuota</th>
+                <th style={{ ...styles.th, textAlign: "right" }}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleAccounts.map(account => {
+                const pools = poolsByVpsId[account.id] ?? [];
+                const codexPool = pools.find(p => p.pool === "default") ?? pools[0];
+                const isSwitching = switchingAccount === account.id;
+
+                return (
+                  <tr key={account.id} style={styles.tr}>
+                    <td style={styles.td}>
+                      <span style={styles.accountAlias}>{account.alias}</span>
+                    </td>
+                    <td style={styles.td}>
+                      <span style={styles.accountEmail}>{account.email || "—"}</span>
+                    </td>
+                    <td style={styles.td}>
+                      <QuotaCell pool={codexPool} />
+                    </td>
+                    <td style={{ ...styles.td, textAlign: "right" }}>
+                      <div style={styles.rowActions}>
+                        <button
+                          style={styles.detailBtn}
+                          onClick={() => setDetailAccount(account)}
+                          title="Ver detalle de pools, burn rate y última lectura"
+                        >
+                          Detalles
+                        </button>
+                        <button
+                          style={{
+                            ...styles.switchBtn,
+                            opacity: noAgentOnPc ? 0.5 : 1,
+                            cursor: noAgentOnPc ? "not-allowed" : "pointer",
+                          }}
+                          onClick={() => handleSwitch(account)}
+                          disabled={isSwitching || noAgentOnPc}
+                          title={noAgentOnPc ? "Modo sin agente en esta PC activo (solo consulta)" : "Escribir esta credencial en esta PC"}
+                        >
+                          {isSwitching ? "Cambiando…" : "⚡ Usar"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -329,34 +450,75 @@ export default function DashboardPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  page: { padding: 24, display: "flex", flexDirection: "column", gap: 20 },
+  page: { padding: 24, display: "flex", flexDirection: "column", gap: 16 },
   pageHeader: { display: "flex", justifyContent: "space-between", alignItems: "center" },
   pageTitle: { fontSize: 20, fontWeight: 700, color: "var(--color-text)", margin: 0 },
   headerActions: { display: "flex", gap: 8 },
   refreshBtn: { padding: "7px 14px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg)", color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" },
-  warningBanner: { padding: "10px 16px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: "var(--radius-md)", fontSize: 12, color: "#92400E" },
+  tabsRow: { display: "flex", gap: 8, borderBottom: "1px solid var(--color-border)", paddingBottom: 10 },
+  tabBtn: {
+    padding: "8px 16px",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md)",
+    background: "var(--color-bg)",
+    color: "var(--color-text-secondary)",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
+  },
+  tabBtnActive: {
+    background: "var(--color-primary)",
+    color: "var(--color-on-primary)",
+    borderColor: "var(--color-primary)",
+    fontWeight: 700,
+  },
+  warningBanner: { padding: "10px 16px", background: "var(--color-bg)", border: "1px solid var(--color-secondary)", borderRadius: "var(--radius-md)", fontSize: 12, color: "var(--color-text)" },
   pollerBar: { padding: "8px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 12, color: "var(--color-text-secondary)" },
-  lastReadTag: { fontSize: 11, color: "var(--color-text-disabled)", marginLeft: 4 },
   infoBar: { padding: "10px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 },
   closeMsgBtn: { background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--color-text-disabled)", padding: "0 2px" },
   errorBox: { padding: "12px 16px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: "var(--radius-md)", fontSize: 13, color: "#991B1B", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" as const },
   retryBtn: { padding: "5px 10px", border: "1px solid #FECACA", borderRadius: "var(--radius-sm)", background: "white", color: "#991B1B", fontSize: 12, cursor: "pointer" },
   empty: { display: "flex", flexDirection: "column" as const, alignItems: "center", gap: 12, padding: 48, color: "var(--color-text-secondary)", textAlign: "center" },
-  compactList: { display: "flex", flexDirection: "column" as const, gap: 8 },
-  compactRow: { display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", flexWrap: "wrap" as const },
-  identityCol: { display: "flex", alignItems: "baseline", gap: 8, flex: 1, minWidth: 180 },
-  accountEmail: { fontSize: 12, color: "var(--color-text-disabled)", fontFamily: "var(--font-mono)" },
-  pctPill: { fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, border: "1px solid" },
-  resetCol: { fontSize: 12, color: "var(--color-text-secondary)", minWidth: 120 },
-  rowActions: { display: "flex", gap: 6, marginLeft: "auto" },
-  detailBtn: { padding: "5px 10px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)", fontSize: 12, cursor: "pointer" },
-  modalOverlay: { position: "fixed" as const, inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 },
-  modal: { background: "var(--color-bg)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-lg)", padding: 22, width: "min(680px, 92vw)", maxHeight: "85vh", overflowY: "auto" as const, display: "flex", flexDirection: "column" as const, gap: 16 },
-  modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
-  accountProvider: { fontSize: 10, fontWeight: 700, color: "var(--color-primary)", textTransform: "uppercase" as const, letterSpacing: "0.08em", marginRight: 6 },
+  tableWrapper: {
+    background: "var(--color-bg)",
+    border: "1px solid var(--color-border)",
+    borderRadius: "var(--radius-md)",
+    overflowX: "auto",
+  },
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontSize: 13,
+  },
+  theadRow: {
+    borderBottom: "1px solid var(--color-border)",
+    background: "var(--color-bg-tertiary)",
+  },
+  th: {
+    textAlign: "left" as const,
+    padding: "10px 14px",
+    fontSize: 11,
+    fontWeight: 700,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.05em",
+    color: "var(--color-text-secondary)",
+    whiteSpace: "nowrap" as const,
+  },
+  tr: {
+    borderBottom: "1px solid var(--color-border-subtle)",
+  },
+  td: {
+    padding: "11px 14px",
+    verticalAlign: "middle" as const,
+    color: "var(--color-text)",
+  },
   accountAlias: { fontSize: 14, color: "var(--color-text)", fontWeight: 600 },
-  alertDot: { fontSize: 14 },
-  switchBtn: { padding: "6px 14px", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "#fff", fontSize: 12, cursor: "pointer", fontWeight: 600 },
-  cardGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14 },
-  noDataMsg: { display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", background: "var(--color-bg-secondary)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", fontSize: 12, color: "var(--color-text-disabled)" },
+  accountEmail: { fontSize: 12, color: "var(--color-text-disabled)", fontFamily: "var(--font-mono)" },
+  quotaCell: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" as const },
+  noDataText: { fontSize: 12, color: "var(--color-text-disabled)" },
+  pctPill: { fontSize: 12, fontWeight: 700, padding: "2px 10px", borderRadius: 999, border: "1px solid", whiteSpace: "nowrap" as const },
+  resetDate: { fontSize: 12, color: "var(--color-text-secondary)", whiteSpace: "nowrap" as const },
+  rowActions: { display: "inline-flex", gap: 6, justifyContent: "flex-end" },
+  detailBtn: { padding: "5px 10px", border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)", fontSize: 12, cursor: "pointer" },
+  switchBtn: { padding: "6px 14px", border: "1px solid var(--color-primary)", borderRadius: "var(--radius-md)", background: "var(--color-primary)", color: "var(--color-on-primary)", fontSize: 12, cursor: "pointer", fontWeight: 600 },
 };

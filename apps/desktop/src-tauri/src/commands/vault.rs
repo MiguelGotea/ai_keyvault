@@ -793,14 +793,21 @@ pub async fn update_vault_account(
         let mut guard = vault_state.vault.lock().unwrap();
         match &mut *guard {
             Some(vault) if vault.is_unlocked() => {
+                let target_provider = vault
+                    .state()
+                    .accounts
+                    .iter()
+                    .find(|a| a.id == uid)
+                    .map(|a| a.provider.clone())
+                    .unwrap_or_default();
                 let duplicate = vault
                     .state()
                     .accounts
                     .iter()
-                    .any(|a| a.id != uid && a.alias == clean_alias);
+                    .any(|a| a.id != uid && a.provider == target_provider && a.alias == clean_alias);
                 if duplicate {
                     return Err(format!(
-                        "Ya existe otra cuenta con el alias '{clean_alias}'."
+                        "Ya existe otra cuenta de este proveedor con el alias '{clean_alias}'."
                     ));
                 }
                 vault
@@ -1157,13 +1164,13 @@ pub async fn add_agy_account_oauth(
                     .state()
                     .accounts
                     .iter()
-                    .any(|a| a.alias == alias_final);
+                    .any(|a| a.provider == "agy" && a.alias == alias_final);
                 if already_exists {
                     Ok(AddAccountResult {
                         success: false,
                         id: None,
                         error: Some(format!(
-                            "Ya existe una cuenta con el alias '{alias_final}'. Usa otro alias."
+                            "Ya existe una cuenta de Antigravity con el alias '{alias_final}'. Usa otro alias."
                         )),
                     })
                 } else {
@@ -1274,19 +1281,19 @@ pub async fn import_current_codex_credential(
         let mut guard = vault_state.vault.lock().unwrap();
         match &mut *guard {
             Some(vault) if vault.is_unlocked() => {
-                // Verificar que no exista ya un alias igual
+                // Verificar que no exista ya un alias igual para Codex
                 let already_exists = vault
                     .state()
                     .accounts
                     .iter()
-                    .any(|a| a.alias == alias_final);
+                    .any(|a| a.provider == "codex" && a.alias == alias_final);
 
                 if already_exists {
                     Ok(AddAccountResult {
                         success: false,
                         id: None,
                         error: Some(format!(
-                            "Ya existe una cuenta con el alias '{}' en la bóveda. \
+                            "Ya existe una cuenta de Codex con el alias '{}' en la bóveda. \
                              Usa otro alias o elimina la existente.",
                             alias_final
                         )),
