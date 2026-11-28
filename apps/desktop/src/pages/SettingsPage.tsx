@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS = {
   dpapiEnabled: false,
   theme: "dark" as "dark" | "light",
   noAgentOnPc: false,
+  vaultSyncIntervalMinutes: 15, // Auto-sync de bóveda cada N minutos (5-60)
 };
 
 type Settings = typeof DEFAULT_SETTINGS;
@@ -69,7 +70,10 @@ export default function SettingsPage() {
     const cleanAutolock = Number.isFinite(settings.autolockMinutes)
       ? Math.max(0, Math.min(120, settings.autolockMinutes))
       : 0;
-    const toSave = { ...settings, autolockMinutes: cleanAutolock };
+    const cleanSyncInterval = Number.isFinite(settings.vaultSyncIntervalMinutes)
+      ? Math.max(5, Math.min(60, settings.vaultSyncIntervalMinutes))
+      : 15;
+    const toSave = { ...settings, autolockMinutes: cleanAutolock, vaultSyncIntervalMinutes: cleanSyncInterval };
     setSettings(toSave);
 
     // Persistir ajustes en localStorage
@@ -86,6 +90,8 @@ export default function SettingsPage() {
       if (toSave.noAgentOnPc) {
         await invoke("stop_poller");
       }
+      // Reiniciar auto-sync de bóveda con el nuevo intervalo
+      await invoke("start_vault_autosync", { intervalMinutes: cleanSyncInterval });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
@@ -270,7 +276,23 @@ export default function SettingsPage() {
         <Row label={es.ajustes.ultimo_respaldo}>
           <LastBackupStatus />
         </Row>
-        <Row label="Sincronizar bóveda con VPS">
+        <Row label="Intervalo de auto-sync">
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="number"
+              style={{ ...styles.input, width: 70 }}
+              value={Number.isFinite(settings.vaultSyncIntervalMinutes) ? settings.vaultSyncIntervalMinutes : 15}
+              min={5}
+              max={60}
+              onChange={e => {
+                const parsed = parseInt(e.target.value, 10);
+                set("vaultSyncIntervalMinutes", Number.isNaN(parsed) ? 15 : parsed);
+              }}
+            />
+            <span style={styles.hint}>min · La bóveda se sube al VPS automáticamente cada N minutos y al cerrar la app</span>
+          </div>
+        </Row>
+        <Row label="Sincronización de bóveda">
           <VaultSyncButtons />
         </Row>
         <Row label="Sesión en esta PC">
@@ -354,9 +376,12 @@ function GlobalLogoutButton() {
     setBusy(true);
     setLogoutError(null);
     try {
+      // Cancelar auto-sync antes de logout
+      try { await invoke("cancel_vault_autosync"); } catch (_) { /* best-effort */ }
       await invoke("global_logout", { forceWithoutSync });
       localStorage.removeItem("akv_settings");
       localStorage.removeItem("autolock_minutes");
+      localStorage.removeItem("akv_last_vault_sync");
       navigate("/unlock", { replace: true });
     } catch (e) {
       setLogoutError(
@@ -491,10 +516,25 @@ function LastBackupStatus() {
   );
 }
 
-/** Botones de sincronización manual de la bóveda con el VPS (Fase 15). */
+/**
+ * Estado de sincronización automática de la bóveda.
+ * Muestra el intervalo activo, última sync, y botones de emergencia colapsables.
+ */
 function VaultSyncButtons() {
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(() =>
+    localStorage.getItem("akv_last_vault_sync")
+  );
+
+  // Leer intervalo configurado
+  const intervalMinutes = (() => {
+    try {
+      const stored = localStorage.getItem("akv_settings");
+      return stored ? (JSON.parse(stored).vaultSyncIntervalMinutes ?? 15) : 15;
+    } catch { return 15; }
+  })();
 
   async function doSync(direction: "upload" | "download") {
     setSyncing(true);
@@ -506,7 +546,10 @@ function VaultSyncButtons() {
         const label = result.direction === "none"
           ? "Sin cambios en el servidor"
           : `${result.direction === "upload" ? "⬆️ Subida" : "⬇️ Descarga"} completada`;
+        const now = new Date().toLocaleString("es-MX");
         setSyncMsg(`✅ ${label}`);
+        setLastSync(now);
+        localStorage.setItem("akv_last_vault_sync", now);
       } else {
         setSyncMsg(`❌ ${result.error ?? "Error desconocido"}`);
       }
@@ -518,27 +561,58 @@ function VaultSyncButtons() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button
-          style={{ padding: "6px 12px", fontSize: 12, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", cursor: "pointer", background: "var(--color-bg-secondary)", color: "var(--color-text)" }}
-          onClick={() => doSync("upload")}
-          disabled={syncing}
-        >
-          ⬆️ Subir bóveda al VPS
-        </button>
-        <button
-          style={{ padding: "6px 12px", fontSize: 12, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", cursor: "pointer", background: "var(--color-bg-secondary)", color: "var(--color-text)" }}
-          onClick={() => doSync("download")}
-          disabled={syncing}
-        >
-          ⬇️ Descargar bóveda del VPS
-        </button>
-      </div>
-      {syncMsg && (
-        <span style={{ fontSize: 12, color: syncMsg.startsWith("✅") ? "var(--color-success)" : "var(--color-danger)" }}>
-          {syncMsg}
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+      {/* Estado activo */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{
+          display: "inline-block", width: 8, height: 8, borderRadius: "50%",
+          background: "var(--color-success)", flexShrink: 0,
+        }} />
+        <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>
+          Auto-sync activo · cada {intervalMinutes} min
+          {lastSync ? ` · Última: ${lastSync}` : ""}
         </span>
+      </div>
+
+      {/* Botones de emergencia (colapsables) */}
+      <button
+        onClick={() => setShowManual(v => !v)}
+        style={{
+          fontSize: 11, padding: "3px 8px",
+          border: "1px solid var(--color-border)", borderRadius: "var(--radius-sm)",
+          background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer",
+        }}
+      >
+        {showManual ? "▲ Ocultar sync manual" : "▼ Sync manual (emergencia)"}
+      </button>
+
+      {showManual && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 4 }}>
+          <span style={{ fontSize: 11, color: "var(--color-text-disabled)", fontStyle: "italic" }}>
+            Solo para forzar una operación puntual.
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              style={{ padding: "5px 10px", fontSize: 12, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", cursor: "pointer", background: "var(--color-bg-secondary)", color: "var(--color-text)" }}
+              onClick={() => doSync("upload")}
+              disabled={syncing}
+            >
+              {syncing ? "⏳" : "⬆️"} Subir bóveda
+            </button>
+            <button
+              style={{ padding: "5px 10px", fontSize: 12, border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", cursor: "pointer", background: "var(--color-bg-secondary)", color: "var(--color-text)" }}
+              onClick={() => doSync("download")}
+              disabled={syncing}
+            >
+              {syncing ? "⏳" : "⬇️"} Descargar bóveda
+            </button>
+          </div>
+          {syncMsg && (
+            <span style={{ fontSize: 12, color: syncMsg.startsWith("✅") ? "var(--color-success)" : "var(--color-danger)" }}>
+              {syncMsg}
+            </span>
+          )}
+        </div>
       )}
     </div>
   );

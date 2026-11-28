@@ -187,6 +187,62 @@ pub async fn upload_vault(
     }))
 }
 
+/// Cuerpo de `POST /api/auth/vault/download` — descarga la bóveda cifrada del usuario autenticado.
+#[derive(Debug, Deserialize)]
+pub struct AuthDownloadVaultRequest {
+    pub username: String,
+    pub auth_key_hex: String,
+    pub device_id: String,
+}
+
+/// `POST /api/auth/vault/download` — descarga la última versión cifrada de la bóveda del usuario.
+pub async fn auth_download_vault(
+    State(state): State<Arc<AppState>>,
+    Json(body): Json<AuthDownloadVaultRequest>,
+) -> Result<Json<AuthLoginResponse>> {
+    let username = body.username.trim().to_lowercase();
+    let display_name = verify_user_auth(&state, &username, &body.auth_key_hex).await?;
+    let now = Utc::now().to_rfc3339();
+
+    // Registrar/actualizar dispositivo
+    sqlx::query(
+        r#"
+        INSERT INTO devices (id, name, public_key_hex, is_active, created_at, last_seen_at)
+        VALUES (?, ?, ?, 1, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name, last_seen_at = excluded.last_seen_at
+        "#,
+    )
+    .bind(&body.device_id)
+    .bind(&body.device_id)
+    .bind("0".repeat(64))
+    .bind(&now)
+    .bind(&now)
+    .execute(&state.db)
+    .await?;
+
+    let vault = sqlx::query(
+        "SELECT version, encrypted_payload, checksum_sha256, updated_at FROM user_vaults WHERE username = ?",
+    )
+    .bind(&username)
+    .fetch_optional(&state.db)
+    .await?;
+
+    if let Some(r) = vault {
+        Ok(Json(AuthLoginResponse {
+            username,
+            display_name,
+            version: r.get("version"),
+            encrypted_payload: r.get("encrypted_payload"),
+            checksum_sha256: r.get("checksum_sha256"),
+            updated_at: r.get("updated_at"),
+        }))
+    } else {
+        Err(ServerError::BadRequest(
+            "No existe ninguna bóveda sincronizada aún para este usuario".into(),
+        ))
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct SyncDownloadResponse {
     pub version: i64,

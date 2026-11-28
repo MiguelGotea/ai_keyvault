@@ -206,12 +206,97 @@ pub async fn upload_vault_sync(
 }
 
 /// Descarga la bóveda cifrada del VPS y la guarda localmente.
-/// Mapea: GET /api/vault/sync -> `{ version, device_id, encrypted_payload, checksum_sha256, updated_at }`
+/// Si hay sesión de usuario autenticado, usa POST /api/auth/login para obtener la bóveda
+/// (igual que hace login_user_and_sync) — esto garantiza que descarga la bóveda del usuario
+/// y no la del endpoint legado de dispositivo.
+/// En fallback sin sesión usa GET /api/vault/sync (legado).
 #[command]
 pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, String> {
-    use crate::commands::vault::vault_path;
+    use crate::commands::vault::{vault_path, SessionAuthState};
     use ai_keyvault_core::vault::EncryptedVaultState;
 
+    // Si hay sesión de usuario registrado, descargar desde /api/auth/vault (endpoint de usuario)
+    let session_creds = {
+        let state = app.state::<SessionAuthState>();
+        let guard = state.auth.lock().unwrap();
+        guard.as_ref().map(|a| {
+            (
+                a.server_url.clone(),
+                a.username.clone(),
+                a.auth_key_hex.clone(),
+            )
+        })
+    };
+
+    if let Some((server_url, username, auth_key_hex)) = session_creds {
+        let device_id =
+            std::env::var("COMPUTERNAME").unwrap_or_else(|_| "desktop-win".to_string());
+
+        // POST /api/auth/vault/download — descarga la última versión del usuario autenticado
+        let resp = http_client()
+            .post(&format!("{server_url}/api/auth/vault/download"))
+            .json(&serde_json::json!({
+                "username": username,
+                "auth_key_hex": auth_key_hex,
+                "device_id": device_id,
+            }))
+            .send()
+            .await
+            .map_err(|e| format!("Error al descargar bóveda de usuario: {e}"))?;
+
+        let status = resp.status();
+        if status.is_success() {
+            let body: serde_json::Value = resp
+                .json()
+                .await
+                .map_err(|e| format!("Error leyendo respuesta del servidor: {e}"))?;
+
+            let encrypted_payload = body
+                .get("encrypted_payload")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    "La respuesta del servidor no contiene encrypted_payload".to_string()
+                })?;
+
+            serde_json::from_str::<EncryptedVaultState>(encrypted_payload)
+                .map_err(|e| format!("La bóveda descargada tiene formato inválido: {e}"))?;
+
+            let path = vault_path(&app);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("No se pudo crear directorio: {e}"))?;
+            }
+            std::fs::write(&path, encrypted_payload.as_bytes())
+                .map_err(|e| format!("Error guardando bóveda descargada: {e}"))?;
+
+            info!(
+                "⬇️ Bóveda de usuario descargada del VPS ({} bytes)",
+                encrypted_payload.len()
+            );
+            return Ok(VaultSyncResult {
+                success: true,
+                direction: "download".into(),
+                error: None,
+            });
+        } else if status.as_u16() == 400 || status.as_u16() == 404 {
+            return Ok(VaultSyncResult {
+                success: true,
+                direction: "none".into(),
+                error: None,
+            });
+        } else {
+            return Ok(VaultSyncResult {
+                success: false,
+                direction: "download".into(),
+                error: Some(format!(
+                    "Error del servidor al descargar bóveda: {}",
+                    status
+                )),
+            });
+        }
+    }
+
+    // Fallback legado: GET /api/vault/sync (sin usuario registrado)
     let resp = http_client()
         .get(&format!("{SERVER_URL}/api/vault/sync"))
         .send()
@@ -230,7 +315,6 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
             .and_then(|v| v.as_str())
             .ok_or_else(|| "La respuesta del servidor no contiene encrypted_payload".to_string())?;
 
-        // Validar que es un EncryptedVaultState válido antes de escribir a disco
         serde_json::from_str::<EncryptedVaultState>(encrypted_payload)
             .map_err(|e| format!("La bóveda descargada tiene formato inválido: {e}"))?;
 
@@ -239,7 +323,6 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("No se pudo crear directorio: {e}"))?;
         }
-
         std::fs::write(&path, encrypted_payload.as_bytes())
             .map_err(|e| format!("Error guardando bóveda descargada: {e}"))?;
 
@@ -253,7 +336,6 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
             error: None,
         })
     } else if status.as_u16() == 400 || status.as_u16() == 404 {
-        // El servidor devuelve 400 ("No existe ninguna bóveda sincronizada aún") cuando está vacío
         Ok(VaultSyncResult {
             success: true,
             direction: "none".into(),
@@ -266,6 +348,61 @@ pub async fn download_vault_sync(app: AppHandle) -> Result<VaultSyncResult, Stri
             error: Some(format!("Error del servidor: {}", status)),
         })
     }
+}
+
+/// Lanza el timer de auto-sincronización periódica de la bóveda en background.
+/// Se llama al desbloquear la bóveda. Cada `interval_minutes` minutos sube la bóveda al VPS.
+/// Si ya hay uno corriendo, el nuevo reemplaza al anterior (via generación atómica).
+static VAULT_SYNC_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+#[command]
+pub async fn start_vault_autosync(app: AppHandle, interval_minutes: u32) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    use crate::commands::vault::VaultState;
+
+    let interval_minutes = interval_minutes.max(5).min(60);
+    let my_gen = VAULT_SYNC_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    info!(
+        "🔄 Auto-sync de bóveda iniciado: cada {interval_minutes} min (gen {my_gen})"
+    );
+
+    let app_handle = app.clone();
+    let duration = tokio::time::Duration::from_secs((interval_minutes as u64) * 60);
+
+    tokio::spawn(async move {
+        let mut ticker = tokio::time::interval(duration);
+        ticker.tick().await; // Consumir el primer tick inmediato
+        loop {
+            ticker.tick().await;
+            if VAULT_SYNC_GEN.load(Ordering::SeqCst) != my_gen {
+                break; // Esta generación fue reemplazada
+            }
+            // Solo subir si la bóveda está desbloqueada
+            let is_unlocked = {
+                let vault_state = app_handle.state::<VaultState>();
+                let guard = vault_state.vault.lock().unwrap();
+                guard.as_ref().map_or(false, |v| v.is_unlocked())
+            };
+            if is_unlocked {
+                match sync_vault_to_vps(&app_handle).await {
+                    Ok(()) => info!("⏱ Auto-sync: bóveda subida al VPS correctamente"),
+                    Err(e) => tracing::warn!("⚠️ Auto-sync: error al subir bóveda: {e}"),
+                }
+            }
+        }
+        info!("⏹ Auto-sync de bóveda detenido (gen {my_gen})");
+    });
+
+    Ok(())
+}
+
+/// Cancela el timer de auto-sincronización (al cerrar sesión o bloquear la bóveda).
+#[command]
+pub async fn cancel_vault_autosync() -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    VAULT_SYNC_GEN.fetch_add(1, Ordering::SeqCst);
+    info!("⏹ Auto-sync de bóveda cancelado");
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]

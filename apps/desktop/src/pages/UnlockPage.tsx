@@ -64,6 +64,17 @@ export default function UnlockPage() {
     }
   }
 
+  async function startVaultAutosync() {
+    // Intervalo configurable; default 15 minutos (mínimo 5)
+    try {
+      const stored = localStorage.getItem("akv_settings");
+      const intervalMinutes = stored ? (JSON.parse(stored).vaultSyncIntervalMinutes ?? 15) : 15;
+      await invoke("start_vault_autosync", { intervalMinutes });
+    } catch (e) {
+      console.warn("No se pudo iniciar auto-sync de bóveda:", e);
+    }
+  }
+
   // ── Iniciar sesión (traer usuario y bóveda desde el VPS) ────────────────────
   async function handleLogin() {
     if (!serverUrl.trim() || !username.trim() || !password) {
@@ -83,6 +94,7 @@ export default function UnlockPage() {
         } catch (e) {
           setCloudNotice(`Sesión iniciada, pero falló el timer de autobloqueo: ${String(e)}`);
         }
+        await startVaultAutosync();
         navigate("/dashboard");
       } else {
         setErrorMsg(result.error ?? "Credenciales inválidas.");
@@ -138,6 +150,7 @@ export default function UnlockPage() {
         } catch (e) {
           setErrorMsg(`Bóveda desbloqueada, pero falló el timer de autobloqueo: ${String(e)}`);
         }
+        await startVaultAutosync();
         navigate("/dashboard");
       } else {
         setErrorMsg(result.error ?? "Clave incorrecta.");

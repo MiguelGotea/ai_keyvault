@@ -102,6 +102,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/api/auth/params", post(routes::auth_params))
         .route("/api/auth/login", post(routes::auth_login))
         .route("/api/auth/vault", post(routes::auth_upload_vault))
+        .route("/api/auth/vault/download", post(routes::auth_download_vault))
         .layer(cors)
         .with_state(state);
 

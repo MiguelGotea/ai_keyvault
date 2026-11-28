@@ -127,6 +127,8 @@ fn main() {
             commands::security::cancel_autolock_timer,
             commands::security::upload_vault_sync,
             commands::security::download_vault_sync,
+            commands::security::start_vault_autosync,
+            commands::security::cancel_vault_autosync,
             commands::security::get_last_backup_info,
             commands::security::get_autostart_enabled,
             commands::security::set_autostart_enabled,
@@ -137,6 +139,21 @@ fn main() {
         .expect("Error al construir la aplicación AI KeyVault")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
+                // Intentar subir la bóveda antes de salir (best-effort, sin bloquear)
+                let app_clone = app_handle.clone();
+                // Usamos block_in_place ya que Exit no tiene runtime async disponible de forma directa
+                let _ = std::thread::spawn(move || {
+                    let rt = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build();
+                    if let Ok(rt) = rt {
+                        rt.block_on(async {
+                            let _ = commands::security::sync_vault_to_vps(&app_clone).await;
+                            info!("🚪 App cerrada — bóveda sincronizada al VPS");
+                        });
+                    }
+                })
+                .join();
                 let poller = app_handle.state::<PollerManager>();
                 commands::poller::kill_poller_process(&poller);
             }
