@@ -53,7 +53,6 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
 
-    
     // 4. Tabla de leases anti-duplicados para consultas
     sqlx::query(
         r#"

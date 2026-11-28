@@ -7,7 +7,7 @@
 
 [package]
 name = "ai-keyvault-desktop"
-version = "0.3.3"
+version = "0.3.4"
 description = "AI KeyVault — Bóveda y tablero para cuentas de agentes de IA"
 authors = ["MiguelGotea"]
 edition = "2021"
